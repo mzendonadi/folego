@@ -1,0 +1,158 @@
+# Publica o Fôlego no servidor de produção (folego.online).
+# Roda só quando alguém manda: aba Actions → "Publicar em produção" → Run workflow,
+# ou no terminal: gh workflow run publicar.yml --repo mzendonadi/folego
+# Antes de publicar, roda todos os testes; se algum falhar, nada vai para o servidor.
+#
+# Precisa (Settings → Secrets and variables → Actions):
+#   segredo  VPS_SSH_KEY      chave privada SSH exclusiva do GitHub Actions (nunca a sua chave pessoal)
+#   variável VPS_HOST         IP do servidor
+#   variável VPS_PORT         porta SSH
+#   variável VPS_USER         usuário SSH
+#   variável VPS_KNOWN_HOSTS  linha pública de identificação do servidor (proteção contra servidor falso)
+# As chaves de produção (Anthropic, Resend, banco...) continuam só no servidor, em ~/folego/deploy/.env.
+
+name: Publicar em produção
+
+on:
+  workflow_dispatch:
+    inputs:
+      motivo:
+        description: 'O que está sendo publicado (fica registrado no histórico)'
+        required: false
+        type: string
+
+# Nunca duas publicações ao mesmo tempo; a segunda espera a primeira terminar.
+concurrency:
+  group: producao
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  testes:
+    name: Testes
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Motor de cálculo (packages/domain)
+        working-directory: packages/domain
+        run: npm test
+
+      - name: Instalar dependências da API
+        working-directory: apps/api
+        run: npm ci --no-audit --no-fund
+
+      - name: API (tipos e testes)
+        working-directory: apps/api
+        run: |
+          npx tsc --noEmit
+          npm test
+
+      - name: Instalar dependências do site
+        working-directory: apps/web
+        run: npm ci --no-audit --no-fund
+
+      - name: Site (testes)
+        working-directory: apps/web
+        run: npm test
+
+  publicar:
+    name: Publicar
+    needs: testes
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Conferir segredos e variáveis
+        env:
+          SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          HOST: ${{ vars.VPS_HOST }}
+          PORT: ${{ vars.VPS_PORT }}
+          USER_: ${{ vars.VPS_USER }}
+          KNOWN: ${{ vars.VPS_KNOWN_HOSTS }}
+        run: |
+          faltando=""
+          [ -n "$SSH_KEY" ] || faltando="$faltando segredo:VPS_SSH_KEY"
+          [ -n "$HOST" ]    || faltando="$faltando variável:VPS_HOST"
+          [ -n "$PORT" ]    || faltando="$faltando variável:VPS_PORT"
+          [ -n "$USER_" ]   || faltando="$faltando variável:VPS_USER"
+          [ -n "$KNOWN" ]   || faltando="$faltando variável:VPS_KNOWN_HOSTS"
+          if [ -n "$faltando" ]; then
+            echo "::error::Falta configurar em Settings → Secrets and variables → Actions:$faltando"
+            exit 1
+          fi
+          echo "Publicando: ${{ inputs.motivo || 'sem descrição' }} (commit ${GITHUB_SHA::7}, por ${GITHUB_ACTOR})"
+
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Montar o site (build)
+        working-directory: apps/web
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+          test -s dist/index.html
+          test -s dist/gestao/index.html
+
+      - name: Empacotar
+        run: |
+          tar -czf "$RUNNER_TEMP/folego-deploy.tgz" \
+            --exclude='./.git' \
+            --exclude='./.github' \
+            --exclude='node_modules' \
+            --exclude='./apps/web/assets/vendor' \
+            --exclude='./deploy/.env' \
+            --exclude='./deploy/certs' \
+            --exclude='./deploy/site' \
+            .
+          ls -lh "$RUNNER_TEMP/folego-deploy.tgz"
+
+      - name: Preparar acesso SSH
+        env:
+          SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          KNOWN: ${{ vars.VPS_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Enviar e publicar no servidor
+        env:
+          HOST: ${{ vars.VPS_HOST }}
+          PORT: ${{ vars.VPS_PORT }}
+          USER_: ${{ vars.VPS_USER }}
+        run: |
+          SSH_OPTS="-i $HOME/.ssh/deploy_key -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=20"
+          scp $SSH_OPTS -P "$PORT" "$RUNNER_TEMP/folego-deploy.tgz" "$USER_@$HOST:folego-deploy.tgz"
+          # Extrai por cima de ~/folego sem apagar o que só existe no servidor (.env, certificados).
+          ssh $SSH_OPTS -p "$PORT" "$USER_@$HOST" '
+            set -e
+            rm -rf ~/folego-new && mkdir -p ~/folego-new
+            tar -C ~/folego-new -xzf ~/folego-deploy.tgz
+            cp -a ~/folego-new/. ~/folego/
+            rm -rf ~/folego-new ~/folego-deploy.tgz
+            cd ~/folego && bash deploy/deploy.sh
+          '
+
+      - name: Conferir o site no ar
+        run: |
+          for i in 1 2 3 4 5 6; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' https://folego.online/api/health || true)
+            if [ "$code" = "200" ]; then echo "Site no ar (api/health = 200)"; exit 0; fi
+            sleep 10
+          done
+          echo "::error::O site não respondeu 200 depois da publicação (último código: $code)"
+          exit 1
+
+      - name: Apagar a chave do executor
+        if: always()
+        run: rm -f ~/.ssh/deploy_key "$RUNNER_TEMP/folego-deploy.tgz"
