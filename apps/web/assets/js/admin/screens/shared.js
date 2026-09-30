@@ -1,0 +1,117 @@
+// Peças usadas por mais de uma tela: linha do tempo da jornada e as gavetas de detalhe (caso e assinante).
+import { api } from '../api.js';
+import { el, icon, toast, brl, int, dt, day, shortId, drawer, dl, badge, table, field, empty, loading, errorBox, EMPLOYMENT, PRODUCT, PLAN, SUB_STATUS, CATEGORY } from '../ui.js';
+
+const KIND_ICON = { view: 'list', click: 'arrow-right', tool: 'shield', step: 'clock', case: 'chart', order: 'wallet', payment: 'check', delivery: 'check', consent: 'shield', account: 'lock', admin: 'alert' };
+
+export function timeline(items) {
+  if (!items || items.length === 0) return empty('Sem registros de navegação para este cliente (o rastreamento só guarda o que aconteceu depois de ativado).');
+  return el(
+    'ol', { class: 'bo-timeline' },
+    ...items.map((i) =>
+      el('li', { class: `bo-tl-${i.kind}` }, el('span', { class: 'bo-tl-dot', 'aria-hidden': 'true' }, icon(KIND_ICON[i.kind] ?? 'info')), el('div', {}, el('strong', {}, i.label), i.detail ? el('span', { class: 'muted' }, ` · ${i.detail}`) : null, el('div', { class: 'fine' }, dt(i.at)))),
+    ),
+  );
+}
+
+const ORDER_STATUS = { paid: ['Pago', 'ok'], pending: ['Pendente', 'warn'], expired: ['Expirado', 'muted'], canceled: ['Cancelado', 'muted'], refunded: ['Reembolsado', 'bad'] };
+
+/** Gaveta com tudo de um comprador avulso: perfil, pedidos, entregas, consentimento e jornada. */
+export async function caseDrawer(id, ctx) {
+  const dw = drawer(`Cliente avulso ${shortId(id)}`);
+  dw.body.append(loading());
+  try {
+    const [c, j] = await Promise.all([api.avulso(id), api.jornadaCaso(id).catch(() => ({ timeline: [] }))]);
+    const contactBox = el('div', { class: 'bo-contact' });
+    if (c.hasContact && c.leadConsent?.active) {
+      if (ctx.can('clientes_pii')) {
+        const btn = el('button', { class: 'btn btn-secondary btn-sm', type: 'button' }, icon('lock'), 'Ver contato (fica registrado)');
+        btn.addEventListener('click', async () => {
+          btn.disabled = true;
+          try {
+            const r = await api.contato(id);
+            contactBox.replaceChildren(dl([['Nome', r.name], ['Telefone', r.phone], ['E-mail', r.email ?? '—']]), el('p', { class: 'fine' }, 'Esta consulta foi registrada na auditoria.'));
+          } catch (e) {
+            btn.disabled = false;
+            toast(e.message);
+          }
+        });
+        contactBox.append(btn);
+      } else contactBox.append(el('p', { class: 'fine' }, 'Há contato autorizado, mas você não tem a permissão para ver dados pessoais.'));
+    } else if (c.hasContact) contactBox.append(el('p', { class: 'fine' }, 'Há contato guardado, mas a pessoa não autoriza (ou revogou) o contato: os dados ficam ocultos.'));
+    else contactBox.append(el('p', { class: 'fine' }, 'Nenhum contato guardado (compra anônima).'));
+
+    // replaceChildren() nativo não ignora null (viraria o texto "null"): por isso o filter.
+    dw.body.replaceChildren(...[
+      el('section', {}, el('h3', {}, 'Perfil'), dl([
+        ['Criado em', dt(c.createdAt)], ['Tipo', c.kind === 'translator' ? 'Tradutor de Cobrança' : 'Diagnóstico de dívidas'], ['Estado', c.uf], ['Vínculo', EMPLOYMENT[c.employment] ?? c.employment],
+        ['Faixa etária', c.ageBand], ['Renda líquida', c.netIncomeCents === null ? '—' : brl(c.netIncomeCents)], ['Dívida total', c.debtTotalCents === null ? '—' : `${brl(c.debtTotalCents)} em ${c.debtCount} dívidas`],
+        ['Em atraso', c.hasOverdue ? 'Sim' : 'Não'], ['Tipos de dívida', c.debtKinds.join(', ') || '—'], ['Dados expiram em', day(c.purgeAfter)],
+      ])),
+      el('section', {}, el('h3', {}, 'Compras'), table([
+        { label: 'Pedido', render: (o) => shortId(o.id) }, { label: 'Itens', render: (o) => o.items }, { label: 'Total', align: 'right', render: (o) => brl(o.totalCents) },
+        { label: 'Situação', render: (o) => badge(...(ORDER_STATUS[o.status] ?? [o.status, 'muted'])) }, { label: 'Meio', render: (o) => (o.method ? `${o.method}${o.provider === 'fake' ? ' (simulado)' : ''}` : '—') }, { label: 'Data', render: (o) => dt(o.paidAt ?? o.createdAt) },
+      ], c.orders, { emptyText: 'Não gerou pedido: só viu o resultado grátis.' })),
+      c.deliverables.length ? el('section', {}, el('h3', {}, 'Entregas'), table([{ label: 'Produto', render: (d) => PRODUCT[d.product] ?? d.product }, { label: 'Situação', render: (d) => d.status }, { label: 'Origem', render: (d) => (d.source === 'ai' ? 'IA' : d.source === 'template' ? 'Modelo fixo' : '—') }, { label: 'Quando', render: (d) => dt(d.at) }], c.deliverables)) : null,
+      c.incomeInterview ? el('section', {}, el('h3', {}, 'Entrevista de renda extra'), dl([['Horas por semana', c.incomeInterview.hoursBand], ['Modo', c.incomeInterview.mode], ['Tem veículo', c.incomeInterview.hasVehicle ? 'Sim' : 'Não'], ['Capital para começar', brl(c.incomeInterview.capitalCents)]])) : null,
+      el('section', {}, el('h3', {}, 'Contato e autorização'), c.leadConsent ? dl([['Autorização', c.leadConsent.active ? badge('Ativa', 'ok') : badge('Revogada', 'muted')], ['Categorias', c.leadConsent.categories.map((k) => CATEGORY[k] ?? k).join(', ') || '—'], ['Desde', dt(c.leadConsent.at)]]) : el('p', { class: 'fine' }, 'Sem autorização de contato de parceiros.'), contactBox),
+      el('section', {}, el('h3', {}, 'Jornada no site'), timeline(j.timeline)),
+    ].filter(Boolean));
+  } catch (e) {
+    dw.body.replaceChildren(errorBox(e));
+  }
+}
+
+/** Gaveta do assinante: situação, pedidos, uso, histórico e ações manuais (sempre com motivo). */
+export async function subscriberDrawer(id, ctx, onChange = () => {}) {
+  const dw = drawer('Assinante');
+  dw.body.append(loading());
+  const render = async () => {
+    const [s, j] = await Promise.all([api.assinante(id), api.jornadaAssinante(id).catch(() => ({ timeline: [] }))]);
+    const [label, tone] = SUB_STATUS[s.status] ?? [s.status, 'muted'];
+    const reason = el('input', { class: 'input', type: 'text', maxlength: '200', placeholder: 'Motivo (fica na auditoria)', 'aria-label': 'Motivo da ação' });
+    const days = el('input', { class: 'input input-sm', type: 'number', min: '1', max: '365', value: '7', 'aria-label': 'Dias' });
+    const plan = el('select', { class: 'input input-sm', 'aria-label': 'Plano' }, ...['controle', 'ousado', 'desbravador'].map((p) => el('option', { value: p, selected: p === s.plan }, PLAN[p])));
+    const run = async (body, okMsg) => {
+      if (reason.value.trim().length < 3) return toast('Escreva o motivo (mínimo 3 letras).');
+      try {
+        await api.assinanteAcao(id, { ...body, reason: reason.value.trim() });
+        toast(okMsg);
+        onChange();
+        await render();
+      } catch (e) {
+        toast(e.message);
+      }
+    };
+    const actions = ctx.can('assinaturas')
+      ? el(
+          'section', {},
+          el('h3', {}, 'Ações'),
+          field('Motivo', reason),
+          el('div', { class: 'bo-actions' },
+            el('label', { class: 'bo-inline' }, 'Dar', days, 'dias'),
+            el('button', { class: 'btn btn-secondary btn-sm', type: 'button', onclick: () => run({ type: 'extend', days: Number(days.value) }, 'Dias adicionados.') }, 'Estender assinatura'),
+          ),
+          el('div', { class: 'bo-actions' },
+            el('label', { class: 'bo-inline' }, 'Plano', plan),
+            el('button', { class: 'btn btn-secondary btn-sm', type: 'button', onclick: () => run({ type: 'set_plan', plan: plan.value }, 'Plano atualizado.') }, 'Definir plano'),
+          ),
+          el('div', { class: 'bo-actions' }, s.plan ? el('button', { class: 'btn btn-quiet btn-sm', type: 'button', onclick: () => run({ type: 'cancel', cancel: !s.cancelAtPeriodEnd }, s.cancelAtPeriodEnd ? 'Voltou a renovar.' : 'Marcado para não renovar.') }, s.cancelAtPeriodEnd ? 'Voltar a renovar' : 'Marcar para não renovar') : null),
+        )
+      : null;
+    dw.body.replaceChildren(...[
+      el('div', { class: 'bo-head-line' }, el('h3', {}, s.email), badge(label, tone)),
+      dl([['Plano', s.plan ? PLAN[s.plan] : '—'], ['Vence em', s.periodEnd ? day(s.periodEnd) : '—'], ['Cadastro', dt(s.createdAt)], ['Último acesso', dt(s.lastLoginAt)], ['Lançamentos', int(s.usage.entries)], ['Metas / aportes', `${int(s.usage.goals)} / ${int(s.usage.contributions)}`], ['Último lançamento', dt(s.usage.lastEntryAt)]]),
+      actions,
+      el('section', {}, el('h3', {}, 'Pedidos'), table([{ label: 'Item', render: (o) => PRODUCT[o.product] ?? o.product }, { label: 'Valor', align: 'right', render: (o) => brl(o.totalCents) }, { label: 'Situação', render: (o) => badge(...(ORDER_STATUS[o.status] ?? [o.status, 'muted'])) }, { label: 'Data', render: (o) => dt(o.paidAt ?? o.createdAt) }], s.orders, { emptyText: 'Nenhum pedido.' })),
+      s.history.length ? el('section', {}, el('h3', {}, 'Histórico de ações'), table([{ label: 'Quando', render: (h) => dt(h.at) }, { label: 'Ação', render: (h) => h.action.replace('admin_subscription_', '') }, { label: 'Quem / motivo', render: (h) => (h.data?.by ? `${h.data.by}${h.data.reason ? `: ${h.data.reason}` : ''}` : h.actor) }], s.history)) : null,
+      el('section', {}, el('h3', {}, 'Jornada'), timeline(j.timeline)),
+    ].filter(Boolean));
+  };
+  try {
+    await render();
+  } catch (e) {
+    dw.body.replaceChildren(errorBox(e));
+  }
+}
+

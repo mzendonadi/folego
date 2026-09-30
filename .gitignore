@@ -1,0 +1,29 @@
+﻿# Dependências
+node_modules/
+
+# Segredos: NUNCA versionar (a .env real vive só no servidor, em ~/folego/deploy/.env)
+.env
+.env.*
+!.env.example
+deploy/.env
+deploy/certs/
+*.pem
+*.key
+
+# Gerados pelo build ou pelo deploy (recriados a cada `npm run build` / `deploy.sh`)
+apps/web/dist/
+apps/web/dist2/
+apps/web/.tmp/
+apps/web/assets/vendor/
+apps/web/assets/fonts/
+apps/web/scripts/build-dist2.mjs
+deploy/site/
+deploy/nginx/cloudflare-ips.conf
+
+# Pacotes de deploy e logs
+*.tgz
+*.log
+
+# Sistema
+.DS_Store
+Thumbs.db

@@ -1,0 +1,18 @@
+export * from './types.ts';
+export { ENGINE_VERSION, RULES } from './config.ts';
+export type { Rules } from './config.ts';
+export { diagnose } from './diagnose.ts';
+export { buildPreview, LOCKED_SECTIONS } from './preview.ts';
+export { simulate } from './simulate.ts';
+export type { SimOptions } from './simulate.ts';
+export { annuityPaymentCents, impliedRateBps } from './rates.ts';
+export { EngineInputError } from './validate.ts';
+export { buildCalendar, formatBrl, addDaysIso } from './calendar.ts';
+export type { CalendarItem, CalendarKind } from './calendar.ts';
+export { buildIncomeFacts, buildIncomePlanTemplate, rateText, HOURS_BAND_LABEL, INCOME_CATALOG, INCOME_PLATFORMS, INCOME_WEEK_TEMPLATES, INCOME_CAUTIONS, RATE_REFERENCE } from './income.ts';
+export type { IncomeInterview, IncomeIdea, IncomeCategory, HoursBand, IncomeMode, RateInfo, IncomeFacts, IncomePlanContent, IncomePlanWeek } from './income.ts';
+export { prescriptionCheck, scamCheck, SCAM_QUESTIONS, RIGHTS } from './tools.ts';
+export type { ScamVerdict, ScamQuestion, RightsTopic } from './tools.ts';
+export { analyzeCollectionText, buildTranslatorPreview, MAX_TRANSLATOR_CHARS } from './translator.ts';
+export type { TranslatorAnalysis, TranslatorPreview, TranslatorFlag, TranslatorRisk, CollectionKind } from './translator.ts';
+export * from './account.ts';

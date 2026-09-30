@@ -1,0 +1,22 @@
+{
+  "name": "@app/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "dev": "node scripts/build.mjs && node scripts/serve.mjs",
+    "contrast": "node scripts/contrast.mjs",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "devDependencies": {
+    "@fontsource-variable/figtree": "^5.3.0",
+    "@fontsource-variable/fraunces": "^5.3.0",
+    "axe-core": "^4.13.0",
+    "esbuild": "^0.28.2",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^6.3.289",
+    "qrcode-generator": "^2.0.4",
+    "tesseract.js": "^7.0.0"
+  }
+}

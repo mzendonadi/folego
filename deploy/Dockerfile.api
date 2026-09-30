@@ -1,0 +1,19 @@
+# API do Fôlego. Contexto de build = raiz do projeto (docker compose build a partir de deploy/).
+# Node 24 executa TypeScript "apagando" os tipos, então não há etapa de compilação.
+FROM node:24-slim
+
+WORKDIR /app
+COPY apps/api/package.json apps/api/package-lock.json apps/api/
+RUN cd apps/api && npm ci --omit=dev && npm cache clean --force
+
+COPY apps/api/src apps/api/src
+COPY apps/api/scripts apps/api/scripts
+COPY packages/domain/src packages/domain/src
+COPY db/schema.sql db/schema.sql
+COPY db/migrations db/migrations
+
+ENV NODE_ENV=production
+USER node
+WORKDIR /app/apps/api
+EXPOSE 3000
+CMD ["node", "src/server.ts"]

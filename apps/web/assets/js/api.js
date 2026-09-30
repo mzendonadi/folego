@@ -1,0 +1,42 @@
+// Seleciona a implementação da API: HTTP (back-end real) ou simulada (site estático, só para demonstração).
+import { API_BASE } from '../config.js';
+
+const impl = API_BASE ? await import('./api-http.js') : await import('./api-mock.js');
+
+export const createCase = impl.createCase;
+export const createOrder = impl.createOrder;
+export const getMe = impl.getMe;
+export const createAccessLink = impl.createAccessLink;
+export const getFeatures = impl.getFeatures;
+export const emailAccessLink = impl.emailAccessLink;
+export const requestLoginCode = impl.requestLoginCode;
+export const loginWithCode = impl.loginWithCode;
+export const logout = impl.logout;
+export const getAccount = impl.getAccount;
+export const deleteAccount = impl.deleteAccount;
+export const createSubscriptionOrder = impl.createSubscriptionOrder;
+export const setSubscriptionCancel = impl.setSubscriptionCancel;
+export const getMonth = impl.getMonth;
+export const addEntries = impl.addEntries;
+export const deleteEntry = impl.deleteEntry;
+export const setEntryCategory = impl.setEntryCategory;
+export const setLimit = impl.setLimit;
+export const saveGoal = impl.saveGoal;
+export const deleteGoal = impl.deleteGoal;
+export const addGoalContribution = impl.addGoalContribution;
+export const deleteGoalContribution = impl.deleteGoalContribution;
+export const getCoach = impl.getCoach;
+export const simulateInvestmentApi = impl.simulateInvestmentApi;
+export const submitLead = impl.submitLead;
+export const revokeLead = impl.revokeLead;
+export const redeemAccess = impl.redeemAccess;
+export const createTranslation = impl.createTranslation;
+export const getTranslation = impl.getTranslation;
+export const getOrderStatus = impl.getOrderStatus;
+export const demoConfirmPayment = impl.demoConfirmPayment;
+export const getDelivery = impl.getDelivery;
+export const deleteCase = impl.deleteCase;
+export const getCatalog = impl.getCatalog;
+export const trackEvent = impl.trackEvent;
+export const submitIncomeInterview = impl.submitIncomeInterview;
+export const setIncomeProgress = impl.setIncomeProgress;

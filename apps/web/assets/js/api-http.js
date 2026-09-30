@@ -1,0 +1,163 @@
+// Cliente HTTP do back-end real (apps/api). O resultado completo só chega depois do pagamento confirmado.
+import { API_BASE } from '../config.js';
+
+class ApiError extends Error {
+  constructor(message, status, code, issues) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+    this.issues = issues;
+  }
+}
+
+async function request(method, path, { body, headers } = {}) {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method,
+    credentials: 'same-origin',
+    headers: { 'x-folego': '1', ...(body === undefined ? {} : { 'content-type': 'application/json' }), ...headers },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (res.status === 204) return null;
+  const json = await res.json().catch(() => null);
+  if (!res.ok) throw new ApiError(json?.message ?? 'Erro na requisição', res.status, json?.error, json?.issues);
+  return json;
+}
+
+export async function createCase(input) {
+  // O servidor define "hoje" e os ids; o cliente manda só o que o usuário informou + o aceite dos termos.
+  const debts = input.debts.map(({ id, ...debt }) => debt);
+  return request('POST', '/cases', { body: { profile: input.profile, debts, acceptTerms: true } });
+}
+
+export async function createOrder({ caseId, products }) {
+  return request('POST', '/orders', { body: { caseId, products }, headers: { 'idempotency-key': crypto.randomUUID() } });
+}
+
+/** Já pagou neste navegador? O cookie de sessão diz; assim o Mapa reabre sem cadastro. */
+export async function getMe() {
+  return request('GET', '/me');
+}
+
+/** Link para voltar ao Mapa em outro aparelho (só o hash fica no servidor). */
+export async function createAccessLink(orderId) {
+  return request('POST', `/orders/${orderId}/access-link`, { body: {} });
+}
+
+export async function getFeatures() {
+  return request('GET', '/features');
+}
+
+export async function emailAccessLink(orderId, email) {
+  return request('POST', `/orders/${orderId}/email-link`, { body: { email } });
+}
+
+export async function requestLoginCode(email) {
+  return request('POST', '/account/login-code', { body: { email } });
+}
+export async function loginWithCode(email, code) {
+  return request('POST', '/account/login', { body: { email, code } });
+}
+export async function logout() {
+  return request('POST', '/account/logout', { body: {} });
+}
+export async function getAccount() {
+  return request('GET', '/account');
+}
+export async function deleteAccount() {
+  return request('DELETE', '/account');
+}
+export async function createSubscriptionOrder(plan) {
+  return request('POST', '/account/subscription-order', { body: { plan }, headers: { 'idempotency-key': crypto.randomUUID() } });
+}
+export async function setSubscriptionCancel(cancel) {
+  return request('POST', '/account/subscription-cancel', { body: { cancel } });
+}
+export async function getMonth(month) {
+  return request('GET', `/account/month/${month}`);
+}
+export async function addEntries(entries) {
+  return request('POST', '/account/entries', { body: { entries } });
+}
+export async function deleteEntry(id) {
+  return request('DELETE', `/account/entries/${id}`);
+}
+export async function setEntryCategory(id, category) {
+  return request('POST', `/account/entries/${id}/category`, { body: { category } });
+}
+export async function setLimit(category, limitCents) {
+  return request('POST', `/account/limits/${category}`, { body: { limitCents } });
+}
+export async function saveGoal(goal) {
+  return request('POST', '/account/goals', { body: goal });
+}
+export async function addGoalContribution(goalId, body) {
+  return request('POST', `/account/goals/${goalId}/contributions`, { body });
+}
+export async function deleteGoalContribution(goalId, contributionId) {
+  return request('DELETE', `/account/goals/${goalId}/contributions/${contributionId}`);
+}
+export async function deleteGoal(id) {
+  return request('DELETE', `/account/goals/${id}`);
+}
+export async function getCoach() {
+  return request('GET', '/account/coach');
+}
+export async function simulateInvestmentApi(input) {
+  return request('POST', '/account/simulate', { body: input });
+}
+
+export async function submitLead(caseId, body) {
+  return request('POST', `/cases/${caseId}/leads`, { body });
+}
+
+export async function revokeLead(caseId) {
+  return request('DELETE', `/cases/${caseId}/leads`);
+}
+
+export async function redeemAccess(token) {
+  return request('POST', '/access', { body: { token } });
+}
+
+export async function createTranslation(text) {
+  return request('POST', '/translations', { body: { text, acceptTerms: true } });
+}
+
+export async function getTranslation(orderId) {
+  return request('GET', `/orders/${orderId}/translation`);
+}
+
+export async function getOrderStatus(orderId) {
+  return request('GET', `/orders/${orderId}`);
+}
+
+/** Só existe no servidor de desenvolvimento (gateway de mentira). Em produção a rota não existe. */
+export async function demoConfirmPayment(orderId) {
+  return request('POST', `/dev/pay/${orderId}`, { body: {} });
+}
+
+export async function getDelivery(orderId) {
+  return request('GET', `/orders/${orderId}/delivery`);
+}
+
+export async function deleteCase(caseId) {
+  return request('DELETE', `/cases/${caseId}`);
+}
+
+/** Preços, produtos à venda e avisos (o dono edita no backoffice). */
+export async function getCatalog() {
+  return request('GET', '/catalog');
+}
+
+/** Evento de navegação anônimo (funil e jornada). */
+export async function trackEvent(body) {
+  return request('POST', '/events', { body });
+}
+
+export async function submitIncomeInterview(caseId, body) {
+  return request('POST', `/cases/${caseId}/income-interview`, { body });
+}
+
+export async function setIncomeProgress(caseId, key, done) {
+  return request('POST', `/cases/${caseId}/income-progress`, { body: { key, done } });
+}

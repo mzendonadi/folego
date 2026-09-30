@@ -1,0 +1,9 @@
+**/node_modules
+.git
+*.tgz
+*.log
+apps/web
+deploy/site
+deploy/certs
+deploy/.env
+deploy/nginx/cloudflare-ips.conf

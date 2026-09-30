@@ -1,0 +1,114 @@
+# Tudo roda em containers: não exige root nem instalar nada no sistema.
+# Uso (na pasta deploy/, com o .env ao lado):  sudo docker compose up -d --build     (ou:  bash deploy.sh)
+
+x-api-env: &api-env
+  NODE_ENV: production
+  DATABASE_URL: postgres://app_owner:${POSTGRES_PASSWORD}@postgres:5432/app
+  APP_SECRET: ${APP_SECRET:?defina APP_SECRET no .env}
+  TRUST_CLOUDFLARE: "1"
+  # Pagamento: "fake" só com ALLOW_FAKE_GATEWAY_IN_PRODUCTION=1 (teste do servidor). Em produção use "asaas".
+  PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-fake}
+  ALLOW_FAKE_GATEWAY_IN_PRODUCTION: ${ALLOW_FAKE_GATEWAY_IN_PRODUCTION:-0}
+  WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
+  ASAAS_API_KEY: ${ASAAS_API_KEY:-}
+  ASAAS_BASE_URL: ${ASAAS_BASE_URL:-https://api.asaas.com/v3}
+  ASAAS_PIX_KEY: ${ASAAS_PIX_KEY:-}
+  ASAAS_WEBHOOK_TOKEN: ${ASAAS_WEBHOOK_TOKEN:-}
+  # IA dos roteiros. Sem ANTHROPIC_API_KEY o worker usa só os modelos determinísticos (o cliente recebe o conteúdo do mesmo jeito).
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  ANTHROPIC_WORKSPACE_ID: ${ANTHROPIC_WORKSPACE_ID:-}
+  # E-mails que podem virar dono do backoffice (folego.online/gestao) no primeiro acesso. Não é segredo.
+  ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+  AI_MODEL: ${AI_MODEL:-claude-sonnet-5}
+  AI_MAX_CALLS_PER_DAY: ${AI_MAX_CALLS_PER_DAY:-200}
+  # E-mail transacional (Resend). Sem chave, o envio por e-mail fica desligado e o site esconde o botão.
+  RESEND_API_KEY: ${RESEND_API_KEY:-}
+  EMAIL_FROM: ${EMAIL_FROM:-Fôlego <acesso@folego.online>}
+  PUBLIC_URL: ${PUBLIC_URL:-https://folego.online}
+  # Recursos que dependem de revisão jurídica: DESLIGADOS por padrão.
+  LEADS_ENABLED: ${LEADS_ENABLED:-0}
+  SUBSCRIPTIONS_ENABLED: ${SUBSCRIPTIONS_ENABLED:-0}
+  PARTNER_ADMIN_TOKEN: ${PARTNER_ADMIN_TOKEN:-}
+
+services:
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: app
+      POSTGRES_USER: app_owner
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+    volumes:
+      - pgdata:/var/lib/postgresql
+      - ../db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./postgresql.conf:/etc/postgresql/postgresql.conf:ro
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]
+    shm_size: 256mb
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app_owner -d app"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    # Sem "ports": o banco NUNCA fica exposto fora da rede interna do Docker.
+
+  api:
+    image: folego-api:local
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *api-env
+      HOST: 0.0.0.0
+      PORT: "3000"
+      WORKER_INLINE: "0" # a geração em segundo plano é do container "worker"
+    # Sem "ports": só o Nginx (mesma rede interna) fala com a API.
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+
+  # Gera roteiros e cartas em segundo plano (fila = tabela deliverables). Mesma imagem da API, outro comando.
+  worker:
+    image: folego-api:local
+    pull_policy: never # a imagem é construída pelo serviço "api"; nunca tentar baixar de um registro
+    command: ["node", "src/worker.ts"]
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    environment:
+      <<: *api-env
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+
+  web:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/folego.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/cloudflare-ips.conf:/etc/nginx/cloudflare-ips.conf:ro
+      - ./site:/var/www/folego:ro
+      - ./certs:/etc/ssl/folego:ro
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+
+volumes:
+  pgdata:

@@ -1,0 +1,5 @@
+User-agent: *
+Disallow: /
+# Ao liberar a indexação do site no lançamento, MANTENHA as duas linhas abaixo (o backoffice nunca deve ser indexado).
+Disallow: /gestao
+Disallow: /gest%C3%A3o

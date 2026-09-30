@@ -1,0 +1,16 @@
+{
+  "name": "@app/domain",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "test": "node --test tests/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "demo": "node scripts/demo.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}

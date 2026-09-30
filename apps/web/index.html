@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Fôlego — organize suas dívidas e só pague se gostar</title>
+  <meta name="description" content="Conte o que você deve em 3 minutos, veja seu diagnóstico na hora e só pague se gostar, por Pix. Sem cadastro, sem CPF, sem assinatura.">
+  <link rel="canonical" href="https://folego.online/">
+  <meta name="theme-color" content="#F6F3EC" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0E1714" media="(prefers-color-scheme: dark)">
+  <meta name="color-scheme" content="light dark">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="pt_BR">
+  <meta property="og:site_name" content="Fôlego">
+  <meta property="og:title" content="Fôlego — organize suas dívidas e só pague se gostar">
+  <meta property="og:description" content="Diagnóstico na hora, sem cadastro. Você só paga se gostar do que viu.">
+  <meta property="og:url" content="https://folego.online/">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="assets/fonts/fraunces-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="assets/fonts/figtree-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Pular para o conteúdo</a>
+
+  <!-- Ícones (sprite). Decorativos: sempre com aria-hidden no uso. -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <defs>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+      <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+      <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"/></symbol>
+      <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+      <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6l7-3z"/><path d="M9 12l2.2 2.2L15 10"/></symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></symbol>
+      <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></symbol>
+      <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3l10 18H2L12 3z"/><path d="M12 10v4M12 17h.01"/></symbol>
+      <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+      <symbol id="i-printer" viewBox="0 0 24 24"><path d="M7 8V4h10v4M7 17H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2"/><path d="M7 14h10v6H7z"/></symbol>
+      <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 19h16M7 16v-5M12 16V6M17 16v-8"/></symbol>
+      <symbol id="i-wallet" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="3"/><path d="M3 10h18M16 14.5h2"/></symbol>
+      <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/></symbol>
+      <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4V5z"/></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+    </defs>
+  </svg>
+
+  <header class="site-header" id="site-header">
+    <div class="wrap header-inner">
+      <a class="brand" href="#/" aria-label="Fôlego, início" data-nav="landing">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+          <circle cx="16" cy="16" r="12.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="63 16" transform="rotate(-62 16 16)"/>
+          <circle cx="16" cy="16" r="5.2" class="brand-dot"/>
+        </svg>
+        <span class="brand-word">fôlego</span>
+      </a>
+      <nav class="header-nav" aria-label="Seções da página" data-landing-only>
+        <a href="#como-funciona">Como funciona</a>
+        <a href="#o-que-recebe">O que você recebe</a>
+        <a href="#duvidas">Dúvidas</a>
+        <a href="#/ferramentas" data-nav="tools">Ferramentas grátis</a>
+        <a href="#/tradutor" data-nav="translator">Tradutor de cobrança</a>
+        <a href="#/conta" data-nav="account">Minha conta</a>
+      </nav>
+      <div class="header-actions">
+        <button class="btn btn-primary btn-sm header-cta" type="button" data-start hidden>Começar grátis</button>
+        <button class="btn btn-quiet btn-sm header-exit" type="button" data-nav="landing" hidden>Sair</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main" tabindex="-1">
+
+    <!-- ============================ LANDING ============================ -->
+    <div id="view-landing" data-view="landing">
+
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-rings" aria-hidden="true"></div>
+        <div class="wrap hero-grid">
+          <div class="hero-copy">
+            <p class="eyebrow">Organizador de dívidas · sem cadastro, sem assinatura</p>
+            <h1 id="hero-title">Respira. A gente organiza suas dívidas <em>com você.</em></h1>
+            <p class="lede">Conte o que você deve em cerca de 3 minutos. Você vê seu diagnóstico na hora e só paga — <strong><span data-price="recovery_map">R$ 29</span> no Pix</strong> — se gostar do que viu. Se não gostar, fecha a página e não deve nada.</p>
+            <div class="hero-cta">
+              <button class="btn btn-primary btn-lg" type="button" data-start>
+                Ver meu diagnóstico grátis
+                <svg class="icon" aria-hidden="true"><use href="#i-arrow-right"/></svg>
+              </button>
+              <a class="btn btn-quiet btn-lg" href="#como-funciona">Como funciona</a>
+            </div>
+            <p class="micro">Sem CPF. Sem login. Seus dados ficam só o tempo necessário.</p>
+            <ul class="chips" aria-label="Garantias">
+              <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Sem cadastro</li>
+              <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Sem CPF</li>
+              <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Sem assinatura</li>
+              <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Só paga se gostar</li>
+            </ul>
+          </div>
+
+          <figure class="example" aria-label="Exemplo ilustrativo de diagnóstico">
+            <figcaption class="example-tag">Exemplo ilustrativo · dados fictícios</figcaption>
+            <div class="example-card">
+              <div class="example-top">
+                <svg class="gauge gauge-sm" viewBox="0 0 120 70" role="img" aria-label="Nota 51 de 100, faixa atenção">
+                  <path class="gauge-track" d="M10 62 A50 50 0 0 1 110 62" pathLength="100"/>
+                  <path class="gauge-value tone-attention" d="M10 62 A50 50 0 0 1 110 62" pathLength="100" stroke-dasharray="51 100"/>
+                  <text x="60" y="52" text-anchor="middle" class="gauge-num">51</text>
+                </svg>
+                <div>
+                  <span class="pill tone-attention">Atenção</span>
+                  <p class="example-head">Dá pra quitar tudo em <strong>1 ano e 2 meses</strong> seguindo o Mapa.</p>
+                </div>
+              </div>
+              <div class="example-first">
+                <span class="example-label">Comece por aqui</span>
+                <strong>Aluguel atrasado</strong>
+                <span class="muted">Conta essencial em atraso: perder a moradia pesa mais que os juros.</span>
+              </div>
+              <ul class="skeleton-list" aria-hidden="true">
+                <li><svg class="icon"><use href="#i-lock"/></svg><span class="bar w70"></span></li>
+                <li><svg class="icon"><use href="#i-lock"/></svg><span class="bar w55"></span></li>
+                <li><svg class="icon"><use href="#i-lock"/></svg><span class="bar w80"></span></li>
+              </ul>
+            </div>
+          </figure>
+        </div>
+      </section>
+
+      <section class="section" id="como-funciona" aria-labelledby="como-title">
+        <div class="wrap">
+          <header class="section-head">
+            <p class="eyebrow">Como funciona</p>
+            <h2 id="como-title">Você só paga depois de ver</h2>
+          </header>
+          <ol class="steps3">
+            <li class="reveal">
+              <span class="step-num" aria-hidden="true">1</span>
+              <h3>Você conta</h3>
+              <p>Renda, gastos e as dívidas que pesam. Sem CPF, sem senha de banco, sem cadastro.</p>
+            </li>
+            <li class="reveal">
+              <span class="step-num" aria-hidden="true">2</span>
+              <h3>Você vê, de graça</h3>
+              <p>Uma nota da sua situação, quanto dá pra economizar ou em quanto tempo dá pra quitar, e por onde começar.</p>
+            </li>
+            <li class="reveal">
+              <span class="step-num" aria-hidden="true">3</span>
+              <h3>Você decide</h3>
+              <p>Gostou? Libera o Mapa completo por <span data-price="recovery_map">R$ 29</span> no Pix. Não gostou? Não paga nada e a gente apaga seus dados.</p>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="section section-tint" id="o-que-recebe" aria-labelledby="recebe-title">
+        <div class="wrap">
+          <header class="section-head">
+            <p class="eyebrow">O que você recebe</p>
+            <h2 id="recebe-title">O Mapa da Virada</h2>
+            <p class="section-sub">Um roteiro claro, feito com os seus números. Fica com você: acesso por 30 dias e PDF pra guardar.</p>
+          </header>
+          <ul class="features">
+            <li class="feature reveal">
+              <svg class="icon icon-lg" aria-hidden="true"><use href="#i-chart"/></svg>
+              <h3>Diagnóstico completo</h3>
+              <p>Onde o dinheiro está indo e o quanto cada dívida pesa de verdade.</p>
+            </li>
+            <li class="feature reveal">
+              <svg class="icon icon-lg" aria-hidden="true"><use href="#i-wallet"/></svg>
+              <h3>Orçamento do mês</h3>
+              <p>Quanto sobra, quanto vai pra dívida e quanto fica de reserva pra respirar.</p>
+            </li>
+            <li class="feature reveal">
+              <svg class="icon icon-lg" aria-hidden="true"><use href="#i-list"/></svg>
+              <h3>Ordem de pagamento</h3>
+              <p>Qual dívida atacar primeiro e por quê. Não é só “a maior” ou “a mais antiga”.</p>
+            </li>
+            <li class="feature reveal">
+              <svg class="icon icon-lg" aria-hidden="true"><use href="#i-chat"/></svg>
+              <h3>Roteiros de negociação</h3>
+              <p>O que dizer (e o que evitar) na conversa com cada credor.</p>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="prescricao-title">
+        <div class="wrap split">
+          <div>
+            <p class="eyebrow">Dívida antiga?</p>
+            <h2 id="prescricao-title">Pagar sem conferir pode ser um erro</h2>
+          </div>
+          <div class="prose">
+            <p>Algumas cobranças antigas podem estar <strong>prescritas</strong>: o prazo para cobrar na Justiça pode ter acabado. Só que negociar ou pagar uma parte pode <strong>reiniciar</strong> esse prazo.</p>
+            <p>Por isso o Fôlego avisa antes de você agir e deixa essas dívidas fora da conta até você conferir.</p>
+            <p class="note"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg><span>Informação geral. Para o seu caso, confirme com um advogado ou com a Defensoria Pública.</span></p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section section-tint" aria-labelledby="calculo-title">
+        <div class="wrap">
+          <header class="section-head">
+            <p class="eyebrow">Sem chute</p>
+            <h2 id="calculo-title">Como a gente calcula</h2>
+          </header>
+          <ul class="trust-list">
+            <li class="reveal"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg><div><h3>Número vem de conta, não de palpite</h3><p>Juros, prazos e prioridades são calculados por regras fixas e testadas. Rodou duas vezes, dá o mesmo resultado.</p></div></li>
+            <li class="reveal"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg><div><h3>Inteligência artificial só escreve</h3><p>Ela ajuda com o texto dos roteiros, e só depois que você libera o Mapa. Nunca recebe seu nome, telefone ou CPF.</p></div></li>
+            <li class="reveal"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg><div><h3>A gente avisa quando estima</h3><p>Se você não sabe a taxa de uma dívida, usamos uma média de mercado e deixamos isso claro no resultado.</p></div></li>
+          </ul>
+          <p class="disclaimer"><strong>Importante:</strong> o Fôlego é uma ferramenta de organização e informação. Não somos banco, financeira, escritório de advocacia nem consultoria de investimentos, e não negociamos por você.</p>
+        </div>
+      </section>
+
+      <section class="section" id="preco" aria-labelledby="preco-title">
+        <div class="wrap price-wrap">
+          <header class="section-head">
+            <p class="eyebrow">Preço</p>
+            <h2 id="preco-title">Um preço. Sem mensalidade.</h2>
+          </header>
+          <div class="price-card reveal">
+            <p class="price"><span class="price-cur">R$</span> <span data-price-int="recovery_map">29</span><span class="price-cents" data-price-dec="recovery_map">,00</span></p>
+            <p class="price-sub">no Pix, uma vez só, e só depois de ver o resultado</p>
+            <ul class="tick-list">
+              <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Diagnóstico, orçamento e ordem de pagamento</li>
+              <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Roteiros de negociação por credor</li>
+              <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>PDF para guardar e acesso por 30 dias</li>
+              <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Nada de assinatura ou renovação</li>
+            </ul>
+            <button class="btn btn-primary btn-lg btn-block" type="button" data-start>Ver meu diagnóstico grátis</button>
+            <p class="micro">Cartas prontas de defesa (prescrição, contestação) podem ser adicionadas depois, por <span data-price="defense_letters">R$ 19</span>.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section section-tint" id="duvidas" aria-labelledby="faq-title">
+        <div class="wrap faq-wrap">
+          <header class="section-head">
+            <p class="eyebrow">Dúvidas</p>
+            <h2 id="faq-title">Perguntas que todo mundo faz</h2>
+          </header>
+          <div class="faq">
+            <details><summary>Preciso informar CPF ou senha do banco?</summary><div><p>Não. Nunca pedimos CPF, senha, número de cartão ou dados bancários. Você só informa valores e tipos de dívida.</p></div></details>
+            <details><summary>E se eu não gostar do resultado?</summary><div><p>É só fechar a página. Nada é cobrado. Se quiser, apague seus dados na hora pelo botão “Apagar meus dados”. Sem isso, a gente apaga automaticamente em até 7 dias.</p></div></details>
+            <details><summary>Vocês limpam meu nome ou negociam por mim?</summary><div><p>Não. O Fôlego mostra o melhor caminho e ensina o que dizer; quem negocia é você, com os roteiros. Desconfie de quem promete “limpar nome” cobrando adiantado.</p></div></details>
+            <details><summary>Como vocês calculam os números?</summary><div><p>Com regras fixas: juros mensais, parcelas, prazos e uma ordem de prioridade que considera contas essenciais e o custo de cada dívida. Quando você não sabe a taxa, usamos uma média de mercado e avisamos.</p></div></details>
+            <details><summary>Isso é orientação jurídica ou financeira?</summary><div><p>Não. É informação e organização. Para decisões sobre prescrição, processos ou investimentos, procure um advogado, a Defensoria Pública ou um profissional habilitado.</p></div></details>
+            <details><summary>Como funciona o pagamento?</summary><div><p>Por Pix, direto na página. A confirmação chega em segundos e o Mapa é liberado na hora.</p></div></details>
+            <details><summary>Meus dados ficam salvos?</summary><div><p>Só o tempo necessário: até 7 dias se você não comprar; 30 dias depois do último acesso se comprar. Depois disso, tudo é apagado. Você pode apagar antes, quando quiser.</p></div></details>
+          </div>
+        </div>
+      </section>
+
+      <section class="section final-cta" aria-labelledby="final-title">
+        <div class="wrap final-inner">
+          <h2 id="final-title">Respira. Leva 3 minutos.</h2>
+          <p>Você vê o resultado antes de decidir qualquer coisa.</p>
+          <button class="btn btn-primary btn-lg" type="button" data-start>Começar meu diagnóstico<svg class="icon" aria-hidden="true"><use href="#i-arrow-right"/></svg></button>
+        </div>
+      </section>
+    </div>
+
+    <!-- ============================ DIAGNÓSTICO (formulário) ============================ -->
+    <section id="view-intake" data-view="intake" hidden aria-labelledby="intake-title">
+      <div class="wrap intake-wrap">
+        <header class="view-head">
+          <p class="eyebrow">Diagnóstico grátis</p>
+          <h1 id="intake-title" tabindex="-1">Vamos olhar isso com calma</h1>
+          <p class="section-sub">Leva cerca de 3 minutos. Pode ser aproximado. Nada aqui é enviado para ninguém.</p>
+        </header>
+        <div class="intake-layout">
+          <div class="intake-main">
+            <div class="progress-mobile" aria-hidden="true">
+              <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+              <p class="progress-label" id="progress-label"></p>
+            </div>
+            <ol class="timeline" id="timeline"></ol>
+          </div>
+          <aside class="summary" id="summary" aria-label="Resumo do que você contou"></aside>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================ PROCESSANDO ============================ -->
+    <section id="view-processing" data-view="processing" hidden aria-labelledby="processing-title">
+      <div class="wrap processing">
+        <div class="breath" aria-hidden="true"></div>
+        <h1 id="processing-title" tabindex="-1">Fazendo as contas…</h1>
+        <p id="processing-msg" class="lede" role="status">Somando o que entra e o que sai</p>
+      </div>
+    </section>
+
+    <!-- ============================ RESULTADO (preview) ============================ -->
+    <section id="view-preview" data-view="preview" hidden aria-labelledby="preview-title">
+      <div class="wrap preview-wrap">
+        <header class="view-head">
+          <p class="eyebrow">Seu diagnóstico</p>
+          <h1 id="preview-title" tabindex="-1">Prontinho. Olha o que a gente viu</h1>
+        </header>
+        <div class="preview-layout" id="preview-root"></div>
+      </div>
+    </section>
+
+    <!-- ============================ PAGAMENTO ============================ -->
+    <section id="view-checkout" data-view="checkout" hidden aria-labelledby="checkout-title">
+      <div class="wrap checkout-wrap">
+        <header class="view-head">
+          <button class="btn btn-quiet btn-sm back-link" type="button" data-nav="preview"><svg class="icon" aria-hidden="true"><use href="#i-arrow-left"/></svg>Voltar ao diagnóstico</button>
+          <h1 id="checkout-title" tabindex="-1">Pagar com Pix</h1>
+        </header>
+        <div class="checkout-layout" id="checkout-root"></div>
+      </div>
+    </section>
+
+    <!-- ============================ FERRAMENTAS GRÁTIS ============================ -->
+    <section id="view-tools" data-view="tools" hidden aria-labelledby="tools-title">
+      <div class="wrap tools-wrap">
+        <header class="view-head">
+          <button class="btn btn-quiet btn-sm back-link" type="button" data-nav="landing"><svg class="icon" aria-hidden="true"><use href="#i-arrow-left"/></svg>Início</button>
+          <p class="eyebrow">Sem cadastro, sem custo</p>
+          <h1 id="tools-title" tabindex="-1">Ferramentas grátis</h1>
+        </header>
+        <div class="tools-layout" id="tools-root"></div>
+      </div>
+    </section>
+
+    <!-- ============================ TRADUTOR DE COBRANÇA ============================ -->
+    <section id="view-translator" data-view="translator" hidden aria-labelledby="translator-title">
+      <div class="wrap tools-wrap">
+        <header class="view-head">
+          <button class="btn btn-quiet btn-sm back-link" type="button" data-nav="landing"><svg class="icon" aria-hidden="true"><use href="#i-arrow-left"/></svg>Início</button>
+          <p class="eyebrow">Sem cadastro</p>
+          <h1 id="translator-title" tabindex="-1">Tradutor de cobrança</h1>
+        </header>
+        <div class="tools-layout" id="translator-root"></div>
+      </div>
+    </section>
+
+    <!-- ============================ CONTA / ASSINATURA ============================ -->
+    <section id="view-account" data-view="account" hidden aria-labelledby="account-title">
+      <div class="wrap tools-wrap">
+        <header class="view-head">
+          <button class="btn btn-quiet btn-sm back-link" type="button" data-nav="landing"><svg class="icon" aria-hidden="true"><use href="#i-arrow-left"/></svg>Início</button>
+          <p class="eyebrow">Assinatura opcional</p>
+          <h1 id="account-title" tabindex="-1">Minha conta</h1>
+        </header>
+        <div class="tools-layout" id="account-root"></div>
+      </div>
+    </section>
+
+    <!-- ============================ PORTAL DO PARCEIRO (sem link público) ============================ -->
+    <section id="view-partner" data-view="partner" hidden aria-labelledby="partner-title">
+      <div class="wrap tools-wrap">
+        <header class="view-head"><h1 id="partner-title" tabindex="-1">Portal do parceiro</h1></header>
+        <div class="tools-layout" id="partner-root"></div>
+      </div>
+    </section>
+
+    <!-- ============================ ENTREGA (Mapa) ============================ -->
+    <section id="view-delivery" data-view="delivery" hidden aria-labelledby="delivery-title">
+      <div class="wrap delivery-wrap" id="delivery-root">
+        <h1 id="delivery-title" tabindex="-1" class="sr-only">Seu Mapa da Virada</h1>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap footer-inner">
+      <div class="footer-brand">
+        <a class="brand" href="#/" data-nav="landing" aria-label="Fôlego, início">
+          <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><circle cx="16" cy="16" r="12.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="63 16" transform="rotate(-62 16 16)"/><circle cx="16" cy="16" r="5.2" class="brand-dot"/></svg>
+          <span class="brand-word">fôlego</span>
+        </a>
+        <p class="muted">folego.online</p>
+      </div>
+      <nav class="footer-links" aria-label="Rodapé">
+        <a class="link" href="#/ferramentas" data-nav="tools">Ferramentas grátis</a>
+        <button class="link" type="button" data-open="dlg-terms">Termos e privacidade</button>
+        <button class="link" type="button" data-wipe>Apagar meus dados</button>
+      </nav>
+      <p class="footer-legal">O Fôlego é uma ferramenta de informação e organização financeira. Não é aconselhamento jurídico, financeiro ou de investimentos. Os valores calculados são estimativas.</p>
+      <!-- PENDENTE (documento oficial §3/§11): razão social, CNPJ/CPF e canal de contato do encarregado (LGPD). Obrigatório publicar antes do lançamento. -->
+    </div>
+  </footer>
+
+  <dialog id="dlg-terms" class="dialog" aria-labelledby="dlg-terms-title">
+    <form method="dialog" class="dialog-inner">
+      <header class="dialog-head">
+        <h2 id="dlg-terms-title">Termos e privacidade (resumo)</h2>
+        <button class="btn btn-quiet btn-icon" value="close" aria-label="Fechar"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="dialog-body prose">
+        <p class="note"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg><span><strong>Minuta em revisão jurídica.</strong> Este é um resumo em linguagem simples. A versão final será publicada antes do lançamento.</span></p>
+        <h3>O que o serviço faz</h3>
+        <p>O Fôlego organiza as informações que você digita e calcula um diagnóstico. É informação e organização, não aconselhamento jurídico, financeiro ou de investimentos.</p>
+        <h3>O que coletamos</h3>
+        <p>Renda, despesas, faixa de idade, estado, e as dívidas que você informar (credor, tipo, valores, atraso). Não pedimos CPF, senhas nem dados bancários.</p>
+        <h3>Por quanto tempo guardamos</h3>
+        <p>Se você não comprar: até 7 dias. Se comprar: 30 dias após o último acesso. Você pode apagar tudo antes, a qualquer momento.</p>
+        <h3>Inteligência artificial</h3>
+        <p>Depois que você libera o Mapa, um serviço de IA ajuda a escrever textos. Ele recebe valores e categorias, nunca nome, telefone, e-mail ou CPF.</p>
+        <h3>Compartilhamento</h3>
+        <p>Não compartilhamos seus dados com terceiros. Qualquer oferta de parceiros só acontece se você pedir, com uma autorização separada, específica e que você pode retirar quando quiser.</p>
+        <h3>Seus direitos (LGPD)</h3>
+        <p>Você pode pedir acesso, correção e exclusão dos dados. Canal de contato: <em>a definir antes do lançamento</em>.</p>
+      </div>
+      <footer class="dialog-foot"><button class="btn btn-primary" value="close">Entendi</button></footer>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  <div class="sr-only" id="live" aria-live="polite" aria-atomic="true"></div>
+
+  <script type="module" src="assets/js/main.js?v=20260927a"></script>
+</body>
+</html>

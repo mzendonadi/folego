@@ -1,0 +1,392 @@
+import Fastify from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import cookie from '@fastify/cookie';
+import rateLimit from '@fastify/rate-limit';
+import staticPlugin from '@fastify/static';
+import { randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { ZodError } from 'zod';
+import type { Config } from './config.ts';
+import type { Db } from './db.ts';
+import { FakeGateway } from './gateway.ts';
+import type { PaymentGateway } from './gateway.ts';
+import type { EmailSender } from './email.ts';
+import { hmac } from './crypto.ts';
+import { AppError, notFound } from './errors.ts';
+import * as leads from './leads.ts';
+import * as sub from './subscriptions.ts';
+import { registerGestao } from './admin/routes.ts';
+import { eventSchema, recordEvent } from './admin/events.ts';
+import { publicCatalog } from './admin/manage.ts';
+import { refreshRuntime } from './runtime.ts';
+import { accessSchema, addEntriesSchema, cancelSchema, contributionSchema, createCaseSchema, createOrderSchema, emailLinkSchema, emailOnlySchema, goalSchema, incomeInterviewSchema, leadSchema, loginCodeSchema, newPartnerSchema, partnerLoginSchema, partnerStatusSchema, setCategorySchema, setLimitSchema, simulateSchema, subscriptionOrderSchema, toggleIncomeTaskSchema, translationSchema, uuidParam } from './schemas.ts';
+import { CSP } from './security.ts';
+import * as svc from './services.ts';
+import type { Ctx } from './services.ts';
+
+const SESSION_COOKIE = 'folego_sid';
+const MONTH_SECONDS = 30 * 24 * 3600;
+
+export interface AppDeps {
+  config: Config;
+  db: Db;
+  gateway: PaymentGateway;
+  /** Sem isto, o envio de e-mail fica desligado. */
+  email?: EmailSender;
+  /** 'relaxed' só para testes que criam muitas requisições do mesmo IP. */
+  rateLimits?: 'strict' | 'relaxed';
+}
+
+export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
+  const { config } = deps;
+  const scale = deps.rateLimits === 'relaxed' ? 1000 : 1;
+  const ctx: Ctx = deps;
+
+  const app = Fastify({
+    logger: config.env === 'test' ? false : { level: 'info', redact: ['req.headers.cookie', 'req.headers.authorization'] },
+    trustProxy: config.env === 'production',
+    bodyLimit: 64 * 1024,
+  });
+
+  const clientIp = (req: FastifyRequest): string => {
+    if (config.trustCloudflare) {
+      const cf = req.headers['cf-connecting-ip'];
+      if (typeof cf === 'string' && cf) return cf;
+    }
+    return req.ip;
+  };
+  const ipHash = (req: FastifyRequest): Buffer => hmac(config.secret, clientIp(req));
+
+  await app.register(cookie);
+  await app.register(rateLimit, { global: true, max: 300 * scale, timeWindow: '1 minute', keyGenerator: clientIp });
+
+  // Cabeçalhos comuns e proteção CSRF: toda escrita em /api precisa do cabeçalho x-folego (um formulário de
+  // outro site não consegue enviá-lo) além do cookie SameSite=Lax.
+  app.addHook('onRequest', async (req, reply) => {
+    if (req.url.startsWith('/api/') || req.url.startsWith('/webhooks/')) {
+      reply.header('Cache-Control', 'no-store');
+      reply.header('X-Content-Type-Options', 'nosniff');
+      reply.header('Referrer-Policy', 'no-referrer');
+    }
+    const write = req.method !== 'GET' && req.method !== 'HEAD' && req.method !== 'OPTIONS';
+    if (write && req.url.startsWith('/api/') && req.headers['x-folego'] !== '1') {
+      throw new AppError(403, 'csrf', 'Requisição não permitida');
+    }
+  });
+
+  // Configurações mudadas no backoffice (recursos ligados/desligados, vendas pausadas...) valem sem reiniciar: releitura a cada 10 s.
+  // As rotas de conta e de parceiros ficam sempre registradas e respondem "não existe" enquanto o recurso está desligado.
+  await refreshRuntime(deps.db, config, true);
+  app.addHook('onRequest', async (req) => {
+    if (!req.url.startsWith('/api/')) return;
+    await refreshRuntime(deps.db, config);
+    const path = req.url.split('?')[0] ?? '';
+    if (path.startsWith('/api/account') && !config.subscriptionsEnabled) throw notFound();
+    if ((path.startsWith('/api/partner') || path === '/api/admin/partners') && !config.leadsEnabled) throw notFound();
+  });
+
+  app.setErrorHandler((error: unknown, req, reply) => {
+    if (error instanceof AppError) return reply.status(error.status).send({ error: error.code, message: error.message });
+    if (error instanceof ZodError) {
+      return reply.status(400).send({ error: 'invalid_input', message: 'Dados inválidos', issues: error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })) });
+    }
+    const e = error as { statusCode?: number; code?: string; message?: string };
+    if (typeof e.statusCode === 'number' && e.statusCode < 500) return reply.status(e.statusCode).send({ error: e.code ?? 'bad_request', message: e.message ?? 'Requisição inválida' });
+    req.log.error({ err: error }, 'erro interno');
+    return reply.status(500).send({ error: 'internal', message: 'Algo deu errado. Tente de novo.' });
+  });
+
+  // ---------- sessão ----------
+  const createSession = async (req: FastifyRequest, reply: FastifyReply): Promise<string> => {
+    const r = await svc.resolveSession(ctx, req.cookies[SESSION_COOKIE], ipHash(req));
+    if (r.newToken) {
+      reply.setCookie(SESSION_COOKIE, r.newToken, { httpOnly: true, sameSite: 'lax', secure: config.cookieSecure, path: '/', maxAge: MONTH_SECONDS });
+    }
+    return r.sessionId;
+  };
+  const requireSession = async (req: FastifyRequest): Promise<string> => {
+    const id = await svc.findSession(ctx, req.cookies[SESSION_COOKIE]);
+    if (!id) throw notFound();
+    return id;
+  };
+  const idParam = (value: unknown): string => uuidParam.parse(value);
+
+  // ---------- rotas ----------
+  app.get('/api/health', async () => ({ ok: true, gateway: deps.gateway.name, db: deps.db.dialect, env: config.env }));
+
+  app.post('/api/cases', { config: { rateLimit: { max: 12 * scale, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const input = createCaseSchema.parse(req.body);
+    const sessionId = await createSession(req, reply);
+    const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null;
+    const created = await svc.createCase(ctx, { sessionId, ipHash: ipHash(req), input, userAgent });
+    return reply.status(201).send(created);
+  });
+
+  app.get('/api/cases/:id/preview', async (req) => {
+    const sessionId = await requireSession(req);
+    return svc.getPreview(ctx, sessionId, idParam((req.params as { id: string }).id));
+  });
+
+  app.delete('/api/cases/:id', async (req, reply) => {
+    const sessionId = await requireSession(req);
+    await svc.deleteCase(ctx, sessionId, idParam((req.params as { id: string }).id));
+    return reply.status(204).send();
+  });
+
+  app.post('/api/orders', { config: { rateLimit: { max: 20 * scale, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const sessionId = await requireSession(req);
+    const key = req.headers['idempotency-key'];
+    if (typeof key !== 'string' || key.length < 8 || key.length > 100) throw new AppError(400, 'idempotency_key', 'Cabeçalho Idempotency-Key obrigatório');
+    const body = createOrderSchema.parse(req.body);
+    const order = await svc.createOrder(ctx, { sessionId, caseId: body.caseId, products: body.products ?? ['recovery_map', ...(body.withLetters ? ['defense_letters'] : [])], idempotencyKey: key });
+    return reply.status(201).send(order);
+  });
+
+  app.get('/api/orders/:id', async (req) => {
+    const sessionId = await requireSession(req);
+    return svc.getOrder(ctx, sessionId, idParam((req.params as { id: string }).id));
+  });
+
+  app.get('/api/orders/:id/delivery', async (req) => {
+    const sessionId = await requireSession(req);
+    return svc.getDelivery(ctx, sessionId, idParam((req.params as { id: string }).id));
+  });
+
+  // Tradutor de cobrança: o texto é analisado na hora e NÃO é guardado; só o resultado fica (7 dias, ou 30 se pago).
+  app.post('/api/translations', { config: { rateLimit: { max: 10 * scale, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const input = translationSchema.parse(req.body);
+    const sessionId = await createSession(req, reply);
+    const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null;
+    const created = await svc.createTranslation(ctx, { sessionId, ipHash: ipHash(req), text: input.text, userAgent });
+    return reply.status(201).send(created);
+  });
+
+  app.get('/api/orders/:id/translation', async (req) => {
+    const sessionId = await requireSession(req);
+    return svc.getTranslation(ctx, sessionId, idParam((req.params as { id: string }).id));
+  });
+
+  // O que está ligado neste servidor (o front-end esconde o que não estiver).
+  // Preços e avisos que o site mostra: vêm do banco (o dono edita no backoffice), nunca fixos no navegador.
+  app.get('/api/catalog', async () => publicCatalog(ctx));
+
+  // Eventos de navegação (funil e jornada). Sem dado pessoal; robôs são ignorados.
+  app.post('/api/events', { config: { rateLimit: { max: 90 * scale, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const input = eventSchema.parse(req.body);
+    const sessionId = await createSession(req, reply);
+    await recordEvent(ctx, sessionId, input, typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined);
+    return reply.status(204).send();
+  });
+
+  registerGestao(app, { ctx, scale, requireSession, createSession, idParam });
+
+  app.get('/api/features', async () => ({ email: Boolean(deps.email), leads: config.leadsEnabled, subscriptions: config.subscriptionsEnabled && Boolean(deps.email) }));
+
+
+  // Manda o link de acesso por e-mail. O endereço é usado para enviar e descartado (não é gravado).
+  app.post('/api/orders/:id/email-link', { config: { rateLimit: { max: 5 * scale, timeWindow: '10 minutes' } } }, async (req) => {
+    const sessionId = await requireSession(req);
+    const { email } = emailLinkSchema.parse(req.body);
+    return svc.emailAccessLink(ctx, sessionId, idParam((req.params as { id: string }).id), email);
+  });
+
+  // ---------- Criador de Renda Extra: entrevista pós-compra e progresso ----------
+  app.post('/api/cases/:id/income-interview', { config: { rateLimit: { max: 5 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => {
+    const sessionId = await requireSession(req);
+    const input = incomeInterviewSchema.parse(req.body);
+    const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null;
+    await svc.submitIncomeInterview(ctx, sessionId, idParam((req.params as { id: string }).id), { input, ipHash: ipHash(req), userAgent });
+    return reply.status(202).send({ ok: true });
+  });
+
+  app.post('/api/cases/:id/income-progress', async (req) => {
+    const sessionId = await requireSession(req);
+    const { key, done } = toggleIncomeTaskSchema.parse(req.body);
+    await svc.toggleIncomeTask(ctx, sessionId, idParam((req.params as { id: string }).id), key, done);
+    return { ok: true };
+  });
+
+  // ---------- propostas de parceiros (desligado por padrão) ----------
+  app.post('/api/cases/:id/leads', { config: { rateLimit: { max: 5 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => {
+    const sessionId = await requireSession(req);
+    const input = leadSchema.parse(req.body);
+    const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null;
+    const out = await leads.submitLead(ctx, { sessionId, caseId: idParam((req.params as { id: string }).id), ipHash: ipHash(req), userAgent, input });
+    return reply.status(201).send(out);
+  });
+
+  app.delete('/api/cases/:id/leads', async (req, reply) => {
+    const sessionId = await requireSession(req);
+    await leads.revokeLead(ctx, sessionId, idParam((req.params as { id: string }).id));
+    return reply.status(204).send();
+  });
+
+  {
+    // Cadastro de parceiro: só o administrador (token no cabeçalho). O parceiro recebe a senha e o segredo do webhook UMA vez.
+    app.post('/api/admin/partners', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
+      if (!leads.isAdminToken(ctx, req.headers['x-admin-token'])) return reply.status(404).send({ error: 'not_found', message: 'Não encontrado' });
+      return reply.status(201).send(await leads.createPartner(ctx, newPartnerSchema.parse(req.body)));
+    });
+    app.post('/api/partner/login', { config: { rateLimit: { max: 10, timeWindow: '5 minutes' } } }, async (req) => {
+      const { email, password } = partnerLoginSchema.parse(req.body);
+      return leads.partnerLogin(ctx, email, password);
+    });
+    app.get('/api/partner/leads', async (req) => ({ leads: await leads.partnerLeads(ctx, leads.partnerFromToken(ctx, req.headers.authorization)) }));
+    app.post('/api/partner/leads/:id/status', async (req) => {
+      const partnerId = leads.partnerFromToken(ctx, req.headers.authorization);
+      await leads.partnerSetStatus(ctx, partnerId, idParam((req.params as { id: string }).id), partnerStatusSchema.parse(req.body).status);
+      return { ok: true };
+    });
+  }
+
+  // ---------- assinatura (desligada por padrão; exige e-mail configurado) ----------
+  const requireSubscriber = async (req: FastifyRequest): Promise<string> => {
+    const sessionId = await requireSession(req);
+    const subscriberId = await sub.subscriberOf(ctx, sessionId);
+    if (!subscriberId) throw new AppError(401, 'not_logged_in', 'Entre com seu e-mail para continuar.');
+    return subscriberId;
+  };
+
+  app.post('/api/account/login-code', { config: { rateLimit: { max: 5 * scale, timeWindow: '10 minutes' } } }, async (req) => {
+    const { email } = emailOnlySchema.parse(req.body);
+    return sub.requestLoginCode(ctx, email);
+  });
+  app.post('/api/account/login', { config: { rateLimit: { max: 10 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => {
+    const { email, code } = loginCodeSchema.parse(req.body);
+    const sessionId = await createSession(req, reply);
+    await sub.verifyLoginCode(ctx, sessionId, email, code);
+    return sub.accountView(ctx, await sub.subscriberOf(ctx, sessionId) as string);
+  });
+  app.post('/api/account/logout', async (req, reply) => {
+    const sessionId = await requireSession(req);
+    await sub.logout(ctx, sessionId);
+    return reply.status(204).send();
+  });
+  app.get('/api/account', async (req) => sub.accountView(ctx, await requireSubscriber(req)));
+  app.delete('/api/account', async (req, reply) => {
+    const sessionId = await requireSession(req);
+    await sub.deleteAccount(ctx, sessionId, await requireSubscriber(req));
+    return reply.status(204).send();
+  });
+
+  app.post('/api/account/subscription-order', { config: { rateLimit: { max: 10 * scale, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const sessionId = await requireSession(req);
+    const subscriberId = await requireSubscriber(req);
+    const key = req.headers['idempotency-key'];
+    if (typeof key !== 'string' || key.length < 8 || key.length > 100) throw new AppError(400, 'idempotency_key', 'Cabeçalho Idempotency-Key obrigatório');
+    const { plan } = subscriptionOrderSchema.parse(req.body);
+    return reply.status(201).send(await sub.createSubscriptionOrder(ctx, { sessionId, subscriberId, plan, idempotencyKey: key }));
+  });
+  app.post('/api/account/subscription-cancel', async (req) => {
+    const { cancel } = cancelSchema.parse(req.body);
+    await sub.setCancel(ctx, await requireSubscriber(req), cancel);
+    return { ok: true };
+  });
+
+  app.get('/api/account/month/:month', async (req) => sub.monthView(ctx, await requireSubscriber(req), (req.params as { month: string }).month));
+  app.post('/api/account/entries', async (req) => sub.addEntries(ctx, await requireSubscriber(req), addEntriesSchema.parse(req.body).entries));
+  app.delete('/api/account/entries/:id', async (req, reply) => {
+    await sub.deleteEntry(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id));
+    return reply.status(204).send();
+  });
+  app.post('/api/account/entries/:id/category', async (req) => {
+    await sub.setEntryCategory(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id), setCategorySchema.parse(req.body).category);
+    return { ok: true };
+  });
+  app.post('/api/account/limits/:category', async (req) => {
+    await sub.setLimit(ctx, await requireSubscriber(req), (req.params as { category: string }).category, setLimitSchema.parse(req.body).limitCents);
+    return { ok: true };
+  });
+  app.post('/api/account/goals', async (req, reply) => {
+    await sub.saveGoal(ctx, await requireSubscriber(req), goalSchema.parse(req.body));
+    return reply.status(201).send({ ok: true });
+  });
+  app.delete('/api/account/goals/:id', async (req, reply) => {
+    await sub.deleteGoal(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id));
+    return reply.status(204).send();
+  });
+  app.post('/api/account/goals/:id/contributions', async (req, reply) => {
+    await sub.addContribution(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id), contributionSchema.parse(req.body));
+    return reply.status(201).send({ ok: true });
+  });
+  app.delete('/api/account/goals/:id/contributions/:cid', async (req, reply) => {
+    const p = req.params as { id: string; cid: string };
+    await sub.deleteContribution(ctx, await requireSubscriber(req), idParam(p.id), idParam(p.cid));
+    return reply.status(204).send();
+  });
+  app.get('/api/account/coach', async (req) => sub.coach(ctx, await requireSubscriber(req)));
+  app.post('/api/account/simulate', async (req) => sub.simulate(ctx, await requireSubscriber(req), simulateSchema.parse(req.body)));
+
+  // Voltar ao Mapa: pelo cookie (mesmo navegador) ou pelo link de acesso (outro aparelho). Sem cadastro, sem senha.
+  app.get('/api/me', async (req) => {
+    const id = await svc.findSession(ctx, req.cookies[SESSION_COOKIE]);
+    return { access: id ? await svc.meAccess(ctx, id) : null, translator: id ? await svc.meAccess(ctx, id, 'translator') : null };
+  });
+
+  app.post('/api/orders/:id/access-link', { config: { rateLimit: { max: 10 * scale, timeWindow: '1 minute' } } }, async (req) => {
+    const sessionId = await requireSession(req);
+    return svc.createAccessLink(ctx, sessionId, idParam((req.params as { id: string }).id));
+  });
+
+  app.post('/api/access', { config: { rateLimit: { max: 10 * scale, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const { token } = accessSchema.parse(req.body);
+    const sessionId = await createSession(req, reply);
+    return svc.redeemAccess(ctx, sessionId, token);
+  });
+
+  // Webhook do gateway: sem cookie, autenticado pela assinatura do provedor.
+  app.post('/webhooks/pix', async (req, reply) => {
+    const outcome = await svc.handleWebhook(ctx, req.headers, req.body);
+    if (outcome === 'invalid_signature') return reply.status(401).send({ error: 'invalid_signature' });
+    return { ok: true, outcome };
+  });
+
+  // Só desenvolvimento: faz o papel do banco confirmando o Pix, passando pelo MESMO caminho do webhook real.
+  // Só existe com o gateway de MENTIRA (em produção, só com ALLOW_FAKE_GATEWAY_IN_PRODUCTION=1, pré-lançamento). Com o Asaas a rota some.
+  if (deps.gateway instanceof FakeGateway) {
+    const fake = deps.gateway;
+    app.post('/api/dev/pay/:orderId', async (req) => {
+      const sessionId = await requireSession(req);
+      const orderId = idParam((req.params as { orderId: string }).orderId);
+      await svc.getOrder(ctx, sessionId, orderId); // garante que o pedido é desta sessão
+      const pay = await deps.db.query<{ provider_payment_id: string }>(`SELECT provider_payment_id FROM app.payments WHERE order_id = $1 ORDER BY created_at DESC LIMIT 1`, [orderId]);
+      const paymentId = pay.rows[0]?.provider_payment_id;
+      if (!paymentId) throw notFound();
+      fake.markPaid(paymentId);
+      const outcome = await svc.handleWebhook(ctx, { 'x-webhook-secret': config.webhookSecret }, { eventId: `evt_${randomUUID()}`, paymentId });
+      return { ok: true, outcome };
+    });
+  }
+
+  // Front-end estático (só desenvolvimento; em produção o Nginx serve).
+  if (config.staticDir) {
+    app.get('/assets/config.js', async (_req, reply) => {
+      reply.header('Content-Type', 'text/javascript; charset=utf-8');
+      reply.header('Cache-Control', 'no-store');
+      return `export const API_BASE = '/api';\nexport const DEV = ${config.env !== 'production'};\n`;
+    });
+    if (config.env !== 'production') {
+      // Só desenvolvimento: entrega o axe-core (auditoria de acessibilidade) que está em apps/web/node_modules.
+      app.get('/__dev/axe.js', async (_req, reply) => {
+        try {
+          const file = new URL('../../web/node_modules/axe-core/axe.min.js', import.meta.url);
+          reply.header('Content-Type', 'text/javascript; charset=utf-8');
+          return await readFile(file);
+        } catch {
+          return reply.status(404).send('axe-core não instalado');
+        }
+      });
+    }
+    await app.register(staticPlugin, { root: config.staticDir, cacheControl: false, index: 'index.html' });
+    // Mesmos cabeçalhos que o Nginx envia em produção, para testar o site sob a política real.
+    app.addHook('onSend', async (_req, reply, payload) => {
+      reply.header('Content-Security-Policy', CSP);
+      reply.header('X-Content-Type-Options', 'nosniff');
+      reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+      reply.header('X-Frame-Options', 'DENY');
+      return payload;
+    });
+  }
+
+  return app;
+}
