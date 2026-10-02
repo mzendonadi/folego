@@ -505,3 +505,29 @@ test('e-mail: manda o link, não grava o endereço, o link do e-mail abre o Mapa
   const fourth = await phone('POST', `/api/orders/${order.json.orderId}/email-link`, { body: { email: 'pessoa@exemplo.com' } });
   assert.equal(fourth.status, 429);
 });
+
+test('entrega traz as estratégias (comparação, plano mês a mês, marcos, roteiro) e o calendário com marcos; "Outra" guarda a descrição', async () => {
+  const c = client();
+  const created = await c('POST', '/api/cases', { body: {
+    profile: { netIncomeCents: 400_000, fixedExpensesCents: 250_000, employmentType: 'clt', ageBand: '35-44', uf: 'SP' },
+    debts: [
+      { creditorName: 'Cartão A', kind: 'credit_card', balanceCents: 300_000, monthlyPaymentCents: 30_000, monthlyRateBps: 1200, daysOverdue: 0 },
+      { creditorName: 'Tio João', kind: 'other', kindNote: 'Empréstimo com parente', balanceCents: 80_000, monthlyPaymentCents: 10_000, daysOverdue: 0 },
+    ],
+    acceptTerms: true,
+  } });
+  assert.equal(created.status, 201);
+  const order = await c('POST', '/api/orders', { body: { caseId: created.json.caseId, products: ['recovery_map', 'calendar_30d'] }, headers: { 'idempotency-key': 'estrategias-pedido-01' } });
+  await pay(order.json.orderId, 'evt-estrategias');
+  const d = await c('GET', `/api/orders/${order.json.orderId}/delivery`);
+  assert.equal(d.status, 200);
+  const s = d.json.strategies;
+  assert.equal(s.comparison.length, 4);
+  assert.ok(s.schedule.length > 0);
+  assert.ok(s.milestones.some((m: any) => m.kind === 'debt_free'));
+  assert.ok(s.playbook.some((p: any) => p.id === 'sair_do_rotativo'));
+  assert.equal(d.json.input.debts[1].kindNote, 'Empréstimo com parente');
+  const kinds = new Set(d.json.extras.calendar.map((i: any) => i.kind));
+  assert.ok(kinds.has('estrategia') && kinds.has('marco'));
+  assert.ok(d.json.extras.calendar.some((i: any) => i.day > 30), 'marcos passam dos 30 dias');
+});

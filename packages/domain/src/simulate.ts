@@ -10,6 +10,8 @@ export interface SimOptions {
   poolCents: number;
   priority: string[];
   maxMonths: number;
+  /** Guarda o detalhe mês a mês dos primeiros N meses (para o plano mensal do Mapa). */
+  traceMonths?: number;
 }
 
 const OVERFLOW_GUARD_CENTS = 1e13;
@@ -39,6 +41,7 @@ export function simulate(debts: ResolvedDebt[], opts: SimOptions): SimulationRes
   }
 
   let months: number | null = null;
+  const schedule: NonNullable<SimulationResult['schedule']> = [];
 
   for (let m = 1; m <= opts.maxMonths; m++) {
     for (const d of debts) {
@@ -53,6 +56,10 @@ export function simulate(debts: ResolvedDebt[], opts: SimOptions): SimulationRes
       }
     }
 
+    const paidById: Record<string, number> = {};
+    const paid = (id: string, cents: number) => {
+      paidById[id] = (paidById[id] ?? 0) + cents;
+    };
     let paidMinimums = 0;
     for (const d of debts) {
       const b = balance.get(d.id) ?? 0;
@@ -61,6 +68,7 @@ export function simulate(debts: ResolvedDebt[], opts: SimOptions): SimulationRes
         balance.set(d.id, b - pay);
         paidMinimums += pay;
         totalPaid += pay;
+        paid(d.id, pay);
       }
     }
 
@@ -74,6 +82,7 @@ export function simulate(debts: ResolvedDebt[], opts: SimOptions): SimulationRes
           balance.set(id, b - pay);
           extra -= pay;
           totalPaid += pay;
+          paid(id, pay);
         }
       }
     }
@@ -81,6 +90,8 @@ export function simulate(debts: ResolvedDebt[], opts: SimOptions): SimulationRes
     for (const d of debts) {
       if ((balance.get(d.id) ?? 0) === 0 && payoffMonthById[d.id] === null) payoffMonthById[d.id] = m;
     }
+
+    if (opts.traceMonths && m <= opts.traceMonths) schedule.push({ month: m, paidById, balanceById: Object.fromEntries(balance) });
 
     const remaining = sumBalance();
     if (remaining === 0) {
@@ -97,5 +108,6 @@ export function simulate(debts: ResolvedDebt[], opts: SimOptions): SimulationRes
     totalPaidCents: totalPaid,
     remainingBalanceCents: sumBalance(),
     payoffMonthById,
+    ...(opts.traceMonths ? { schedule } : {}),
   };
 }

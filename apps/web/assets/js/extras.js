@@ -84,7 +84,7 @@ export function addonsSection(items, { lettersEligible }, onBuy) {
 }
 
 // ---------- calendário ----------
-const KIND = { orcamento: 'Orçamento', essencial: 'Conta essencial', prescricao: 'Atenção', negociar: 'Negociar', pagar: 'Pagar', revisar: 'Revisão' };
+const KIND = { orcamento: 'Orçamento', essencial: 'Conta essencial', prescricao: 'Atenção', negociar: 'Negociar', pagar: 'Pagar', revisar: 'Revisão', estrategia: 'Estratégia', marco: 'Marco' };
 
 const fold = (line) => {
   const out = [];
@@ -97,22 +97,27 @@ const fold = (line) => {
   return out.join('\r\n');
 };
 const esc = (t) => String(t).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+const nextDay = (iso) => new Date(Date.parse(`${iso}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
 
-/** Arquivo .ics (abre no Google Agenda, Apple e Outlook). Eventos de dia inteiro com lembrete às 9h. */
+/**
+ * Arquivo .ics: é o formato padrão de calendário, aceito por Google Agenda, iPhone/Mac (Apple Calendário) e Outlook.
+ * Eventos de dia inteiro com lembrete às 9h do próprio dia.
+ */
 export function buildIcs(items) {
   const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
-  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Folego//Calendario 30 dias//PT-BR', 'CALSCALE:GREGORIAN', 'X-WR-CALNAME:Fôlego: 30 dias'];
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Folego//Calendario de acoes//PT-BR', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'X-WR-CALNAME:Fôlego: plano de ação', 'X-WR-TIMEZONE:America/Sao_Paulo'];
   items.forEach((it, i) => {
     const day = it.date.replaceAll('-', '');
-    const next = new Date(Date.parse(`${it.date}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10).replaceAll('-', '');
     lines.push(
       'BEGIN:VEVENT',
       `UID:${day}-${i}@folego.online`,
       `DTSTAMP:${stamp}`,
       `DTSTART;VALUE=DATE:${day}`,
-      `DTEND;VALUE=DATE:${next}`,
+      `DTEND;VALUE=DATE:${nextDay(it.date).replaceAll('-', '')}`,
       `SUMMARY:${esc(`Fôlego: ${it.title}`)}`,
       `DESCRIPTION:${esc(it.detail)}`,
+      `CATEGORIES:${esc(KIND[it.kind] ?? 'Fôlego')}`,
+      'TRANSP:TRANSPARENT',
       'BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${esc(it.title)}`, 'TRIGGER:PT9H', 'END:VALARM',
       'END:VEVENT',
     );
@@ -121,21 +126,57 @@ export function buildIcs(items) {
   return `${lines.map(fold).join('\r\n')}\r\n`;
 }
 
+/** Link que abre o Google Agenda com o evento já preenchido (um evento por vez; para todos de uma vez, importe o arquivo). */
+export function googleCalendarUrl(it) {
+  const p = new URLSearchParams({ action: 'TEMPLATE', text: `Fôlego: ${it.title}`, dates: `${it.date.replaceAll('-', '')}/${nextDay(it.date).replaceAll('-', '')}`, details: it.detail });
+  return `https://calendar.google.com/calendar/render?${p.toString()}`;
+}
+
 export function calendarSection(items) {
-  const fmt = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' });
-  return card(
-    'calendario', 'Calendário dos 30 dias',
-    el('p', { class: 'section-sub' }, 'Uma ação de cada vez, com data. Baixe para o calendário do celular e receba lembretes às 9h.'),
-    el('div', { class: 'button-row no-print' }, el('button', { class: 'btn btn-primary', type: 'button', onclick: () => saveFile('folego-30-dias.ics', 'text/calendar;charset=utf-8', buildIcs(items)) }, icon('clock'), 'Baixar para meu calendário (.ics)')),
+  const fmt = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short', year: '2-digit' });
+  const download = () => saveFile('folego-plano-de-acao.ics', 'text/calendar;charset=utf-8', buildIcs(items));
+  const soon = items.filter((it) => it.day <= 30);
+  const later = items.filter((it) => it.day > 30);
+  const how = el('div', { class: 'cal-how', hidden: true });
+  const show = (title, steps) => {
+    how.hidden = false;
+    how.replaceChildren(el('h3', {}, title), el('ol', { class: 'strat-steps' }, ...steps.map((s) => el('li', {}, s))));
+  };
+  const btn = (label, onclick, primary = false) => el('button', { class: `btn ${primary ? 'btn-primary' : 'btn-secondary'} btn-sm`, type: 'button', onclick }, icon('clock'), label);
+  const row = (it) =>
     el(
-      'ol', { class: 'agenda' },
-      ...items.map((it) =>
-        el(
-          'li', { class: `agenda-item kind-${it.kind}` },
-          el('div', { class: 'agenda-date' }, el('strong', {}, it.day === 0 ? 'Hoje' : `Dia ${it.day}`), el('span', { class: 'muted' }, fmt(it.date))),
-          el('div', { class: 'agenda-body' }, el('span', { class: 'pill' }, KIND[it.kind]), el('h3', {}, it.title), el('p', { class: 'muted' }, it.detail)),
-        ),
+      'li', { class: `agenda-item kind-${it.kind}` },
+      el('div', { class: 'agenda-date' }, el('strong', {}, it.day === 0 ? 'Hoje' : it.day <= 30 ? `Dia ${it.day}` : fmt(it.date).split(',').pop().trim()), el('span', { class: 'muted' }, it.day <= 30 ? fmt(it.date) : '')),
+      el(
+        'div', { class: 'agenda-body' },
+        el('span', { class: 'pill' }, KIND[it.kind] ?? it.kind),
+        el('h3', {}, it.title),
+        el('p', { class: 'muted' }, it.detail),
+        el('a', { class: 'link no-print', href: googleCalendarUrl(it), target: '_blank', rel: 'noopener noreferrer' }, 'Adicionar só este ao Google Agenda'),
       ),
+    );
+  return card(
+    'calendario', 'Calendário do seu plano',
+    el('p', { class: 'section-sub' }, `${items.length} lembretes: as ações dos primeiros 30 dias, as estratégias do seu caso e os marcos dos próximos meses (dia de pagar, dívida quitada, livre das dívidas). Funciona no Google Agenda, no iPhone e no Outlook.`),
+    el(
+      'div', { class: 'button-row no-print' },
+      btn('Google Agenda', () => {
+        download();
+        show('No Google Agenda (todos de uma vez)', ['O arquivo "folego-plano-de-acao.ics" acabou de ser baixado.', 'No computador, abra calendar.google.com, clique na engrenagem → Configurações → Importar e exportar.', 'Escolha o arquivo baixado, selecione a agenda e clique em Importar.', 'No celular Android, basta abrir o arquivo baixado e escolher "Agenda". Se preferir, use o link "Adicionar só este ao Google Agenda" em cada item abaixo.']);
+      }, true),
+      btn('iPhone / Mac', () => {
+        download();
+        show('No iPhone, iPad ou Mac (Calendário da Apple)', ['O arquivo "folego-plano-de-acao.ics" acabou de ser baixado.', 'No iPhone: toque no arquivo baixado (ele aparece no Safari ou no app Arquivos) e depois em "Adicionar Todos".', 'No Mac: dê dois cliques no arquivo e escolha em qual calendário guardar.', 'Os lembretes chegam às 9h do dia de cada ação.']);
+      }),
+      btn('Outlook', () => {
+        download();
+        show('No Outlook', ['O arquivo "folego-plano-de-acao.ics" acabou de ser baixado.', 'No computador: dê dois cliques no arquivo; o Outlook abre e pergunta se quer importar.', 'No Outlook pela internet (outlook.com): Calendário → Adicionar calendário → Carregar do arquivo.', 'Escolha o calendário e confirme.']);
+      }),
     ),
+    how,
+    el('h3', {}, 'Primeiros 30 dias'),
+    el('ol', { class: 'agenda' }, ...soon.map(row)),
+    later.length > 0 ? el('h3', {}, 'Próximos meses: pagamentos e marcos') : null,
+    later.length > 0 ? el('ol', { class: 'agenda' }, ...later.map(row)) : null,
   );
 }

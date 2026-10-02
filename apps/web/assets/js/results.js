@@ -7,6 +7,8 @@ import {
 import { scriptsSection, lettersSection } from './generated.js';
 import { accessSection, addonsSection, calendarSection } from './extras.js';
 import { incomeSection } from './income.js';
+import { strategiesSection } from './strategies.js';
+import { kindText } from './copy.js';
 import { leadsSection } from './leads.js';
 import { CATALOG, priceLabel } from './catalog.js';
 
@@ -189,7 +191,7 @@ function section(id, title, ...children) {
   return el('section', { class: 'card d-section', id, 'aria-labelledby': `${id}-t` }, el('h2', { id: `${id}-t` }, title), ...children);
 }
 
-export function renderDelivery(root, { input, diagnosis: d, items, generated, extras = {}, accessUntil, lettersEligible = 0, leads = null }, { onLead = async () => {}, onLeadRevoke = async () => {}, onWipe, onAddon = () => {}, makeLink = async () => '', sendEmail = null, onIncomeInterview = async () => {}, onIncomeTask = async () => {} }) {
+export function renderDelivery(root, { input, diagnosis: d, items, generated, extras = {}, strategies = null, accessUntil, lettersEligible = 0, leads = null }, { onLead = async () => {}, onLeadRevoke = async () => {}, onWipe, onAddon = () => {}, makeLink = async () => '', sendEmail = null, onIncomeInterview = async () => {}, onIncomeTask = async () => {} }) {
   const debtById = new Map(input.debts.map((x) => [x.id, x]));
   const diagById = new Map(d.debts.map((x) => [x.debtId, x]));
   const band = d.health.band;
@@ -211,7 +213,7 @@ export function renderDelivery(root, { input, diagnosis: d, items, generated, ex
   const nav = el(
     'nav',
     { class: 'd-nav no-print', 'aria-label': 'Seções do Mapa' },
-    ...[['resumo', 'Resumo'], ['ordem', 'Ordem'], ['orcamento', 'Orçamento'], ['linha', 'Linha do tempo'], ['roteiros', 'Roteiros'], ...(items.includes('defense_letters') ? [['cartas', 'Cartas']] : []), ...(extras.calendar ? [['calendario', 'Calendário']] : []), ...(generated.income ? [['renda', 'Renda extra']] : []), ['dinheiro', 'Dinheiro esquecido']].map(([id, label]) => el('a', { href: `#${id}`, 'data-anchor': id }, label)),
+    ...[['resumo', 'Resumo'], ['ordem', 'Ordem'], ['orcamento', 'Orçamento'], ['linha', 'Linha do tempo'], ...(strategies ? [['estrategias', 'Estratégias']] : []), ['roteiros', 'Roteiros'], ...(items.includes('defense_letters') ? [['cartas', 'Cartas']] : []), ...(extras.calendar ? [['calendario', 'Calendário']] : []), ...(generated.income ? [['renda', 'Renda extra']] : []), ['dinheiro', 'Dinheiro esquecido']].map(([id, label]) => el('a', { href: `#${id}`, 'data-anchor': id }, label)),
   );
 
   // Resumo
@@ -240,7 +242,7 @@ export function renderDelivery(root, { input, diagnosis: d, items, generated, ex
       el('span', { class: 'rank', 'aria-hidden': 'true' }, String(i + 1)),
       el(
         'div', { class: 'order-body' },
-        el('p', { class: 'order-name' }, el('strong', {}, debt.creditorName), ' ', el('span', { class: 'muted' }, `· ${KIND_LABEL[debt.kind]}`)),
+        el('p', { class: 'order-name' }, el('strong', {}, debt.creditorName), ' ', el('span', { class: 'muted' }, `· ${kindText(debt)}`)),
         el('p', { class: 'muted' }, `${brl(debt.balanceCents)} · ${bpsToText(dg.rateBps)} (${RATE_SOURCE[dg.rateSource]})`),
         el('p', {}, tierReason(dg.tier), dg.payoffMonth !== null ? ` Quita em cerca de ${formatMonths(dg.payoffMonth)}.` : ''),
         dg.prescription.status === 'approaching' ? el('p', { class: 'note note-amber' }, icon('alert'), el('span', {}, 'Perto de completar o prazo de prescrição. Confira antes de negociar.')) : null,
@@ -316,6 +318,7 @@ export function renderDelivery(root, { input, diagnosis: d, items, generated, ex
     el('p', { class: 'note note-amber' }, icon('alert'), el('span', {}, 'Ninguém pode cobrar para “liberar” seu dinheiro. Use só sites e aplicativos oficiais (.gov.br) e desconfie de mensagens que pedem pagamento.')),
   );
 
+  const estrategias = strategiesSection(strategies);
   const acesso = accessSection(makeLink, accessUntil, sendEmail);
   const calendario = extras.calendar ? calendarSection(extras.calendar) : null;
   const renda = generated.income ? incomeSection(generated.income, { onSubmitInterview: onIncomeInterview, onToggleTask: onIncomeTask }) : null;
@@ -325,7 +328,7 @@ export function renderDelivery(root, { input, diagnosis: d, items, generated, ex
   // replaceChildren() é API nativa: diferente do nosso el(), ela NÃO ignora null/undefined — transforma em texto "null" na tela. Por isso filtramos aqui.
   root.replaceChildren(
     ...[
-      header, acesso, nav, resumo, ordem, orcamento, linha, roteiros, cartas, calendario, renda, complementos, propostas, dinheiro,
+      header, acesso, nav, resumo, ordem, orcamento, linha, estrategias, roteiros, cartas, calendario, renda, complementos, propostas, dinheiro,
       el('p', { class: 'fine' }, 'Estimativas educativas, calculadas com o que você informou. O Fôlego não é escritório de advocacia, banco ou consultoria de investimentos, e não negocia por você.'),
     ].filter(Boolean),
   );

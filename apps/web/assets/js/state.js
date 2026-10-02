@@ -7,6 +7,7 @@ export function newDebt() {
     uid: `d${Date.now().toString(36)}${uid}`,
     creditor: '',
     kind: '',
+    kindNote: '', // só quando o tipo é "Outra": a pessoa diz qual dívida é
     balanceCents: null,
     paymentCents: null,
     overdue: '', // '' | 'no' | 'yes'

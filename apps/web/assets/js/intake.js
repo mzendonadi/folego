@@ -166,6 +166,14 @@ function debtCard(d, index, total) {
   kind.dataset.debt = p;
   card.append(field({ id: `${p}-kind`, label: 'Que tipo de dívida é?', control: kind }));
 
+  // "Outra": abre um campo para a pessoa dizer qual dívida é (aparece no Mapa e nos roteiros).
+  const kindNote = el('input', { id: `${p}-kindnote`, class: 'input', type: 'text', maxlength: '60', autocomplete: 'off', placeholder: 'Ex.: empréstimo com parente, mensalidade escolar, multa', 'data-field': 'kindNote', 'data-debt': p });
+  kindNote.value = d.kindNote ?? '';
+  describe(kindNote, `${p}-kindnote`, false);
+  const kindNoteField = field({ id: `${p}-kindnote`, label: 'Qual dívida é essa?', control: kindNote, className: 'field-kindnote' });
+  kindNoteField.hidden = d.kind !== 'other';
+  card.append(kindNoteField);
+
   const balance = moneyControl(`${p}-balance`, d.balanceCents);
   $('input', balance).dataset.field = 'balance';
   $('input', balance).dataset.debt = p;
@@ -366,6 +374,7 @@ function validateStep(i) {
     for (const d of a.debts) {
       if (!d.creditor.trim()) errors.push([`${d.uid}-creditor`, 'Escreva o nome do credor. Pode ser só “Banco” ou “Loja”.']);
       if (!d.kind) errors.push([`${d.uid}-kind`, 'Escolha o tipo de dívida.']);
+      if (d.kind === 'other' && !(d.kindNote ?? '').trim()) errors.push([`${d.uid}-kindnote`, 'Diga em poucas palavras qual dívida é.']);
       if (!d.balanceCents) errors.push([`${d.uid}-balance`, 'Diga quanto falta pagar, mesmo que aproximado.']);
       if (!d.overdue) errors.push([`${d.uid}-overdue`, 'Diga se está em dia ou em atraso.']);
       if (d.overdue === 'yes' && !d.overdueBand && !d.firstDefaultMonth) errors.push([`${d.uid}-band`, 'Escolha há quanto tempo está em atraso.']);
@@ -455,6 +464,7 @@ export function buildInput() {
       const bps = percentToBps(d.ratePct);
       if (bps !== undefined) debt.monthlyRateBps = bps;
       if (firstDefaultOn) debt.firstDefaultOn = firstDefaultOn;
+      if (d.kind === 'other' && (d.kindNote ?? '').trim()) debt.kindNote = d.kindNote.trim();
       return debt;
     }),
   };
@@ -483,7 +493,14 @@ function onInput(event) {
 
   if (d) {
     if (key === 'creditor') d.creditor = t.value;
-    else if (key === 'kind') d.kind = t.value;
+    else if (key === 'kind') {
+      d.kind = t.value;
+      const noteField = $(`#${d.uid}-kindnote`)?.closest('.field');
+      if (noteField) {
+        noteField.hidden = d.kind !== 'other';
+        if (d.kind === 'other') $(`#${d.uid}-kindnote`)?.focus();
+      }
+    } else if (key === 'kindNote') d.kindNote = t.value;
     else if (key === 'balance') d.balanceCents = cents;
     else if (key === 'payment') d.paymentCents = cents;
     else if (key === 'overdue') {

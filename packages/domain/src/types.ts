@@ -26,6 +26,8 @@ export interface DebtInput {
   id: string;
   creditorName: string;
   kind: DebtKind;
+  /** Quando kind = 'other': o que a pessoa escreveu sobre a dívida (só exibição, não entra em cálculo). */
+  kindNote?: string;
   balanceCents: number;
   monthlyPaymentCents?: number;
   remainingInstallments?: number;
@@ -74,6 +76,8 @@ export interface SimulationResult {
   totalPaidCents: number;
   remainingBalanceCents: number;
   payoffMonthById: Record<string, number | null>;
+  /** Só quando pedido (opts.traceMonths): quanto foi pago em cada dívida e o saldo ao fim de cada mês. */
+  schedule?: { month: number; paidById: Record<string, number>; balanceById: Record<string, number> }[];
 }
 
 export interface BudgetSummary {

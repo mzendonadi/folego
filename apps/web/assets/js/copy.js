@@ -28,6 +28,8 @@ export const DEBT_KINDS = [
   ['other', 'Outra'],
 ];
 export const KIND_LABEL = Object.fromEntries(DEBT_KINDS);
+/** Rótulo do tipo de dívida; em "Outra", usa o que a pessoa escreveu. */
+export const kindText = (debt) => (debt.kind === 'other' && debt.kindNote ? debt.kindNote : (KIND_LABEL[debt.kind] ?? debt.kind));
 
 // Faixa de atraso → dias aproximados (o motor trabalha com dias).
 export const OVERDUE_BANDS = [

@@ -752,3 +752,45 @@ ul, ol { margin: 0; padding: 0; }
 .announce { padding: 10px var(--gutter); text-align: center; font-weight: 700; font-size: 0.9375rem; }
 .announce-info { background: var(--mint); color: var(--mint-ink); }
 .announce-warn { background: var(--amber-bg); color: var(--amber-ink); }
+.week-goal { margin: 4px 0 0; font-size: 0.9375rem; }
+
+/* Estratégias do Mapa e calendário do plano */
+.strat-verdict { font-size: clamp(1.15rem, 1rem + 0.6vw, 1.4rem); }
+.strat-block { display: grid; gap: var(--s3); padding-top: var(--s4); border-top: 1px solid var(--line); min-width: 0; }
+.strat-block h3 { font-size: 1.25rem; }
+.strat-pill { margin-left: 8px; font-size: 0.75rem; padding: 2px 8px; }
+.strat-desc { display: block; font-weight: 400; margin-top: 2px; }
+.table-wrap { overflow-x: auto; margin-inline: calc(var(--s5) * -1); padding-inline: var(--s5); }
+.data-table { width: 100%; border-collapse: collapse; font-size: 0.9375rem; min-width: 460px; }
+.data-table th, .data-table td { text-align: left; padding: 10px 12px 10px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+.data-table thead th { font-size: 0.75rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+.data-table tbody th { font-weight: 400; }
+.data-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.data-table tr.is-highlight th, .data-table tr.is-highlight td { background: var(--mint); color: var(--mint-ink); }
+.data-table tr.is-highlight th { padding-left: 10px; border-radius: 10px 0 0 10px; }
+.data-table tr.is-highlight td:last-child { padding-right: 10px; border-radius: 0 10px 10px 0; }
+.data-table tr.is-highlight .fine { color: inherit; }
+.month-plan { list-style: none; display: grid; gap: var(--s3); margin: 0; padding: 0; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+.month-plan > li { display: grid; gap: 8px; align-content: start; padding: var(--s4); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--paper); }
+.month-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--s2); flex-wrap: wrap; }
+.month-pay { list-style: none; display: grid; gap: 4px; margin: 0; padding: 0; }
+.month-pay li { display: flex; justify-content: space-between; gap: var(--s3); align-items: baseline; }
+.month-pay strong { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.milestones { list-style: none; display: grid; gap: 0; margin: 0; padding: 0; }
+.milestone { display: grid; grid-template-columns: 84px 1fr; gap: var(--s3); padding: 10px 0 10px var(--s3); border-left: 3px solid var(--line); }
+.milestone p { margin: 2px 0 0; }
+.ms-when { font-weight: 800; font-size: 0.875rem; color: var(--muted); }
+.ms-payoff { border-left-color: var(--seg-d); }
+.ms-debt_free { border-left-color: var(--primary); }
+.strat-item { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 0 var(--s4); background: var(--paper); }
+.strat-item[open] { padding-bottom: var(--s4); }
+.strat-item summary { display: flex; align-items: center; gap: var(--s3); min-height: 56px; cursor: pointer; list-style: none; }
+.strat-item summary::-webkit-details-marker { display: none; }
+.strat-item > p { margin: 0 0 var(--s3); }
+.strat-steps { display: grid; gap: 6px; padding-left: 1.3em; margin: 0 0 var(--s3); }
+.cal-how { padding: var(--s4); border-radius: var(--radius-sm); background: var(--mint); color: var(--mint-ink); display: grid; gap: var(--s2); }
+.cal-how h3 { font-size: 1.1rem; }
+.cal-how .strat-steps { margin: 0; }
+.agenda-item.kind-marco { border-color: var(--primary); }
+.agenda-item.kind-estrategia { border-color: color-mix(in srgb, var(--primary) 45%, var(--line)); }
+@media print { .strat-item:not([open]) > * { display: block; } }

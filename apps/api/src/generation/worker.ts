@@ -111,7 +111,7 @@ async function generate(ctx: Ctx, opts: WorkerOptions, job: Claimed): Promise<Ge
     const used = await ctx.db.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.deliverables WHERE generation_meta->>'source' = 'ai' AND generated_at >= date_trunc('day', now())`);
     if (Number(used.rows[0]?.n ?? 0) < Math.min(opts.maxAiCallsPerDay, ctx.config.aiMaxCallsPerDay)) {
       let feedback: string[] = [];
-      for (let attempt = 1; attempt <= 2 && !content; attempt++) {
+      for (let attempt = 1; attempt <= 3 && !content; attempt++) {
         try {
           const ai = await opts.generator.generate(facts, feedback);
           const issues = checkGeneratedText(ai.core, facts, expectedIds);
@@ -120,11 +120,14 @@ async function generate(ctx: Ctx, opts: WorkerOptions, job: Claimed): Promise<Ge
             meta = { source: 'ai', model: ai.model, inputTokens: ai.inputTokens, outputTokens: ai.outputTokens, aiAttempts: attempt };
           } else {
             feedback = issues;
-            opts.log?.({ evento: 'ia_reprovada_no_verificador', tentativa: attempt, problemas: issues.length });
+            opts.log?.({ evento: 'ia_reprovada_no_verificador', tentativa: attempt, problemas: issues.length, detalhe: issues.slice(0, 3).join(' | ').slice(0, 300) });
           }
         } catch (error) {
-          opts.log?.({ evento: 'ia_falhou', tentativa: attempt, erro: error instanceof Error ? error.message.slice(0, 120) : 'erro' });
-          break; // erro de rede/formato: vai direto para o modelo determinístico
+          const msg = error instanceof Error ? error.message : 'erro';
+          opts.log?.({ evento: 'ia_falhou', tentativa: attempt, erro: msg.slice(0, 200) });
+          // Formato fora do esperado (ex.: texto longo demais): tenta de novo dizendo o que corrigir. Erro de rede: modelo fixo.
+          if (msg.startsWith('anthropic_formato_invalido')) { feedback = [msg.slice(0, 400)]; continue; }
+          break;
         }
       }
       if (!content) meta = { source: 'template', motivo: 'ia_indisponivel_ou_reprovada' };
@@ -186,7 +189,7 @@ async function generateIncome(ctx: Ctx, opts: WorkerOptions, job: Claimed): Prom
     const used = await ctx.db.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.deliverables WHERE generation_meta->>'source' = 'ai' AND generated_at >= date_trunc('day', now())`);
     if (Number(used.rows[0]?.n ?? 0) < Math.min(opts.maxAiCallsPerDay, ctx.config.aiMaxCallsPerDay)) {
       let feedback: string[] = [];
-      for (let attempt = 1; attempt <= 2 && !content; attempt++) {
+      for (let attempt = 1; attempt <= 3 && !content; attempt++) {
         try {
           const ai = await opts.incomeGenerator.generate(facts, feedback);
           const issues = checkIncomeText(ai.core, facts);
@@ -195,10 +198,12 @@ async function generateIncome(ctx: Ctx, opts: WorkerOptions, job: Claimed): Prom
             meta = { source: 'ai', model: ai.model, inputTokens: ai.inputTokens, outputTokens: ai.outputTokens, aiAttempts: attempt };
           } else {
             feedback = issues;
-            opts.log?.({ evento: 'ia_reprovada_no_verificador', produto: 'extra_income_plan', tentativa: attempt, problemas: issues.length });
+            opts.log?.({ evento: 'ia_reprovada_no_verificador', produto: 'extra_income_plan', tentativa: attempt, problemas: issues.length, detalhe: issues.slice(0, 3).join(' | ').slice(0, 300) });
           }
         } catch (error) {
-          opts.log?.({ evento: 'ia_falhou', produto: 'extra_income_plan', tentativa: attempt, erro: error instanceof Error ? error.message.slice(0, 120) : 'erro' });
+          const msg = error instanceof Error ? error.message : 'erro';
+          opts.log?.({ evento: 'ia_falhou', produto: 'extra_income_plan', tentativa: attempt, erro: msg.slice(0, 200) });
+          if (msg.startsWith('anthropic_formato_invalido')) { feedback = [msg.slice(0, 400)]; continue; }
           break;
         }
       }

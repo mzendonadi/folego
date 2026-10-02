@@ -1,6 +1,6 @@
 import { buildIncomePlanTemplate, rateText } from '../engine.ts';
 import type { IncomeFacts, IncomePlanContent } from '../engine.ts';
-import { INCOME_WEEK_TEMPLATES, INCOME_CAUTIONS } from '../engine.ts';
+import { INCOME_CAUTIONS } from '../engine.ts';
 import type { IncomePlanCore } from './income-schema.ts';
 
 /**
@@ -29,7 +29,12 @@ export function assembleIncomePlan(core: IncomePlanCore | null, facts: IncomeFac
       rateNote: rateText(cat, facts),
       projected: facts.projectedByCategory[cat] ?? null,
     },
-    weeks: INCOME_WEEK_TEMPLATES[cat].map((w, i) => ({ week: i + 1, title: w.title, tasks: [...w.tasks, core.weekNotes[i]!] })),
+    headline: core.headline,
+    offer: core.offer,
+    firstMessage: core.firstMessage,
+    risks: core.risks,
+    // As 4 semanas agora são escritas pela IA sob medida (o verificador já conferiu valores e plataformas).
+    weeks: core.weeks.map((w, i) => ({ week: i + 1, title: w.title, goal: w.goal, tasks: w.tasks })),
     cautions: INCOME_CAUTIONS,
   };
 }

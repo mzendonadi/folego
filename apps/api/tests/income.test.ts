@@ -58,13 +58,17 @@ const goodCore = (): IncomePlanCore => ({
   ideaId: facts.candidates[0]!.id,
   openingNote: 'Você contou que sabe fazer doces e organizar festas — dá pra transformar isso em uma renda extra real.',
   personalizedWhy: 'Encomendas de doces combinam com o tempo que você tem e com o que você já sabe fazer.',
-  weekNotes: ['Comece por um sabor que você já domina.', 'Peça pra quem experimentou indicar mais gente.', 'Anote o que mais pediram.', 'Veja se o ritmo cabe na sua semana.'],
+  headline: 'Doces de festa sob encomenda para o bairro',
+  offer: { whatYouSell: 'Brigadeiros e bolos pequenos para aniversários, por encomenda.', idealCustomer: 'Vizinhos e colegas que fazem festa em casa.', pricingApproach: 'Some o custo dos ingredientes, o seu tempo e uma margem; confira a faixa de referência antes de fechar.' },
+  weeks: [1, 2, 3, 4].map((n) => ({ title: `Semana ${n}`, goal: 'Ter algo pronto para mostrar.', tasks: ['Separe as receitas que você já domina.', 'Fotografe com boa luz.', 'Mostre para cinco conhecidos.'] })),
+  firstMessage: 'Oi! Estou fazendo doces de festa sob encomenda. Posso te mandar as opções?',
+  risks: ['Não compre ingredientes antes de receber o sinal.', 'Combine o prazo de entrega por escrito.'],
   encouragement: 'Vai com calma: o primeiro mês é para testar, não para virar sua renda principal.',
 });
 
 test('verificador aprova o modelo determinístico', () => {
   const template = assembleIncomePlan(null, facts, 'template');
-  assert.equal(checkIncomeText({ ideaId: facts.candidates[0]!.id, openingNote: 'x'.repeat(25), personalizedWhy: template.idea.why, weekNotes: template.weeks.map((w) => w.tasks[0]!), encouragement: 'y'.repeat(15) }, facts).length, 0);
+  assert.equal(checkIncomeText({ ...goodCore(), personalizedWhy: template.idea.why, weeks: template.weeks.map((w) => ({ title: w.title, goal: 'x'.repeat(10), tasks: w.tasks })) }, facts).length, 0);
 });
 
 test('verificador rejeita ideaId inválido, valor inventado, plataforma não autorizada e promessa de ficar rico', () => {
@@ -77,7 +81,9 @@ test('verificador rejeita ideaId inválido, valor inventado, plataforma não aut
   assert.match(inject((c) => (c.personalizedWhy = 'Você pode ganhar R$ 999,00 por semana fácil.')), /Valor não autorizado/);
   assert.match(inject((c) => (c.openingNote = 'Anuncie tudo no Shopee, que é ótimo pra isso.')), /Plataforma não autorizada/);
   assert.match(inject((c) => (c.encouragement = 'Com isso você vai ficar rico rapidinho.')), /ficar rico/);
-  assert.match(inject((c) => (c.weekNotes = ['só uma nota'])), /weekNotes precisa ter exatamente 4/);
+  assert.match(inject((c) => (c.weeks = c.weeks.slice(0, 1))), /weeks precisa ter exatamente 4/);
+  assert.match(inject((c) => (c.weeks[2]!.tasks[0] = 'Cobre R$ 777,00 de cada cliente.')), /Valor não autorizado/);
+  assert.match(inject((c) => (c.firstMessage = 'Me chama no Shopee!')), /Plataforma não autorizada/);
 });
 
 // ---------- cliente do Claude ----------
@@ -233,4 +239,25 @@ test('o pedido ao Claude não envia "temperature" (descontinuado nos modelos nov
   const stub = stubFetch(() => toolUse(goodCore()));
   await new AnthropicIncomeGenerator({ apiKey: 'k', model: 'm', fetchFn: stub.fn }).generate(facts, []);
   assert.equal('temperature' in stub.calls[0]!.body, false);
+});
+
+test('resposta da IA fora do formato (ex.: texto longo demais) tenta de novo em vez de cair no modelo fixo', async () => {
+  const { call, caseId, mapOrderId } = await paidMapPlusIncome('inc-formato');
+  await call('POST', `/api/cases/${caseId}/income-interview`, goodInterviewBody);
+  let calls = 0;
+  const flaky: IncomePlanGenerator = {
+    name: 'flaky',
+    generate: async (f, feedback) => {
+      calls += 1;
+      if (calls === 1) throw new Error('anthropic_formato_invalido: personalizedWhy: Too big');
+      assert.match(feedback.join(' '), /formato_invalido/);
+      return { core: { ...goodCore(), ideaId: f.candidates[0]!.id }, model: 'm', inputTokens: 1, outputTokens: 1 };
+    },
+  };
+  while (await processNext(ctx(), { generator: null, incomeGenerator: flaky, maxAiCallsPerDay: 100 })) { /* fila */ }
+  const d = await call('GET', `/api/orders/${mapOrderId}/delivery`);
+  assert.equal(d.json.generated.income.source, 'ai');
+  assert.equal(d.json.generated.income.content.headline, goodCore().headline);
+  assert.equal(d.json.generated.income.content.weeks.length, 4);
+  assert.equal(calls, 2);
 });

@@ -7,8 +7,8 @@ import { leadState, leadDocumentId } from './leads.ts';
 import type { LeadState } from './leads.ts';
 import type { EmailSender } from './email.ts';
 import type { CreateCaseInput, IncomeInterviewInput } from './schemas.ts';
-import { diagnose, buildPreview, buildCalendar, buildIncomeFacts, analyzeCollectionText, buildTranslatorPreview } from './engine.ts';
-import type { DebtInput, Diagnosis, Preview, CalendarItem, Profile, TranslatorAnalysis, TranslatorPreview } from './engine.ts';
+import { diagnose, buildPreview, buildCalendar, buildStrategies, buildIncomeFacts, analyzeCollectionText, buildTranslatorPreview } from './engine.ts';
+import type { DebtInput, Diagnosis, Preview, CalendarItem, Profile, Strategies, EmploymentType, TranslatorAnalysis, TranslatorPreview } from './engine.ts';
 import { encryptText, hmac, newToken, sha256 } from './crypto.ts';
 import { AppError, notFound } from './errors.ts';
 
@@ -346,6 +346,8 @@ export interface Delivery {
   items: string[];
   /** Complementos calculados no servidor SÓ para quem tem o direito ativo. */
   extras: { calendar?: CalendarItem[] };
+  /** Estratégias do Mapa (comparação, plano mês a mês, marcos, roteiro). Calculadas na hora, a partir dos dados do caso. */
+  strategies: Strategies | null;
   /** Até quando o Mapa está liberado (ms). */
   accessUntil: number;
   /** Quantas dívidas comportam cartas (em atraso ou possivelmente prescritas): decide se o Kit é oferecido. */
@@ -377,7 +379,18 @@ export async function getDelivery(ctx: Ctx, sessionId: string, orderId: string):
   const items = await ctx.db.query<{ product_code: string }>(`SELECT product_code FROM app.entitlements WHERE case_id = $1 AND expires_at > now() ORDER BY product_code`, [order.case_id]);
   const has = new Set(items.rows.map((i) => i.product_code));
   const extras: Delivery['extras'] = {};
-  if (has.has('calendar_30d')) extras.calendar = buildCalendar(diagnosis, cr.inputs.debts);
+  // Recalculadas a cada leitura (função pura do motor): casos antigos também recebem, sem migrar nada.
+  let strategies: Strategies | null = null;
+  try {
+    strategies = buildStrategies(
+      { asOf: cr.inputs.asOf, profile: { netIncomeCents: num(cr.net_income_cents), fixedExpensesCents: num(cr.fixed_expenses_cents), employmentType: cr.employment_type as EmploymentType, ageBand: cr.age_band, uf: cr.uf }, debts: cr.inputs.debts },
+      undefined,
+      diagnosis,
+    );
+  } catch {
+    strategies = null; // o Mapa nunca deixa de abrir por causa das estratégias
+  }
+  if (has.has('calendar_30d')) extras.calendar = buildCalendar(diagnosis, cr.inputs.debts, strategies ?? undefined);
 
   // Acesso vale por 30 dias contados do último acesso (documento oficial, §6.4).
   await ctx.db.query(`UPDATE app.cases SET status = 'delivered', purge_after = GREATEST(purge_after, now() + interval '30 days') WHERE id = $1`, [order.case_id]);
@@ -411,6 +424,7 @@ export async function getDelivery(ctx: Ctx, sessionId: string, orderId: string):
     diagnosis,
     items: items.rows.map((i) => i.product_code),
     extras,
+    strategies,
     accessUntil: new Date(ent.rows[0]!.expires_at).getTime(),
     lettersEligible: cr.inputs.debts.filter((d) => d.daysOverdue > 0 || diagnosis.heldAsideIds.includes(d.id)).length,
     leads: await leadState(ctx, order.case_id, diagnosis, cr.inputs.debts),

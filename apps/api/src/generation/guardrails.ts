@@ -80,7 +80,7 @@ export function checkIncomeText(core: IncomePlanCore, facts: IncomeFacts): strin
   if (!facts.candidates.some((c) => c.id === core.ideaId)) {
     issues.push(`ideaId deve ser uma das ideias candidatas fornecidas; recebi "${core.ideaId}".`);
   }
-  if (core.weekNotes.length !== 4) issues.push('weekNotes precisa ter exatamente 4 itens, um por semana.');
+  if (core.weeks.length !== 4) issues.push('weeks precisa ter exatamente 4 semanas.');
   const text = collectStrings(core);
   issues.push(...checkCommonRules(text, facts.allowedAmountsCents, null));
 

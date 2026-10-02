@@ -10,6 +10,7 @@ const cents = z.number().int().min(0).max(100_000_000_000);
 export const debtSchema = z.object({
   creditorName: z.string().trim().min(1).max(60),
   kind: z.enum(KINDS),
+  kindNote: z.string().trim().max(60).optional(),
   balanceCents: cents.min(1),
   monthlyPaymentCents: cents.optional(),
   remainingInstallments: z.number().int().min(1).max(600).optional(),

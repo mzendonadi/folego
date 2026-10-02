@@ -10,10 +10,10 @@ export const CATALOG = {
     blurb: 'Cartas prontas para pedir informações, contestar juros e avisar sobre prazo de cobrança. Você preenche uma vez e baixa em PDF.',
   },
   calendar_30d: {
-    name: 'Calendário dos 30 dias',
+    name: 'Calendário do plano',
     cents: 1999,
     active: true,
-    blurb: 'As ações do seu Mapa em ordem, com data para cada uma. Baixe para o calendário do celular, com lembretes.',
+    blurb: 'As ações dos 30 dias, as estratégias do seu caso e os marcos dos próximos meses (dia de pagar, dívida quitada), com lembretes. Funciona no Google Agenda, no iPhone e no Outlook.',
   },
   extra_income_plan: {
     name: 'Criador de Renda Extra',

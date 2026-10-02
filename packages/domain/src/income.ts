@@ -177,6 +177,8 @@ const CAUTIONS = [
 export interface IncomePlanWeek {
   week: number;
   title: string;
+  /** O que precisa estar pronto ao fim da semana (só quando a IA escreveu o plano). */
+  goal?: string | null;
   tasks: string[];
 }
 
@@ -186,6 +188,11 @@ export interface IncomePlanContent {
   /** Só quando source = 'ai': uma nota de abertura e um incentivo final, escritos pela IA. */
   openingNote: string | null;
   encouragement: string | null;
+  /** Só quando source = 'ai': o negócio em uma linha, a oferta, a primeira mensagem aos clientes e os cuidados específicos. */
+  headline?: string | null;
+  offer?: { whatYouSell: string; idealCustomer: string; pricingApproach: string } | null;
+  firstMessage?: string | null;
+  risks?: string[] | null;
   target: { cents: number; basis: 'deficit' | 'surplus'; text: string };
   idea: { title: string; category: IncomeCategory; why: string; platforms: string[]; rateNote: string; projected: { lowCents: number; highCents: number } | null };
   weeks: IncomePlanWeek[];

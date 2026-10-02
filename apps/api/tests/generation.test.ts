@@ -222,7 +222,7 @@ test('IA reprovada no verificador: tenta de novo com feedback e, se persistir, e
     },
   };
   while (await processNext(ctx(), { generator: bad, maxAiCallsPerDay: 100 })) { /* fila */ }
-  assert.equal(feedbacks.length, 2);
+  assert.equal(feedbacks.length, 3); // até 3 tentativas antes de cair no modelo fixo
   assert.deepEqual(feedbacks[0], []);
   assert.match(feedbacks[1]!.join(' '), /Valor não autorizado/);
   const s = (await call('GET', `/api/orders/${orderId}/delivery`)).json.generated.scripts;

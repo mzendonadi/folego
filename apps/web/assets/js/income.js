@@ -1,8 +1,9 @@
 // Criador de Renda Extra 2.0: sem IA antes da compra. Depois de pagar, uma entrevista curta personaliza
 // um plano de verdade (a IA só escreve texto sobre os números e as ideias que o motor já calculou).
-import { el, icon, toast } from './dom.js';
+import { el, icon, toast, copyText } from './dom.js';
 import { fieldToCents, centsToField } from './format.js';
 
+const block = (title, ...children) => el('div', { class: 'script-block' }, el('h4', {}, title), ...children);
 const list = (items, cls = 'bullets') => el('ul', { class: cls }, ...items.map((t) => el('li', {}, t)));
 
 function card(...children) {
@@ -89,8 +90,8 @@ function planContent(g, onToggleTask) {
   const c = g.content;
   const origin =
     c.source === 'ai'
-      ? 'Personalizado com ajuda de inteligência artificial a partir do que você contou (sem inventar números nem plataformas).'
-      : 'Montado com os seus números.';
+      ? 'Plano escrito sob medida por inteligência artificial a partir da sua entrevista. Os valores e as plataformas vêm do nosso motor de cálculo, nunca inventados.'
+      : 'Plano padrão montado com os seus números. A personalização por IA não ficou disponível desta vez; você pode refazer a entrevista para tentar de novo.';
   const progress = g.progress ?? {};
   return [
     el('p', { class: 'section-sub' }, origin),
@@ -98,11 +99,24 @@ function planContent(g, onToggleTask) {
     el('p', { class: 'note' }, icon('info'), el('span', {}, c.target.text)),
     el(
       'article', { class: 'script' },
-      el('h3', {}, c.idea.title),
+      c.headline ? el('p', { class: 'card-eyebrow' }, c.idea.title) : null,
+      el('h3', {}, c.headline || c.idea.title),
       el('p', {}, c.idea.why),
-      el('p', { class: 'muted' }, c.idea.rateNote),
-      c.idea.platforms.length > 0 ? el('p', {}, el('strong', {}, 'Onde oferecer: '), c.idea.platforms.join(', ')) : null,
+      c.offer ? block('O que você vai oferecer', el('p', {}, c.offer.whatYouSell)) : null,
+      c.offer ? block('Seu primeiro cliente', el('p', {}, c.offer.idealCustomer)) : null,
+      c.offer ? block('Como cobrar', el('p', {}, c.offer.pricingApproach)) : null,
+      block('Faixa de referência', el('p', { class: 'muted' }, c.idea.rateNote)),
+      c.idea.platforms.length > 0 ? block('Onde oferecer', el('p', {}, c.idea.platforms.join(', '))) : null,
     ),
+    c.firstMessage
+      ? el(
+          'article', { class: 'script' },
+          el('h3', {}, 'Mensagem pronta para os primeiros clientes'),
+          el('pre', { class: 'message' }, c.firstMessage),
+          el('button', { class: 'btn btn-secondary btn-sm no-print', type: 'button', onclick: async () => toast((await copyText(c.firstMessage)) ? 'Mensagem copiada.' : 'Não consegui copiar. Selecione o texto e copie manualmente.') }, icon('copy'), 'Copiar mensagem'),
+          el('p', { class: 'fine' }, 'Ajuste com o seu jeito de falar antes de enviar.'),
+        )
+      : null,
     el('h3', {}, 'Plano de 4 semanas'),
     el(
       'ol', { class: 'weeks' },
@@ -110,6 +124,7 @@ function planContent(g, onToggleTask) {
         el(
           'li', {},
           el('strong', {}, `Semana ${w.week}: ${w.title}`),
+          w.goal ? el('p', { class: 'muted week-goal' }, `Objetivo: ${w.goal}`) : null,
           el(
             'ul', { class: 'checklist' },
             ...w.tasks.map((task, i) => {
@@ -132,7 +147,9 @@ function planContent(g, onToggleTask) {
         ),
       ),
     ),
-    el('h3', {}, 'Cuidados'),
+    c.risks?.length ? el('h3', {}, 'Cuidados para o seu caso') : null,
+    c.risks?.length ? list(c.risks) : null,
+    el('h3', {}, 'Cuidados gerais'),
     list(c.cautions),
     c.encouragement ? el('p', { class: 'note' }, icon('info'), el('span', {}, c.encouragement)) : null,
     el('p', { class: 'fine' }, 'Não prometemos ganhos: o resultado depende do seu esforço, da sua região e do seu tempo.'),
@@ -152,5 +169,13 @@ export function incomeSection(g, { onSubmitInterview = async () => {}, onToggleT
   if (g.status === 'failed' || !g.content) {
     return card(statusBox('alert', 'Não conseguimos preparar agora', 'Isso é problema nosso, não seu. Recarregue a página em alguns minutos; o Mapa continua disponível.'));
   }
-  return card(...planContent(g, onToggleTask));
+  const section = card(...planContent(g, onToggleTask));
+  // Mudou de ideia, ou o plano saiu no modelo padrão? Refazer a entrevista gera um plano novo do zero.
+  const redo = el('button', { class: 'btn btn-quiet btn-sm no-print', type: 'button' }, 'Refazer a entrevista e gerar um plano novo');
+  redo.addEventListener('click', () => {
+    section.replaceChildren(el('h2', { id: 'renda-t' }, 'Criador de Renda Extra'), interviewForm(onSubmitInterview));
+    section.scrollIntoView({ block: 'start' });
+  });
+  section.append(redo);
+  return section;
 }
