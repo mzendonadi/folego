@@ -112,10 +112,10 @@ export async function publicCatalog(ctx: Ctx) {
 // Usuários e permissões do backoffice
 // ---------------------------------------------------------------------------
 export async function listUsers(ctx: Ctx) {
-  const r = await ctx.db.query<{ id: string; email: string; name: string; role: Role; permissions: string[]; active: boolean; created_at: Date; last_login_at: Date | null }>(
-    `SELECT id, email::text AS email, name, role, permissions, active, created_at, last_login_at FROM app.admin_users ORDER BY (role = 'owner') DESC, created_at`,
+  const r = await ctx.db.query<{ id: string; email: string; name: string; role: Role; permissions: string[]; active: boolean; created_at: Date; last_login_at: Date | null; has_password: boolean; locked: boolean }>(
+    `SELECT id, email::text AS email, name, role, permissions, active, created_at, last_login_at, password_hash IS NOT NULL AS has_password, coalesce(locked_until > now(), false) AS locked FROM app.admin_users ORDER BY (role = 'owner') DESC, created_at`,
   );
-  return r.rows.map((u) => ({ id: u.id, email: u.email, name: u.name, role: u.role, permissions: u.role === 'owner' ? ROLE_PRESETS.owner : u.permissions.filter(isSection), active: u.active, createdAt: iso(u.created_at), lastLoginAt: iso(u.last_login_at) }));
+  return r.rows.map((u) => ({ id: u.id, email: u.email, name: u.name, role: u.role, permissions: u.role === 'owner' ? ROLE_PRESETS.owner : u.permissions.filter(isSection), active: u.active, createdAt: iso(u.created_at), lastLoginAt: iso(u.last_login_at), hasPassword: u.has_password, locked: u.locked }));
 }
 
 const cleanPerms = (list: unknown[]): Section[] => [...new Set(list.filter(isSection))];

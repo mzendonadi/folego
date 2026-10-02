@@ -1,6 +1,7 @@
 // Configurações: recursos do site e das assinaturas (valem na hora), usuários e permissões do backoffice, e auditoria.
 import { api } from '../api.js';
 import { el, icon, toast, dt, card, table, tabs, badge, field, dl, drawer, loading, errorBox } from '../ui.js';
+import { confirmDialog } from '../../confirm.js';
 
 const ROLE_LABEL = { owner: 'Dono', gestor: 'Gestor', financeiro: 'Financeiro', marketing: 'Marketing', suporte: 'Suporte' };
 const ACTION = {
@@ -81,6 +82,20 @@ async function usersTab(ctx) {
       role.addEventListener('change', applyPreset);
       applyPreset();
       if (u) boxes.forEach((b) => { b.input.checked = u.permissions.includes(b.id); });
+      const reset = u
+        ? el('button', { class: 'btn btn-quiet btn-sm', type: 'button' }, icon('lock'), u.hasPassword ? 'Redefinir senha (apaga a atual)' : 'Liberar novo cadastro de senha')
+        : null;
+      reset?.addEventListener('click', async () => {
+        if (!(await confirmDialog({ title: 'Redefinir a senha?', text: 'Apaga a senha de ' + u.email + ', encerra as sessões dela e libera por 24 horas o cadastro de uma senha nova (com código por e-mail).', confirmLabel: 'Redefinir', danger: true }))) return;
+        try {
+          await api.salvarUsuario(u.id, { resetPassword: true });
+          toast('Pronto. A pessoa já pode criar uma senha nova pela tela de login.');
+          dw.close();
+          draw();
+        } catch (e) {
+          toast(e.message);
+        }
+      });
       const active = toggle('u-active', 'Acesso ativo', 'Desativar encerra as sessões desta pessoa na hora.', u?.active ?? true);
       const save = el('button', { class: 'btn btn-primary', type: 'button' }, isNew ? 'Criar e liberar acesso' : 'Salvar');
       save.addEventListener('click', async () => {
@@ -99,7 +114,7 @@ async function usersTab(ctx) {
           toast(e.message);
         }
       });
-      dw.body.append(el('div', { class: 'bo-form' }, field('E-mail', email), field('Nome', name), field('Papel', role), presetHint, el('h3', {}, 'O que esta pessoa pode acessar'), ...boxes.map((b) => b.node), isNew ? el('p', { class: 'fine' }, 'A pessoa entra em folego.online/gestao com este e-mail: o código de 6 dígitos chega na caixa dela. Não há senha.') : active.node, save));
+      dw.body.append(el('div', { class: 'bo-form' }, field('E-mail', email), field('Nome', name), field('Papel', role), presetHint, el('h3', {}, 'O que esta pessoa pode acessar'), ...boxes.map((b) => b.node), isNew ? el('p', { class: 'fine' }, 'No primeiro acesso, a pessoa abre folego.online/gestao, clica em "Primeiro acesso" e cria a própria senha com um código enviado ao e-mail dela. Depois, todo login pede senha e código.') : active.node, reset ? el('div', {}, reset) : null, save));
     }
     const add = el('button', { class: 'btn btn-primary btn-sm', type: 'button' }, icon('plus'), 'Novo usuário');
     add.addEventListener('click', () => editor(null));
@@ -108,7 +123,7 @@ async function usersTab(ctx) {
         [
           { label: 'Usuário', render: (u) => el('span', {}, u.name || u.email, u.name ? el('span', { class: 'fine' }, ` ${u.email}`) : null) },
           { label: 'Papel', render: (u) => roleLabel(u.role) },
-          { label: 'Acesso', render: (u) => (u.active ? badge('Ativo', 'ok') : badge('Desativado', 'muted')) },
+          { label: 'Acesso', render: (u) => el('span', {}, u.active ? badge('Ativo', 'ok') : badge('Desativado', 'muted'), ' ', u.locked ? badge('Bloqueado', 'bad') : null, ' ', !u.hasPassword ? badge('Sem senha', 'warn') : null) },
           { label: 'Áreas', render: (u) => (u.role === 'owner' ? 'Todas' : `${u.permissions.length} de ${d.sections.length}`) },
           { label: 'Último acesso', render: (u) => dt(u.lastLoginAt) },
         ],

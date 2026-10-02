@@ -5,7 +5,7 @@ import { AppError } from '../errors.ts';
 import { currentSettings, refreshRuntime, runtimeSchema, saveRuntime } from '../runtime.ts';
 import type { Ctx } from '../services.ts';
 import { audit } from '../services.ts';
-import { adminLogout, adminOf, can, requestAdminCode, requirePermission, verifyAdminCode } from './auth.ts';
+import { adminLogout, adminOf, can, changePassword, completeSetup, releasePasswordReset, requestSetupCode, requirePermission, startPasswordLogin, verifyAdminCode } from './auth.ts';
 import type { AdminUser } from './auth.ts';
 import * as customers from './customers.ts';
 import * as manage from './manage.ts';
@@ -23,6 +23,8 @@ export interface AdminRouteDeps {
 }
 
 const emailSchema = z.object({ email: z.string().trim().toLowerCase().email().max(200) });
+const passwordLoginSchema = emailSchema.extend({ password: z.string().min(1).max(200) });
+const changePasswordSchema = z.object({ current: z.string().min(1).max(200), next: z.string().min(1).max(200) });
 const loginSchema = emailSchema.extend({ code: z.string().regex(/^\d{6}$/) });
 const daysQuery = (q: unknown) => metrics.clampDays((q as { dias?: string }).dias);
 const pageQuery = (q: unknown) => Math.max(0, Math.floor(Number((q as { pagina?: string }).pagina) || 0));
@@ -36,7 +38,7 @@ const productPatch = z.object({
   description: z.string().max(400).optional(),
 });
 const userCreate = z.object({ email: z.string().trim().toLowerCase().email().max(200), name: z.string().trim().max(80).default(''), role: z.enum(ROLES), permissions: z.array(z.string()).max(20).optional() });
-const userPatch = z.object({ name: z.string().trim().max(80).optional(), role: z.enum(ROLES).optional(), permissions: z.array(z.string()).max(20).optional(), active: z.boolean().optional() });
+const userPatch = z.object({ resetPassword: z.boolean().optional(), name: z.string().trim().max(80).optional(), role: z.enum(ROLES).optional(), permissions: z.array(z.string()).max(20).optional(), active: z.boolean().optional() });
 const subAction = z.discriminatedUnion('type', [
   z.object({ type: z.literal('extend'), days: z.number().int().min(1).max(365), reason: z.string().trim().min(3).max(200) }),
   z.object({ type: z.literal('set_plan'), plan: z.enum(['controle', 'ousado', 'desbravador']), reason: z.string().trim().min(3).max(200) }),
@@ -67,7 +69,27 @@ export function registerGestao(app: FastifyInstance, deps: AdminRouteDeps): void
   };
 
   // ---------- entrada ----------
-  app.post(`${P}/login-code`, { config: { rateLimit: { max: 5 * scale, timeWindow: '10 minutes' } } }, async (req) => requestAdminCode(ctx, emailSchema.parse(req.body).email));
+  // Etapa 1: e-mail + senha (o código só é enviado se a senha estiver certa). Etapa 2: o código, em /login.
+  app.post(`${P}/login-password`, { config: { rateLimit: { max: 8 * scale, timeWindow: '10 minutes' } } }, async (req) => {
+    const { email, password } = passwordLoginSchema.parse(req.body);
+    return startPasswordLogin(ctx, email, password);
+  });
+  // Primeiro acesso (ou senha liberada pelo dono): código por e-mail + senha nova. Não entra: depois faz o login normal.
+  app.post(`${P}/setup-code`, { config: { rateLimit: { max: 5 * scale, timeWindow: '10 minutes' } } }, async (req) => requestSetupCode(ctx, emailSchema.parse(req.body).email));
+  app.post(`${P}/setup`, { config: { rateLimit: { max: 8 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => {
+    const { email, code, password } = loginSchema.extend({ password: z.string().min(1).max(200) }).parse(req.body);
+    await completeSetup(ctx, email, code, password);
+    return reply.status(204).send();
+  });
+  app.post(`${P}/password`, async (req, reply) => {
+    const sessionId = await requireSession(req).catch(() => {
+      throw new AppError(401, 'not_logged_in', 'Entre no backoffice para continuar.');
+    });
+    const a = await admin(req);
+    const { current, next } = changePasswordSchema.parse(req.body);
+    await changePassword(ctx, sessionId, a, current, next);
+    return reply.status(204).send();
+  });
   app.post(`${P}/login`, { config: { rateLimit: { max: 10 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => {
     const { email, code } = loginSchema.parse(req.body);
     const sessionId = await createSession(req, reply);
@@ -204,7 +226,10 @@ export function registerGestao(app: FastifyInstance, deps: AdminRouteDeps): void
   });
   app.put(`${P}/usuarios/:id`, async (req) => {
     const a = await admin(req, 'config_usuarios');
-    await manage.updateUser(ctx, a, idParam((req.params as { id: string }).id), userPatch.parse(req.body));
+    const id = idParam((req.params as { id: string }).id);
+    const body = userPatch.parse(req.body);
+    if (body.resetPassword) await releasePasswordReset(ctx, a, id);
+    await manage.updateUser(ctx, a, id, body);
     return { ok: true };
   });
 

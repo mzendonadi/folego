@@ -48,12 +48,28 @@ function client() {
 }
 type Client = ReturnType<typeof client>;
 
-async function adminLogin(c: Client, email: string) {
+const PASSWORDS = new Map<string, string>();
+const PW = 'Senha-Forte-2026';
+
+const lastCode = () => /\b(\d{6})\b/.exec(mailbox.sent.at(-1)!.text)![1]!;
+
+/** Primeiro acesso: código por e-mail + senha nova. */
+async function adminSetup(c: Client, email: string, password = PW) {
   mailbox.sent.length = 0;
-  assert.equal((await c('POST', '/api/gestao/login-code', { body: { email } })).status, 200);
+  assert.equal((await c('POST', '/api/gestao/setup-code', { body: { email } })).status, 200);
+  assert.equal(mailbox.sent.length, 1, 'o código de primeiro acesso deve chegar por e-mail');
+  const res = await c('POST', '/api/gestao/setup', { body: { email, code: lastCode(), password } });
+  assert.equal(res.status, 204);
+  PASSWORDS.set(email, password);
+}
+
+/** Login completo em duas etapas: senha, depois o código do e-mail. */
+async function adminLogin(c: Client, email: string) {
+  if (!PASSWORDS.has(email)) await adminSetup(c, email);
+  mailbox.sent.length = 0;
+  assert.equal((await c('POST', '/api/gestao/login-password', { body: { email, password: PASSWORDS.get(email) } })).status, 200);
   assert.equal(mailbox.sent.length, 1, 'o código deve chegar por e-mail');
-  const code = /\b(\d{6})\b/.exec(mailbox.sent[0]!.text)![1];
-  const ok = await c('POST', '/api/gestao/login', { body: { email, code } });
+  const ok = await c('POST', '/api/gestao/login', { body: { email, code: lastCode() } });
   assert.equal(ok.status, 200);
   return ok.json.user;
 }
@@ -88,7 +104,7 @@ test('entrada: só e-mail autorizado recebe código; sem sessão de admin nada a
   const c = client();
   assert.equal((await c('GET', '/api/gestao/dashboard')).status, 401);
   mailbox.sent.length = 0;
-  assert.equal((await c('POST', '/api/gestao/login-code', { body: { email: 'intruso@exemplo.com' } })).status, 200); // resposta igual, sem revelar nada
+  assert.equal((await c('POST', '/api/gestao/setup-code', { body: { email: 'intruso@exemplo.com' } })).status, 200); // resposta igual, sem revelar nada
   assert.equal(mailbox.sent.length, 0);
   assert.equal((await c('POST', '/api/gestao/login', { body: { email: 'intruso@exemplo.com', code: '123456' } })).status, 401);
 
@@ -103,7 +119,7 @@ test('entrada: só e-mail autorizado recebe código; sem sessão de admin nada a
 test('código errado é recusado e o assinante comum não vira administrador', async () => {
   const c = client();
   mailbox.sent.length = 0;
-  await c('POST', '/api/gestao/login-code', { body: { email: 'dono@exemplo.com' } });
+  await ownerClient();
   assert.equal((await c('POST', '/api/gestao/login', { body: { email: 'dono@exemplo.com', code: '000000' } })).status, 401);
   // sessão de assinante não abre o backoffice
   const sub = client();
@@ -389,4 +405,95 @@ test('parcerias: tamanho do público e do pool com consentimento (sem listar pes
   const contacts = (await owner('GET', '/api/gestao/parcerias/contatos?categoria=empreendedorismo')).json.items;
   assert.ok(contacts.length >= 1);
   assert.ok(!JSON.stringify(contacts).includes('Maria'), 'a lista só traz perfil; o nome exige a revelação auditada');
+});
+
+// ---------- segurança do login ----------
+test('login em duas etapas: sem senha certa o código nunca é enviado, e o código sozinho não entra', async () => {
+  await ownerClient(); // dono com senha definida
+  const c = client();
+  mailbox.sent.length = 0;
+  assert.equal((await c('POST', '/api/gestao/login-password', { body: { email: 'dono@exemplo.com', password: 'senha-errada-123' } })).status, 401);
+  assert.equal((await c('POST', '/api/gestao/login-password', { body: { email: 'intruso@exemplo.com', password: PW } })).status, 401);
+  assert.equal(mailbox.sent.length, 0, 'nenhum código sai com senha errada');
+  // um código antigo de OUTRA etapa não vale sem passar pela senha
+  assert.equal((await c('POST', '/api/gestao/login', { body: { email: 'dono@exemplo.com', code: '123456' } })).status, 401);
+  assert.equal((await c('GET', '/api/gestao/me')).status, 401);
+});
+
+test('5 senhas erradas bloqueiam por 15 minutos, até a senha certa fica recusada, e o desbloqueio libera', async () => {
+  const owner = await ownerClient();
+  const created = await owner('POST', '/api/gestao/usuarios', { body: { email: 'bloqueio@exemplo.com', role: 'suporte' } });
+  const email = 'bloqueio@exemplo.com';
+  const c = client();
+  await adminSetup(c, email);
+  for (let i = 0; i < 5; i++) assert.equal((await c('POST', '/api/gestao/login-password', { body: { email, password: 'errada-errada-1' } })).status, 401);
+  mailbox.sent.length = 0;
+  assert.equal((await c('POST', '/api/gestao/login-password', { body: { email, password: PW } })).status, 401, 'bloqueado mesmo com a senha certa');
+  assert.equal(mailbox.sent.length, 0);
+  await db.query(`UPDATE app.admin_users SET locked_until = now() - interval '1 minute' WHERE id = $1`, [created.json.id]);
+  assert.equal((await c('POST', '/api/gestao/login-password', { body: { email, password: PW } })).status, 200);
+});
+
+test('política de senha: curta, sem número, repetitiva ou com o e-mail são recusadas', async () => {
+  const owner = await ownerClient();
+  await owner('POST', '/api/gestao/usuarios', { body: { email: 'politica@exemplo.com', role: 'suporte' } });
+  const email = 'politica@exemplo.com';
+  const c = client();
+  mailbox.sent.length = 0;
+  await c('POST', '/api/gestao/setup-code', { body: { email } });
+  const code = lastCode();
+  for (const bad of ['curta1', 'apenasletrasaqui', '123456789012', 'aaaaaaaaaaaa1', 'politica-2026-x']) {
+    const res = await c('POST', '/api/gestao/setup', { body: { email, code, password: bad } });
+    assert.equal(res.status, 422, bad);
+  }
+  assert.equal((await c('POST', '/api/gestao/setup', { body: { email, code, password: 'Uma-Senha-Boa-77' } })).status, 204);
+  PASSWORDS.set(email, 'Uma-Senha-Boa-77');
+  assert.equal((await c('POST', '/api/gestao/login-password', { body: { email, password: 'Uma-Senha-Boa-77' } })).status, 200);
+});
+
+test('primeiro acesso só vale uma vez: com senha definida, ninguém redefine só com o e-mail', async () => {
+  await ownerClient();
+  const c = client();
+  mailbox.sent.length = 0;
+  assert.equal((await c('POST', '/api/gestao/setup-code', { body: { email: 'dono@exemplo.com' } })).status, 200);
+  assert.equal(mailbox.sent.length, 0, 'sem código: a senha já existe');
+  assert.equal((await c('POST', '/api/gestao/setup', { body: { email: 'dono@exemplo.com', code: '123456', password: 'Outra-Senha-9999' } })).status, 401);
+});
+
+test('trocar a senha exige a atual e derruba as outras sessões; o dono libera a redefinição de outra pessoa', async () => {
+  const owner = await ownerClient();
+  const created = await owner('POST', '/api/gestao/usuarios', { body: { email: 'troca@exemplo.com', role: 'gestor' } });
+  const email = 'troca@exemplo.com';
+  const a = client();
+  const b = client();
+  await adminLogin(a, email);
+  await adminLogin(b, email);
+  assert.equal((await b('POST', '/api/gestao/password', { body: { current: 'errada', next: 'Nova-Senha-Forte-1' } })).status, 401);
+  assert.equal((await b('POST', '/api/gestao/password', { body: { current: PW, next: 'fraca' } })).status, 422);
+  assert.equal((await b('POST', '/api/gestao/password', { body: { current: PW, next: 'Nova-Senha-Forte-1' } })).status, 204);
+  assert.equal((await b('GET', '/api/gestao/me')).status, 200, 'a sessão que trocou continua');
+  assert.equal((await a('GET', '/api/gestao/me')).status, 401, 'a outra sessão cai');
+  PASSWORDS.set(email, 'Nova-Senha-Forte-1');
+
+  // dono libera redefinição: senha some, sessões caem, e a pessoa cria outra com código do e-mail
+  assert.equal((await owner('PUT', `/api/gestao/usuarios/${created.json.id}`, { body: { resetPassword: true } })).status, 200);
+  assert.equal((await b('GET', '/api/gestao/me')).status, 401);
+  mailbox.sent.length = 0;
+  assert.equal((await client()('POST', '/api/gestao/login-password', { body: { email, password: 'Nova-Senha-Forte-1' } })).status, 401);
+  PASSWORDS.delete(email);
+  await adminSetup(client(), email, 'Senha-Redefinida-55');
+  assert.equal((await client()('POST', '/api/gestao/login-password', { body: { email, password: 'Senha-Redefinida-55' } })).status, 200);
+  const list = await owner('GET', '/api/gestao/usuarios');
+  assert.equal(list.json.users.find((u: any) => u.email === email).hasPassword, true);
+  const audit = await owner('GET', '/api/gestao/auditoria');
+  assert.ok(audit.json.items.some((x: any) => x.action === 'admin_password_reset_released'));
+});
+
+test('senha nunca aparece em resposta nem em auditoria', async () => {
+  const owner = await ownerClient();
+  const audit = JSON.stringify((await owner('GET', '/api/gestao/auditoria?escopo=todos')).json);
+  const users = JSON.stringify((await owner('GET', '/api/gestao/usuarios')).json);
+  for (const s of [PW, 'scrypt$', 'password_hash']) {
+    assert.ok(!audit.includes(s) && !users.includes(s), s);
+  }
 });

@@ -28,7 +28,10 @@ const qs = (o = {}) => {
 };
 
 export const api = {
-  requestCode: (email) => call('POST', '/login-code', { email }),
+  loginPassword: (email, password) => call('POST', '/login-password', { email, password }),
+  setupCode: (email) => call('POST', '/setup-code', { email }),
+  setup: (email, code, password) => call('POST', '/setup', { email, code, password }),
+  changePassword: (current, next) => call('POST', '/password', { current, next }),
   login: (email, code) => call('POST', '/login', { email, code }),
   logout: () => call('POST', '/logout', {}),
   me: () => call('GET', '/me'),
