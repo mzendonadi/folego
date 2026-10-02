@@ -114,6 +114,9 @@ export async function getTranslation() {
   throw new Error('indisponível na demonstração');
 }
 
+export async function unsubscribeEmails() {
+  throw new Error('indisponível na demonstração');
+}
 export async function getCatalog() {
   throw new Error('indisponível na demonstração');
 }
@@ -130,3 +133,11 @@ export async function deleteCase(caseId) {
   cases.delete(caseId);
   for (const [orderId, order] of orders) if (order.caseId === caseId) orders.delete(orderId);
 }
+export const getWallets = notAvailable;
+export const createWallet = notAvailable;
+export const deleteWallet = notAvailable;
+export const setEntryWallet = notAvailable;
+export const getReminders = notAvailable;
+export const createReminder = notAvailable;
+export const updateReminder = notAvailable;
+export const deleteReminder = notAvailable;

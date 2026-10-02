@@ -247,6 +247,9 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
       panel.replaceChildren(el('p', { class: 'muted acc-loading', role: 'status' }, 'Carregando…'));
       try {
         if (NEEDS_MONTH.has(id)) ctx.data = await api.getMonth(month);
+        if (id === 'lancamentos') ctx.wallets = await ctx.api.getWallets().catch(() => null);
+        if (id === 'carteiras') ctx.wallets = await ctx.api.getWallets();
+        if (id === 'lembretes') ctx.reminders = (await ctx.api.getReminders()).reminders;
         if (id === 'treinador') ctx.coach = await api.getCoach().catch(() => null);
         if (mine !== token) return; // a pessoa já foi para outra aba
         panel.replaceChildren(VIEWS[id](ctx));

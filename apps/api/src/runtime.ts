@@ -14,6 +14,7 @@ export const runtimeSchema = z.object({
   announcement: z.object({ text: z.string().trim().min(1).max(240), tone: z.enum(['info', 'warn']) }).nullable(),
   bundlePriceCents: z.number().int().min(100).max(1_000_000),
   reminderDaysBefore: z.number().int().min(1).max(15),
+  campaignDailyCap: z.number().int().min(0).max(5000),
 }).partial();
 export type RuntimePatch = z.infer<typeof runtimeSchema>;
 
@@ -26,6 +27,7 @@ export interface RuntimeSettings {
   announcement: { text: string; tone: 'info' | 'warn' } | null;
   bundlePriceCents: number;
   reminderDaysBefore: number;
+  campaignDailyCap: number;
 }
 
 export const currentSettings = (config: Config): RuntimeSettings => ({
@@ -37,6 +39,7 @@ export const currentSettings = (config: Config): RuntimeSettings => ({
   announcement: config.announcement,
   bundlePriceCents: config.bundlePriceCents,
   reminderDaysBefore: config.reminderDaysBefore,
+  campaignDailyCap: config.campaignDailyCap,
 });
 
 function apply(config: Config, patch: RuntimePatch): void {
@@ -48,6 +51,7 @@ function apply(config: Config, patch: RuntimePatch): void {
   if (patch.announcement !== undefined) config.announcement = patch.announcement;
   if (patch.bundlePriceCents !== undefined) config.bundlePriceCents = patch.bundlePriceCents;
   if (patch.reminderDaysBefore !== undefined) config.reminderDaysBefore = patch.reminderDaysBefore;
+  if (patch.campaignDailyCap !== undefined) config.campaignDailyCap = patch.campaignDailyCap;
 }
 
 const lastRefresh = new WeakMap<Config, number>();

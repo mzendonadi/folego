@@ -1,6 +1,6 @@
 // Marketing e relacionamento: insights calculados dos dados reais, públicos para campanhas, quadro de planejamento e calendário.
 import { api } from '../api.js';
-import { el, icon, toast, int, day, card, table, tabs, badge, field, periodSelect, loading, errorBox, empty, drawer } from '../ui.js';
+import { el, icon, toast, int, dt, card, table, tabs, badge, field, periodSelect, loading, errorBox, empty, drawer, day } from '../ui.js';
 import { copyText } from '../../dom.js';
 import { confirmDialog } from '../../confirm.js';
 
@@ -50,6 +50,10 @@ export async function marketingScreen(ctx) {
   async function draw() {
     host.replaceChildren(loading());
     try {
+      if (st.tab === 'emails') {
+        host.replaceChildren(...[header(), await emailsTab()]);
+        return;
+      }
       if (st.tab === 'planejamento') {
         const { plans } = await api.planos();
         host.replaceChildren(...[header(), planning(plans)]);
@@ -63,7 +67,7 @@ export async function marketingScreen(ctx) {
   }
 
   function header() {
-    return el('div', { class: 'bo-toolbar' }, tabs([['insights', 'Insights'], ['publicos', 'Públicos e mensagens'], ['planejamento', 'Planejamento'], ['calendario', 'Calendário']], st.tab, (t) => {
+    return el('div', { class: 'bo-toolbar' }, tabs([['insights', 'Insights'], ['publicos', 'Públicos e mensagens'], ['emails', 'E-mails'], ['planejamento', 'Planejamento'], ['calendario', 'Calendário']], st.tab, (t) => {
       st.tab = t;
       draw();
     }), st.tab === 'insights' || st.tab === 'publicos' ? periodSelect(ctx.state.days, (v) => ctx.setDays(v)) : null);
@@ -128,6 +132,119 @@ export async function marketingScreen(ctx) {
       );
     });
     return el('div', { class: 'bo-stack' }, el('div', { class: 'bo-toolbar' }, el('p', { class: 'muted' }, 'Quadro de planejamento de marketing e relacionamento. Clique num cartão para editar e mude a situação conforme avança.'), add), el('div', { class: 'bo-board', tabindex: '0', role: 'region', 'aria-label': 'Quadro de planejamento (rola para o lado)' }, ...cols));
+  }
+
+  const CAMP_STATUS = { draft: ['Rascunho', 'muted'], sending: ['Enviando', 'warn'], sent: ['Enviada', 'ok'], cancelled: ['Parada', 'bad'] };
+
+  async function emailsTab() {
+    const d = await api.emails();
+    const add = el('button', { class: 'btn btn-primary btn-sm', type: 'button' }, icon('plus'), 'Nova campanha');
+    add.addEventListener('click', () => campaignForm(null, d, draw));
+    return el(
+      'div', { class: 'bo-stack' },
+      d.emailConfigured ? null : el('p', { class: 'note note-amber' }, icon('alert'), el('span', {}, 'O envio de e-mail não está configurado neste servidor: dá para escrever, mas não para enviar.')),
+      el('div', { class: 'bo-toolbar' }, el('p', { class: 'muted' }, `Só para assinantes (quem tem conta). Cada e-mail leva link de descadastro; quem sai nunca mais recebe campanha. Ninguém recebe mais de uma campanha por semana. Teto de ${int(d.dailyCap)} e-mails por dia.`), add),
+      card('Públicos', table([{ label: 'Público', render: (a) => a.name }, { label: 'Pessoas', align: 'right', render: (a) => int(a.total) }, { label: 'Podem receber agora', align: 'right', render: (a) => int(a.eligible) }], d.audiences)),
+      card('Campanhas', table(
+        [
+          { label: 'Campanha', render: (c) => el('span', {}, el('strong', {}, c.name), el('span', { class: 'fine' }, ` · ${c.audienceName}`)) },
+          { label: 'Situação', render: (c) => badge(...(CAMP_STATUS[c.status] ?? [c.status, 'muted'])) },
+          { label: 'Enviados', align: 'right', render: (c) => (c.status === 'draft' ? '—' : `${int(c.sent)} de ${int(c.recipients)}`) },
+          { label: 'Pulados', align: 'right', render: (c) => (c.status === 'draft' ? '—' : int(c.skipped + c.failed)) },
+          { label: 'Descadastros', align: 'right', render: (c) => (c.status === 'draft' ? '—' : int(c.unsubscribedAfter)) },
+          { label: 'Quando', render: (c) => dt(c.startedAt ?? c.createdAt) },
+        ],
+        d.campaigns,
+        { emptyText: 'Nenhuma campanha ainda. Comece por "Nova campanha".', onRow: (c) => campaignForm(c, d, draw) },
+      )),
+    );
+  }
+
+  async function campaignForm(c, d, onDone) {
+    const full = c ? await api.email(c.id) : null;
+    const editable = !c || c.status === 'draft';
+    const dw = drawer(c ? c.name : 'Nova campanha de e-mail');
+    const f = {
+      name: el('input', { class: 'input', type: 'text', maxlength: '100', value: full?.name ?? '', disabled: !editable }),
+      audience: el('select', { class: 'input', disabled: !editable }, ...d.audiences.map((a) => el('option', { value: a.id, selected: a.id === (full?.audience ?? 'renovar_7d') }, `${a.name} (${a.eligible} podem receber)`))),
+      subject: el('input', { class: 'input', type: 'text', maxlength: '120', value: full?.subject ?? '', disabled: !editable, placeholder: 'Sem link e sem promessa de resultado' }),
+      body: el('textarea', { class: 'input', rows: '9', maxlength: '4000', disabled: !editable, placeholder: 'Escreva em parágrafos separados por uma linha em branco.' }),
+      buttonLabel: el('input', { class: 'input', type: 'text', maxlength: '40', value: full?.buttonLabel ?? '', disabled: !editable, placeholder: 'Ex.: Abrir minha conta' }),
+      buttonUrl: el('input', { class: 'input', type: 'url', maxlength: '300', value: full?.buttonUrl ?? '', disabled: !editable, placeholder: 'https://folego.online/#/conta' }),
+    };
+    f.body.value = full?.body ?? '';
+    const read = () => ({ name: f.name.value.trim(), audience: f.audience.value, subject: f.subject.value.trim(), body: f.body.value.trim(), buttonLabel: f.buttonLabel.value.trim() || null, buttonUrl: f.buttonUrl.value.trim() || null });
+    const persist = async () => {
+      const body = read();
+      if (c) await api.salvarEmail(c.id, body);
+      else c = { id: (await api.criarEmail(body)).id, status: 'draft' };
+      return c.id;
+    };
+    const save = el('button', { class: 'btn btn-secondary', type: 'button' }, 'Salvar rascunho');
+    save.addEventListener('click', async () => {
+      try {
+        await persist();
+        toast('Rascunho salvo.');
+        onDone();
+      } catch (e) {
+        toast(e.message);
+      }
+    });
+    const test = el('button', { class: 'btn btn-secondary', type: 'button' }, icon('clock'), 'Enviar teste para o meu e-mail');
+    test.addEventListener('click', async () => {
+      test.disabled = true;
+      try {
+        const id = await persist();
+        const r = await api.testarEmail(id);
+        toast(`Teste enviado para ${r.to}. Confira como chegou.`);
+      } catch (e) {
+        toast(e.message);
+      }
+      test.disabled = false;
+    });
+    const actions = [];
+    if (editable) {
+      actions.push(save, test);
+      if (d.canSend) {
+        const send = el('button', { class: 'btn btn-primary', type: 'button' }, icon('arrow-right'), 'Revisar e enviar');
+        send.addEventListener('click', async () => {
+          try {
+            const id = await persist();
+            const fresh = (await api.emails()).audiences.find((a) => a.id === f.audience.value);
+            if (!fresh?.eligible) return toast('Ninguém pode receber neste público agora.');
+            const ok = await confirmDialog({ title: `Enviar para ${fresh.eligible} pessoas?`, text: `Público: ${fresh.name}. Você já viu o teste no seu e-mail? Depois de enviar, não dá para editar nem desfazer o que já saiu (só parar o restante).`, confirmLabel: 'Enviar agora' });
+            if (!ok) return;
+            await api.enviarEmail(id, fresh.eligible);
+            toast('Envio iniciado. Acompanhe na lista de campanhas.');
+            dw.close();
+            onDone();
+          } catch (e) {
+            toast(e.message);
+          }
+        });
+        actions.push(send);
+      } else actions.push(el('p', { class: 'fine' }, 'Quem aprova o envio é quem tem a permissão "Enviar e-mails de campanha". Peça ao dono depois de salvar e testar.'));
+      if (c) {
+        const del = el('button', { class: 'btn btn-quiet btn-sm', type: 'button' }, icon('trash'), 'Apagar rascunho');
+        del.addEventListener('click', async () => {
+          if (!(await confirmDialog({ title: 'Apagar este rascunho?', text: c.name, confirmLabel: 'Apagar', danger: true }))) return;
+          await api.apagarEmail(c.id).catch((e) => toast(e.message));
+          dw.close();
+          onDone();
+        });
+        actions.push(del);
+      }
+    } else if (c.status === 'sending' && d.canSend) {
+      const stop = el('button', { class: 'btn btn-danger', type: 'button' }, 'Parar o envio');
+      stop.addEventListener('click', async () => {
+        if (!(await confirmDialog({ title: 'Parar o envio?', text: 'O que já saiu não volta; o restante da fila é cancelado.', confirmLabel: 'Parar', danger: true }))) return;
+        await api.pararEmail(c.id).catch((e) => toast(e.message));
+        dw.close();
+        onDone();
+      });
+      actions.push(stop);
+    }
+    dw.body.append(el('div', { class: 'bo-form' }, c && !editable ? el('p', { class: 'note' }, icon('info'), el('span', {}, `Campanha ${CAMP_STATUS[c.status]?.[0].toLowerCase() ?? c.status}: ${int(c.sent)} enviados, ${int(c.skipped)} pulados (descadastro ou outra campanha na semana), ${int(c.failed)} com erro.`)) : null, field('Nome (uso interno)', f.name), field('Público', f.audience), field('Assunto', f.subject), field('Mensagem', f.body, 'Parágrafos separados por linha em branco. O rodapé com o link de descadastro entra sozinho.'), field('Texto do botão (opcional)', f.buttonLabel), field('Endereço do botão (só folego.online)', f.buttonUrl), el('div', { class: 'bo-actions' }, ...actions)));
   }
 
   function calendar(d) {

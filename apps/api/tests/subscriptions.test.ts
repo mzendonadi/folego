@@ -8,6 +8,7 @@ import type { Db } from '../src/db.ts';
 import { FakeGateway } from '../src/gateway.ts';
 import { MemorySender } from '../src/email.ts';
 import { maintenance } from '../src/subscriptions.ts';
+import { sendDueReminders } from '../src/account-extras.ts';
 
 let db: Db;
 let app: FastifyInstance;
@@ -31,7 +32,7 @@ after(async () => {
 
 function client(server: FastifyInstance = app) {
   let cookie = '';
-  return async (method: 'GET' | 'POST' | 'DELETE', url: string, opts: { body?: unknown; headers?: Record<string, string> } = {}) => {
+  return async (method: 'GET' | 'POST' | 'PUT' | 'DELETE', url: string, opts: { body?: unknown; headers?: Record<string, string> } = {}) => {
     const res = await server.inject({
       method,
       url,
@@ -259,4 +260,40 @@ test('aportes em meta: o plano Controle não tem metas', async () => {
   await pay(order.json.orderId, 'sub-ctrl-apt');
   const res = await c('POST', '/api/account/goals/01a0e56f-8f28-7df0-958d-8057148a8628/contributions', { body: { amountCents: 1000 } });
   assert.equal(res.status, 403);
+});
+
+test('carteiras e lembretes: carteira isolada por dono, saldo por carteira, lembrete mensal renasce e e-mail sai uma vez', async () => {
+  const c = client();
+  await login(c, 'extras@exemplo.com');
+  const order = await c('POST', '/api/account/subscription-order', { body: { plan: 'ousado' }, headers: { 'idempotency-key': 'sub-extras-00001' } });
+  await pay(order.json.orderId, 'sub-extras');
+
+  const w = await c('POST', '/api/account/wallets', { body: { name: 'Nubank', kind: 'conta' } });
+  assert.equal(w.status, 201);
+  assert.equal((await c('POST', '/api/account/wallets', { body: { name: '', kind: 'conta' } })).status, 400);
+  const month = new Date().toISOString().slice(0, 7);
+  await c('POST', '/api/account/entries', { body: { entries: [{ date: `${month}-02`, amountCents: 100_000, note: 'Salario', walletId: w.json.id }, { date: `${month}-03`, amountCents: -20_000, note: 'Mercado' }] } });
+  const list = (await c('GET', '/api/account/wallets')).json;
+  assert.equal(list.wallets[0].balanceCents, 100_000);
+  assert.equal(list.unassigned.balanceCents, -20_000);
+
+  const other = client();
+  await login(other, 'extras-outro@exemplo.com');
+  const o2 = await other('POST', '/api/account/subscription-order', { body: { plan: 'ousado' }, headers: { 'idempotency-key': 'sub-extras-00002' } });
+  await pay(o2.json.orderId, 'sub-extras2');
+  assert.equal((await other('POST', '/api/account/entries', { body: { entries: [{ date: `${month}-04`, amountCents: 1000, note: 'x', walletId: w.json.id }] } })).status, 404, 'carteira alheia');
+  assert.equal((await other('DELETE', `/api/account/wallets/${w.json.id}`)).status, 404);
+
+  const today = new Date().toISOString().slice(0, 10);
+  const r = await c('POST', '/api/account/reminders', { body: { title: 'Conta de luz', dueOn: today, amountCents: 18_000, repeatMonthly: true, emailDaysBefore: 1 } });
+  assert.equal(r.status, 201);
+  assert.equal((await c('POST', '/api/account/reminders', { body: { title: 'X', dueOn: 'amanhã' } })).status, 400);
+  mailbox.sent.length = 0;
+  assert.ok((await sendDueReminders({ db, config, gateway, email: mailbox })) >= 1);
+  assert.ok(mailbox.sent.some((m) => m.to === 'extras@exemplo.com' && /Conta de luz/.test(m.subject)));
+  assert.equal(await sendDueReminders({ db, config, gateway, email: mailbox }), 0, 'não repete');
+  assert.equal((await c('PUT', `/api/account/reminders/${r.json.id}`, { body: { done: true } })).status, 200);
+  const rem = (await c('GET', '/api/account/reminders')).json.reminders;
+  assert.equal(rem.filter((x: any) => !x.done).length, 1, 'a do mês seguinte nasceu');
+  assert.equal((await other('DELETE', `/api/account/reminders/${r.json.id}`)).status, 404);
 });

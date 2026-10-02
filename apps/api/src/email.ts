@@ -5,6 +5,8 @@ export interface EmailMessage {
   subject: string;
   text: string;
   html: string;
+  /** Cabeçalhos extras (ex.: List-Unsubscribe, que faz Gmail e Outlook mostrarem o botão "cancelar inscrição"). */
+  headers?: Record<string, string>;
 }
 
 export interface EmailSender {
@@ -30,7 +32,7 @@ export class ResendSender implements EmailSender {
     const res = await this.fetchFn('https://api.resend.com/emails', {
       method: 'POST',
       headers: { authorization: `Bearer ${this.cfg.apiKey}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ from: this.cfg.from, to: [m.to], subject: m.subject, text: m.text, html: m.html }),
+      body: JSON.stringify({ from: this.cfg.from, to: [m.to], subject: m.subject, text: m.text, html: m.html, ...(m.headers ? { headers: m.headers } : {}) }),
       signal: AbortSignal.timeout(10_000),
     });
     if (!res.ok) throw new Error(`Resend respondeu ${res.status}`);
@@ -49,11 +51,12 @@ export class MemorySender implements EmailSender {
 const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] as string);
 
 /** Molde simples e legível (sem imagens externas, sem rastreadores). */
-export function layout(title: string, paragraphs: string[], button?: { label: string; url: string }): { text: string; html: string } {
-  const text = [title, '', ...paragraphs, ...(button ? ['', `${button.label}: ${button.url}`] : []), '', 'Fôlego · folego.online'].join('\n');
+export function layout(title: string, paragraphs: string[], button?: { label: string; url: string }, footer?: { unsubscribeUrl: string }): { text: string; html: string } {
+  const foot = footer ? `Você recebe este e-mail porque tem uma conta no Fôlego. Para não receber mais mensagens como esta: ${footer.unsubscribeUrl}` : '';
+  const text = [title, '', ...paragraphs, ...(button ? ['', `${button.label}: ${button.url}`] : []), '', 'Fôlego · folego.online', ...(foot ? ['', foot] : [])].join('\n');
   const html = `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;color:#12241c;line-height:1.5"><h2 style="margin:0 0 12px">${esc(title)}</h2>${paragraphs.map((p) => `<p>${esc(p)}</p>`).join('')}${
     button ? `<p><a href="${esc(button.url)}" style="display:inline-block;background:#0b4a3a;color:#fff;padding:12px 20px;border-radius:999px;text-decoration:none;font-weight:bold">${esc(button.label)}</a></p><p style="font-size:12px;color:#5b6b64">Se o botão não abrir, copie este endereço: ${esc(button.url)}</p>` : ''
-  }<p style="font-size:12px;color:#5b6b64">Fôlego · folego.online</p></div>`;
+  }<p style="font-size:12px;color:#5b6b64">Fôlego · folego.online</p>${footer ? `<p style="font-size:12px;color:#5b6b64">Você recebe este e-mail porque tem uma conta no Fôlego. <a href="${esc(footer.unsubscribeUrl)}" style="color:#5b6b64">Cancelar o recebimento de mensagens como esta</a>.</p>` : ''}</div>`;
   return { text, html };
 }
 

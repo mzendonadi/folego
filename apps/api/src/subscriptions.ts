@@ -10,6 +10,7 @@ import { AppError, notFound } from './errors.ts';
 import type { Ctx, OrderView } from './services.ts';
 import { audit, num, orderView, todaySaoPaulo } from './services.ts';
 import type { Queryable } from './db.ts';
+import { ownedWalletId } from './account-extras.ts';
 
 const CODE_TTL_MIN = 10;
 const PIX_TTL_MS = 30 * 60 * 1000;
@@ -188,6 +189,7 @@ export interface NewEntry {
   note: string;
   category?: string | undefined;
   source?: 'manual' | 'import' | undefined;
+  walletId?: string | null | undefined;
 }
 
 export async function addEntries(ctx: Ctx, subscriberId: string, entries: NewEntry[]): Promise<{ added: number; duplicates: number }> {
@@ -206,7 +208,8 @@ export async function addEntries(ctx: Ctx, subscriberId: string, entries: NewEnt
           continue;
         }
       }
-      await q.query(`INSERT INTO app.ledger_entries(subscriber_id, occurred_on, amount_cents, category, note, source) VALUES ($1,$2,$3,$4,$5,$6)`, [subscriberId, e.date, e.amountCents, category, e.note.slice(0, 120), e.source ?? 'manual']);
+      const walletId = e.walletId ? await ownedWalletId({ ...ctx, db: q as never }, subscriberId, e.walletId) : null;
+      await q.query(`INSERT INTO app.ledger_entries(subscriber_id, occurred_on, amount_cents, category, note, source, wallet_id) VALUES ($1,$2,$3,$4,$5,$6,$7)`, [subscriberId, e.date, e.amountCents, category, e.note.slice(0, 120), e.source ?? 'manual', walletId]);
       added += 1;
     }
   });
@@ -308,9 +311,12 @@ export async function monthView(ctx: Ctx, subscriberId: string, month: string) {
   const entries = await loadLedger(ctx, subscriberId, from);
   const limits = await loadLimits(ctx, subscriberId);
   const goals = planHas(plan, 'goals') ? await loadGoals(ctx, subscriberId) : [];
+  const inMonth = entries.filter((e) => monthOf(e.date) === month);
+  const wallets = inMonth.length ? await ctx.db.query<{ id: string; wallet_id: string | null }>(`SELECT id, wallet_id FROM app.ledger_entries WHERE subscriber_id = $1 AND id = ANY($2::uuid[])`, [subscriberId, inMonth.map((e) => e.id)]) : { rows: [] as { id: string; wallet_id: string | null }[] };
+  const walletOf = new Map(wallets.rows.map((w) => [w.id, w.wallet_id]));
   return {
     month,
-    entries: entries.filter((e) => monthOf(e.date) === month),
+    entries: inMonth.map((e) => ({ ...e, walletId: walletOf.get(e.id as string) ?? null })),
     summary: summarizeMonth(entries, limits, month),
     limits,
     goals,

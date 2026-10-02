@@ -23,6 +23,7 @@ async function siteTab(ctx) {
   const ai = toggle('cf-ai', 'IA nas entregas (roteiros e plano de renda extra)', env.aiKeyConfigured ? 'Desligada, as entregas saem pelos modelos fixos, sem custo de IA.' : 'Não há chave da Anthropic configurada no servidor: mesmo ligada, sai o modelo fixo.', s.aiEnabled);
   const paused = toggle('cf-paused', 'Pausar as vendas', 'Ninguém consegue gerar Pix novo (assinantes e compradores veem um aviso). O resultado grátis continua funcionando.', s.salesPaused);
   const cap = el('input', { class: 'input input-sm', type: 'number', min: '0', max: '100000', value: String(s.aiMaxCallsPerDay), 'aria-label': 'Teto diário de chamadas à IA' });
+  const campCap = el('input', { class: 'input input-sm', type: 'number', min: '0', max: '5000', value: String(s.campaignDailyCap), 'aria-label': 'Teto diário de e-mails de campanha' });
   const remind = el('input', { class: 'input input-sm', type: 'number', min: '1', max: '15', value: String(s.reminderDaysBefore), 'aria-label': 'Dias de antecedência do lembrete' });
   const bannerOn = toggle('cf-banner', 'Mostrar um aviso no topo do site', 'Use para avisar de manutenção, promoção ou novidade.', Boolean(s.announcement));
   const bannerText = el('input', { class: 'input', type: 'text', maxlength: '240', value: s.announcement?.text ?? '', placeholder: 'Ex.: Estamos em manutenção rápida; volte em alguns minutos.', 'aria-label': 'Texto do aviso' });
@@ -34,7 +35,7 @@ async function siteTab(ctx) {
     try {
       await api.salvarConfig({
         subscriptionsEnabled: subs.input.checked, leadsEnabled: leads.input.checked, aiEnabled: ai.input.checked, salesPaused: paused.input.checked,
-        aiMaxCallsPerDay: Number(cap.value) || 0, reminderDaysBefore: Number(remind.value) || 3,
+        aiMaxCallsPerDay: Number(cap.value) || 0, campaignDailyCap: Number(campCap.value) || 0, reminderDaysBefore: Number(remind.value) || 3,
         announcement: bannerOn.input.checked ? { text: bannerText.value.trim(), tone: bannerTone.value } : null,
       });
       toast('Configurações salvas. Valem agora.');
@@ -47,7 +48,7 @@ async function siteTab(ctx) {
     'div', { class: 'bo-stack' },
     card('Recursos do site', subs.node, leads.node, ai.node, paused.node),
     card('Aviso no site', bannerOn.node, el('div', { class: 'bo-actions' }, field('Texto', bannerText), field('Tipo', bannerTone))),
-    card('Assinaturas e IA', el('div', { class: 'bo-actions' }, field('Lembrete de vencimento (dias antes)', remind, 'O e-mail é enviado uma vez, nesta antecedência.'), field('Teto diário de chamadas à IA', cap, 'Acima disso, as entregas usam o modelo fixo (controle de custo).')), el('p', { class: 'fine' }, 'Preços, dias por pagamento e o Kit Completo ficam em Produtos e preços.')),
+    card('Assinaturas e IA', el('div', { class: 'bo-actions' }, field('Lembrete de vencimento (dias antes)', remind, 'O e-mail é enviado uma vez, nesta antecedência.'), field('Teto diário de chamadas à IA', cap, 'Acima disso, as entregas usam o modelo fixo (controle de custo).'), field('Teto diário de e-mails de campanha', campCap, 'Protege a reputação do e-mail do Fôlego. 0 = nenhuma campanha sai.')), el('p', { class: 'fine' }, 'Preços, dias por pagamento e o Kit Completo ficam em Produtos e preços.')),
     el('div', { class: 'bo-actions' }, save),
     card('Ambiente (somente leitura)', dl([
       ['Envio de e-mail', env.emailConfigured ? badge('Configurado', 'ok') : badge('Não configurado', 'bad')],

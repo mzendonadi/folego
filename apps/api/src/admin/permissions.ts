@@ -1,6 +1,6 @@
 // Seções do backoffice e o que cada papel enxerga por padrão. O dono (owner) sempre tem tudo; para os demais,
 // vale a lista de permissões gravada no usuário (o papel só sugere o conjunto inicial ao criar).
-export const SECTIONS = ['dashboard', 'clientes', 'clientes_pii', 'assinaturas', 'jornada', 'parcerias', 'precos', 'marketing', 'config_site', 'config_usuarios', 'auditoria'] as const;
+export const SECTIONS = ['dashboard', 'clientes', 'clientes_pii', 'assinaturas', 'jornada', 'parcerias', 'precos', 'marketing', 'marketing_envio', 'config_site', 'config_usuarios', 'auditoria'] as const;
 export type Section = (typeof SECTIONS)[number];
 
 export const SECTION_LABEL: Record<Section, string> = {
@@ -11,7 +11,8 @@ export const SECTION_LABEL: Record<Section, string> = {
   jornada: 'Jornada e funil',
   parcerias: 'Parcerias e leads',
   precos: 'Produtos e preços',
-  marketing: 'Marketing e relacionamento',
+  marketing: 'Marketing e relacionamento (insights, planejamento, rascunho de e-mails)',
+  marketing_envio: 'Enviar e-mails de campanha (aprovar o envio)',
   config_site: 'Configurações do site e das assinaturas',
   config_usuarios: 'Usuários e permissões do backoffice',
   auditoria: 'Registro de auditoria',

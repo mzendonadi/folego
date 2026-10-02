@@ -7,6 +7,7 @@ import type { Ctx } from '../services.ts';
 import { audit } from '../services.ts';
 import { adminLogout, adminOf, can, changePassword, completeSetup, releasePasswordReset, requestSetupCode, requirePermission, startPasswordLogin, verifyAdminCode } from './auth.ts';
 import type { AdminUser } from './auth.ts';
+import * as campaigns from './campaigns.ts';
 import * as customers from './customers.ts';
 import * as manage from './manage.ts';
 import * as marketing from './marketing.ts';
@@ -44,6 +45,14 @@ const subAction = z.discriminatedUnion('type', [
   z.object({ type: z.literal('set_plan'), plan: z.enum(['controle', 'ousado', 'desbravador']), reason: z.string().trim().min(3).max(200) }),
   z.object({ type: z.literal('cancel'), cancel: z.boolean(), reason: z.string().trim().min(3).max(200) }),
 ]);
+const campaignSchema = z.object({
+  name: z.string().trim().min(3).max(100),
+  audience: z.string().min(1).max(40),
+  subject: z.string().trim().min(3).max(120),
+  body: z.string().trim().min(20).max(4000),
+  buttonLabel: z.string().trim().max(40).nullable().optional(),
+  buttonUrl: z.string().trim().max(300).nullable().optional(),
+});
 const planSchema = z.object({
   title: z.string().trim().min(3).max(140),
   goal: z.string().max(400).optional(),
@@ -246,6 +255,44 @@ export function registerGestao(app: FastifyInstance, deps: AdminRouteDeps): void
     const [ins, aud] = await Promise.all([marketing.insights(ctx, days), marketing.audiences(ctx)]);
     return { ...ins, audiences: aud, calendar: marketing.CALENDAR };
   });
+  // ---------- e-mails de campanha (só para assinantes; descadastro em /api/unsubscribe) ----------
+  app.get(`${P}/marketing/emails`, async (req) => {
+    const a = await admin(req, 'marketing');
+    return { campaigns: await campaigns.listCampaigns(ctx), audiences: await campaigns.audienceSizes(ctx), canSend: can(a, 'marketing_envio'), emailConfigured: Boolean(ctx.email), dailyCap: ctx.config.campaignDailyCap };
+  });
+  app.get(`${P}/marketing/emails/:id`, async (req) => {
+    await admin(req, 'marketing');
+    return campaigns.getCampaign(ctx, idParam((req.params as { id: string }).id));
+  });
+  app.post(`${P}/marketing/emails`, async (req, reply) => {
+    const a = await admin(req, 'marketing');
+    return reply.status(201).send({ id: await campaigns.saveCampaign(ctx, a, null, campaignSchema.parse(req.body)) });
+  });
+  app.put(`${P}/marketing/emails/:id`, async (req) => {
+    const a = await admin(req, 'marketing');
+    await campaigns.saveCampaign(ctx, a, idParam((req.params as { id: string }).id), campaignSchema.parse(req.body));
+    return { ok: true };
+  });
+  app.delete(`${P}/marketing/emails/:id`, async (req, reply) => {
+    const a = await admin(req, 'marketing');
+    await campaigns.deleteCampaign(ctx, a, idParam((req.params as { id: string }).id));
+    return reply.status(204).send();
+  });
+  app.post(`${P}/marketing/emails/:id/teste`, { config: { rateLimit: { max: 10 * scale, timeWindow: '10 minutes' } } }, async (req) => {
+    const a = await admin(req, 'marketing');
+    await campaigns.sendTest(ctx, a, idParam((req.params as { id: string }).id));
+    return { ok: true, to: a.email };
+  });
+  app.post(`${P}/marketing/emails/:id/enviar`, { config: { rateLimit: { max: 5 * scale, timeWindow: '10 minutes' } } }, async (req) => {
+    const a = await admin(req, 'marketing_envio');
+    return campaigns.startSending(ctx, a, idParam((req.params as { id: string }).id), z.object({ recipients: z.number().int().min(1) }).parse(req.body).recipients);
+  });
+  app.post(`${P}/marketing/emails/:id/parar`, async (req) => {
+    const a = await admin(req, 'marketing_envio');
+    await campaigns.cancelCampaign(ctx, a, idParam((req.params as { id: string }).id));
+    return { ok: true };
+  });
+
   app.get(`${P}/marketing/planos`, async (req) => {
     await admin(req, 'marketing');
     return { plans: await marketing.listPlans(ctx) };

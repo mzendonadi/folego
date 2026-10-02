@@ -794,3 +794,10 @@ ul, ol { margin: 0; padding: 0; }
 .agenda-item.kind-marco { border-color: var(--primary); }
 .agenda-item.kind-estrategia { border-color: color-mix(in srgb, var(--primary) 45%, var(--line)); }
 @media print { .strat-item:not([open]) > * { display: block; } }
+
+/* Assinatura: carteiras e lembretes */
+.wallet-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: var(--s3); align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.wallet-row.is-done strong, .wallet-row.is-done .muted { text-decoration: line-through; opacity: .7; }
+.wallet-row .check { display: flex; gap: var(--s3); align-items: flex-start; }
+.wallet-row .neg { color: var(--danger-ink, #b3261e); }
+.entry-note .wallet-tag { color: var(--muted, #5b6470); font-size: .85em; }

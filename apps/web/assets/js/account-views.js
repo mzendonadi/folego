@@ -4,6 +4,7 @@ import { el, icon, toast } from './dom.js';
 import { brl } from './format.js';
 import { moneyInput } from './money.js';
 import { confirmDialog } from './confirm.js';
+import { viewCarteiras, viewLembretes } from './account-extras-views.js';
 import { PLANS, CATEGORIES, CATEGORY_LABEL, categorize, parseExtract } from '../vendor/engine.js';
 
 export const FEATURE_LABEL = { ledger: 'Controle de gastos', import: 'Importar extrato', alerts: 'Alertas de limite', coach_limited: 'Treinador (3 dicas)', goals: 'Metas com aportes', coach: 'Treinador completo', simulator: 'Simulador de investimento' };
@@ -12,6 +13,8 @@ export const FEATURE_LABEL = { ledger: 'Controle de gastos', import: 'Importar e
 export const TABS = [
   { id: 'geral', label: 'Visão geral' },
   { id: 'lancamentos', label: 'Lançamentos' },
+  { id: 'carteiras', label: 'Carteiras' },
+  { id: 'lembretes', label: 'Lembretes' },
   { id: 'orcamento', label: 'Orçamento' },
   { id: 'metas', label: 'Metas', needs: 'goals' },
   { id: 'treinador', label: 'Treinador' },
@@ -149,6 +152,8 @@ export function viewLancamentos(ctx) {
       return b;
     }),
   );
+  const wallets = ctx.wallets?.wallets ?? [];
+  const walletSel = wallets.length ? el('select', { class: 'input', id: 'lc-carteira', 'aria-label': 'Carteira' }, el('option', { value: '' }, 'Sem carteira'), ...wallets.map((x) => el('option', { value: x.id }, x.name))) : null;
   const amount = moneyInput({ id: 'lc-valor', ariaLabel: 'Valor' });
   const date = el('input', { class: 'input', id: 'lc-data', type: 'date', value: ctx.month === monthNow() ? new Date().toISOString().slice(0, 10) : `${ctx.month}-01` });
   const note = el('input', { class: 'input', id: 'lc-desc', type: 'text', maxlength: '120', placeholder: 'Ex.: mercado, salário, farmácia' });
@@ -159,6 +164,7 @@ export function viewLancamentos(ctx) {
     el('div', { class: 'field' }, el('label', { class: 'label', for: 'lc-valor' }, 'Valor (R$)'), amount.input),
     el('div', { class: 'field' }, el('label', { class: 'label', for: 'lc-data' }, 'Data'), date),
     el('div', { class: 'field field-wide' }, el('label', { class: 'label', for: 'lc-desc' }, 'Descrição'), note),
+    walletSel ? el('div', { class: 'field' }, el('label', { class: 'label', for: 'lc-carteira' }, 'Carteira'), walletSel) : null,
     addBtn,
   );
   form.addEventListener('submit', async (e) => {
@@ -169,7 +175,7 @@ export function viewLancamentos(ctx) {
     addBtn.disabled = true;
     const text = note.value.trim() || (kind.value === 'gasto' ? 'Gasto' : 'Entrada');
     try {
-      await ctx.api.addEntries([{ date: date.value, amountCents: kind.value === 'gasto' ? -cents : cents, note: text }]);
+      await ctx.api.addEntries([{ date: date.value, amountCents: kind.value === 'gasto' ? -cents : cents, note: text, walletId: walletSel?.value || null }]);
       toast('Lançamento adicionado.');
       ctx.month = date.value.slice(0, 7);
       ctx.refresh();
@@ -201,6 +207,7 @@ export function viewLancamentos(ctx) {
     importBox = el('div', { class: 'import-box no-print' }, input, btn, el('span', { class: 'fine' }, 'Baixe o extrato no app ou site do banco. Repetidos são ignorados.'));
   }
 
+  const walletName = new Map(wallets.map((x) => [x.id, x.name]));
   const rows = d.entries.map((x) => {
     const del = el('button', { class: 'btn btn-quiet btn-sm icon-btn', type: 'button', 'aria-label': `Remover ${x.note}` }, icon('trash'));
     del.addEventListener('click', async () => {
@@ -217,7 +224,7 @@ export function viewLancamentos(ctx) {
     return el(
       'li', { class: 'entry-row' },
       el('span', { class: 'entry-date muted' }, fmtDay(x.date)),
-      el('span', { class: 'entry-note' }, x.note),
+      el('span', { class: 'entry-note' }, x.note, x.walletId && walletName.get(x.walletId) ? el('span', { class: 'wallet-tag' }, ` · ${walletName.get(x.walletId)}`) : null),
       cat,
       el('strong', { class: `entry-amount ${x.amountCents < 0 ? 'neg' : 'pos'}` }, brl(x.amountCents)),
       del,
@@ -514,6 +521,6 @@ export function viewPlano(ctx) {
   );
 }
 
-export const VIEWS = { geral: viewGeral, lancamentos: viewLancamentos, orcamento: viewOrcamento, metas: viewMetas, treinador: viewTreinador, simulador: viewSimulador, plano: viewPlano };
+export const VIEWS = { geral: viewGeral, lancamentos: viewLancamentos, orcamento: viewOrcamento, carteiras: viewCarteiras, lembretes: viewLembretes, metas: viewMetas, treinador: viewTreinador, simulador: viewSimulador, plano: viewPlano };
 export const NEEDS_MONTH = new Set(['geral', 'lancamentos', 'orcamento', 'metas']);
 export { monthNow };

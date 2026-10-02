@@ -95,10 +95,21 @@ const entrySchema = z.object({
   amountCents: z.number().int().refine((v) => v !== 0).refine((v) => Math.abs(v) <= 100_000_000_00),
   note: z.string().trim().max(120).default(''),
   category: z.string().max(30).optional(),
+  walletId: z.string().uuid().nullable().optional(),
   source: z.enum(['manual', 'import']).optional(),
 });
 export const addEntriesSchema = z.object({ entries: z.array(entrySchema).min(1).max(500) });
 export const setCategorySchema = z.object({ category: z.string().max(30) });
+export const walletSchema = z.object({ name: z.string().trim().min(1).max(40), kind: z.enum(['dinheiro', 'conta', 'cartao', 'poupanca', 'outra']) });
+export const entryWalletSchema = z.object({ walletId: z.string().uuid().nullable() });
+export const reminderSchema = z.object({
+  title: z.string().trim().min(2).max(80),
+  dueOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  amountCents: z.number().int().min(1).max(100_000_000_00).nullable().optional(),
+  repeatMonthly: z.boolean().optional(),
+  emailDaysBefore: z.number().int().min(0).max(10).optional(),
+});
+export const reminderPatchSchema = reminderSchema.partial().extend({ done: z.boolean().optional() });
 export const setLimitSchema = z.object({ limitCents: z.number().int().positive().max(100_000_000_00).nullable() });
 export const goalSchema = z.object({
   id: z.string().uuid().optional(),

@@ -145,6 +145,10 @@ export async function deleteCase(caseId) {
 }
 
 /** Preços, produtos à venda e avisos (o dono edita no backoffice). */
+export async function unsubscribeEmails(token) {
+  return request('POST', '/unsubscribe', { body: { token } });
+}
+
 export async function getCatalog() {
   return request('GET', '/catalog');
 }
@@ -160,4 +164,28 @@ export async function submitIncomeInterview(caseId, body) {
 
 export async function setIncomeProgress(caseId, key, done) {
   return request('POST', `/cases/${caseId}/income-progress`, { body: { key, done } });
+}
+export async function getWallets() {
+  return request('GET', '/account/wallets');
+}
+export async function createWallet(body) {
+  return request('POST', '/account/wallets', { body });
+}
+export async function deleteWallet(id) {
+  return request('DELETE', `/account/wallets/${id}`);
+}
+export async function setEntryWallet(id, walletId) {
+  return request('POST', `/account/entries/${id}/wallet`, { body: { walletId } });
+}
+export async function getReminders() {
+  return request('GET', '/account/reminders');
+}
+export async function createReminder(body) {
+  return request('POST', '/account/reminders', { body });
+}
+export async function updateReminder(id, body) {
+  return request('PUT', `/account/reminders/${id}`, { body });
+}
+export async function deleteReminder(id) {
+  return request('DELETE', `/account/reminders/${id}`);
 }

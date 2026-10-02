@@ -16,10 +16,12 @@ import { AppError, notFound } from './errors.ts';
 import * as leads from './leads.ts';
 import * as sub from './subscriptions.ts';
 import { registerGestao } from './admin/routes.ts';
+import * as campaigns from './admin/campaigns.ts';
+import * as extras from './account-extras.ts';
 import { eventSchema, recordEvent } from './admin/events.ts';
 import { publicCatalog } from './admin/manage.ts';
 import { refreshRuntime } from './runtime.ts';
-import { accessSchema, addEntriesSchema, cancelSchema, contributionSchema, createCaseSchema, createOrderSchema, emailLinkSchema, emailOnlySchema, goalSchema, incomeInterviewSchema, leadSchema, loginCodeSchema, newPartnerSchema, partnerLoginSchema, partnerStatusSchema, setCategorySchema, setLimitSchema, simulateSchema, subscriptionOrderSchema, toggleIncomeTaskSchema, translationSchema, uuidParam } from './schemas.ts';
+import { accessSchema, addEntriesSchema, cancelSchema, contributionSchema, createCaseSchema, entryWalletSchema, reminderPatchSchema, reminderSchema, walletSchema, createOrderSchema, emailLinkSchema, emailOnlySchema, goalSchema, incomeInterviewSchema, leadSchema, loginCodeSchema, newPartnerSchema, partnerLoginSchema, partnerStatusSchema, setCategorySchema, setLimitSchema, simulateSchema, subscriptionOrderSchema, toggleIncomeTaskSchema, translationSchema, uuidParam } from './schemas.ts';
 import { CSP } from './security.ts';
 import * as svc from './services.ts';
 import type { Ctx } from './services.ts';
@@ -57,6 +59,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   };
   const ipHash = (req: FastifyRequest): Buffer => hmac(config.secret, clientIp(req));
 
+  // O Gmail/Outlook mandam o descadastro de um clique como formulário (List-Unsubscribe=One-Click): só lemos como texto; a rota usa o token da URL.
+  app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_req, body, done) => done(null, {}));
   await app.register(cookie);
   await app.register(rateLimit, { global: true, max: 300 * scale, timeWindow: '1 minute', keyGenerator: clientIp });
 
@@ -69,7 +73,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       reply.header('Referrer-Policy', 'no-referrer');
     }
     const write = req.method !== 'GET' && req.method !== 'HEAD' && req.method !== 'OPTIONS';
-    if (write && req.url.startsWith('/api/') && req.headers['x-folego'] !== '1') {
+    if (write && req.url.startsWith('/api/') && !req.url.startsWith('/api/unsubscribe') && req.headers['x-folego'] !== '1') {
       throw new AppError(403, 'csrf', 'Requisição não permitida');
     }
   });
@@ -179,6 +183,14 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
 
   registerGestao(app, { ctx, scale, requireSession, createSession, idParam });
+
+  // Descadastro de e-mails de campanha: link assinado, vale sem login (aceita POST de um clique, como o Gmail faz).
+  app.post('/api/unsubscribe', { config: { rateLimit: { max: 30 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => {
+    const q = req.query as { t?: string };
+    const body = (req.body ?? {}) as { token?: string };
+    await campaigns.unsubscribe(ctx, String(body.token ?? q.t ?? ''));
+    return reply.status(204).send();
+  });
 
   app.get('/api/features', async () => ({ email: Boolean(deps.email), leads: config.leadsEnabled, subscriptions: config.subscriptionsEnabled && Boolean(deps.email) }));
 
@@ -312,6 +324,31 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.delete('/api/account/goals/:id/contributions/:cid', async (req, reply) => {
     const p = req.params as { id: string; cid: string };
     await sub.deleteContribution(ctx, await requireSubscriber(req), idParam(p.id), idParam(p.cid));
+    return reply.status(204).send();
+  });
+  // Carteiras e lembretes
+  app.get('/api/account/wallets', async (req) => extras.listWallets(ctx, await requireSubscriber(req)));
+  app.post('/api/account/wallets', async (req, reply) => {
+    return reply.status(201).send({ id: await extras.createWallet(ctx, await requireSubscriber(req), walletSchema.parse(req.body)) });
+  });
+  app.delete('/api/account/wallets/:id', async (req, reply) => {
+    await extras.deleteWallet(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id));
+    return reply.status(204).send();
+  });
+  app.post('/api/account/entries/:id/wallet', async (req) => {
+    await extras.setEntryWallet(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id), entryWalletSchema.parse(req.body).walletId);
+    return { ok: true };
+  });
+  app.get('/api/account/reminders', async (req) => ({ reminders: await extras.listReminders(ctx, await requireSubscriber(req)) }));
+  app.post('/api/account/reminders', async (req, reply) => {
+    return reply.status(201).send({ id: await extras.createReminder(ctx, await requireSubscriber(req), reminderSchema.parse(req.body)) });
+  });
+  app.put('/api/account/reminders/:id', async (req) => {
+    await extras.updateReminder(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id), reminderPatchSchema.parse(req.body));
+    return { ok: true };
+  });
+  app.delete('/api/account/reminders/:id', async (req, reply) => {
+    await extras.deleteReminder(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id));
     return reply.status(204).send();
   });
   app.get('/api/account/coach', async (req) => sub.coach(ctx, await requireSubscriber(req)));

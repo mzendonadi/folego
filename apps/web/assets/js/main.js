@@ -8,6 +8,7 @@ import { renderTools } from './tools.js';
 import { renderTranslator } from './translator.js';
 import { renderPartner } from './partner.js';
 import { renderAccount } from './account.js';
+import { renderUnsubscribe } from './unsubscribe.js';
 import { renderResumeBanner } from './banner.js';
 import * as api from './api.js';
 import { loadCatalog } from './prices.js';
@@ -27,6 +28,7 @@ const ROUTES = {
   translator: '#/tradutor',
   partner: '#/parceiros',
   account: '#/conta',
+  unsubscribe: '#/descadastrar',
 };
 const TITLES = {
   landing: 'Fôlego — organize suas dívidas e só pague se gostar',
@@ -40,6 +42,7 @@ const TITLES = {
   translator: 'Tradutor de cobrança — Fôlego',
   partner: 'Portal do parceiro — Fôlego',
   account: 'Minha conta — Fôlego',
+  unsubscribe: 'Cancelar e-mails — Fôlego',
 };
 const HEADINGS = { intake: '#intake-title', processing: '#processing-title', preview: '#preview-title', checkout: '#checkout-title', addon: '#checkout-title', translator: '#translator-title', delivery: '#delivery-title', tools: '#tools-title' };
 
@@ -53,6 +56,7 @@ let generatedTimer = 0;
 // ---------- roteamento ----------
 function viewFromHash(hash) {
   if (hash === ROUTES.account || hash.startsWith(`${ROUTES.account}/`)) return 'account'; // #/conta e #/conta/<aba>
+  if (hash.startsWith(`${ROUTES.unsubscribe}/`)) return 'unsubscribe'; // #/descadastrar/<assinatura>
   const found = Object.entries(ROUTES).find(([, h]) => h === hash);
   return found ? found[0] : null;
 }
@@ -179,6 +183,7 @@ async function route() {
   if (view === 'addon' && !state.paid && state.addonCodes[0] !== 'collection_translator') return replaceWith('landing');
   if (view === 'translator') await renderTranslatorView();
   if (view === 'partner') renderPartner($('#partner-root'));
+  if (view === 'unsubscribe') renderUnsubscribe($('#unsubscribe-root'), location.hash.split('/')[2] ?? '');
   if (view === 'account') renderAccount($('#account-root'), { api, tab: location.hash.split('/')[2] ?? null });
   if (view === 'delivery' && state.paid && !$('#delivery-root').querySelector('.d-head')) {
     try {

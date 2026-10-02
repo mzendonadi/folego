@@ -49,6 +49,8 @@ export interface Config {
   bundlePriceCents: number;
   /** Quantos dias antes de vencer a assinatura o lembrete por e-mail é enviado. */
   reminderDaysBefore: number;
+  /** Teto de e-mails de campanha por dia (proteção da reputação do domínio de envio). */
+  campaignDailyCap: number;
 }
 
 const ASAAS_PRODUCTION_URL = 'https://api.asaas.com/v3';
@@ -109,5 +111,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     announcement: null,
     bundlePriceCents: 5990,
     reminderDaysBefore: 3,
+    campaignDailyCap: 200,
   };
 }
