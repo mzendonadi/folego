@@ -11,7 +11,7 @@ export const CATALOG = {
   },
   calendar_30d: {
     name: 'Calendário do plano',
-    cents: 1999,
+    cents: 2499,
     active: true,
     blurb: 'As ações dos 30 dias, as estratégias do seu caso e os marcos dos próximos meses (dia de pagar, dívida quitada), com lembretes. Funciona no Google Agenda, no iPhone e no Outlook.',
   },
