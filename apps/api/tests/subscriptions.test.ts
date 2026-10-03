@@ -10,6 +10,7 @@ import { MemorySender } from '../src/email.ts';
 import { maintenance } from '../src/subscriptions.ts';
 import { sendDueReminders } from '../src/account-extras.ts';
 import { sendWeeklyDigests } from '../src/account-debts.ts';
+import { refreshMarket } from '../src/market.ts';
 
 let db: Db;
 let app: FastifyInstance;
@@ -364,4 +365,56 @@ test('planejador: só Desbravador, responde com os fatos da conta (sem chave de 
   assert.match(r.json.answer, /Cartão/);
   await db.query(`INSERT INTO app.planner_log(subscriber_id, source) SELECT id, 'regras' FROM app.subscribers, generate_series(1, 9) WHERE email = 'plan-desbrav@exemplo.com'`);
   assert.equal((await c('POST', '/api/account/planner', { body: { question: 'Mais uma pergunta aqui' } })).status, 429);
+});
+
+test('coach: nota, jornadas por plano, missão confirmada pelos dados e cenário econômico do Banco Central', async () => {
+  const fakeBcb = (async (url: string) => {
+    const serie = /sgs\.(\d+)\//.exec(url)![1];
+    const rows: Record<string, Array<{ data: string; valor: string }>> = {
+      '432': [{ data: '01/07/2026', valor: '15.25' }, { data: '01/10/2026', valor: '14.75' }],
+      '13522': [{ data: '01/09/2026', valor: '5.20' }],
+      '4389': [{ data: '01/10/2026', valor: '14.65' }],
+      '1': [{ data: '01/10/2026', valor: '5.4000' }],
+    };
+    return new Response(JSON.stringify(rows[serie!] ?? []), { status: 200 });
+  }) as unknown as typeof fetch;
+  assert.ok((await refreshMarket({ db, config, gateway, email: mailbox }, { fetchFn: fakeBcb, force: true })) >= 5);
+  assert.equal(await refreshMarket({ db, config, gateway, email: mailbox }, { fetchFn: fakeBcb }), 0, 'dados frescos não rebuscam');
+
+  const c = client();
+  await login(c, 'coach-controle@exemplo.com');
+  const o = await c('POST', '/api/account/subscription-order', { body: { plan: 'controle' }, headers: { 'idempotency-key': 'sub-coach-00001' } });
+  await pay(o.json.orderId, 'sub-coach1');
+  const today = new Date().toISOString().slice(0, 10);
+  await c('POST', '/api/account/entries', { body: { entries: [{ date: today, amountCents: 500_000, note: 'Salario' }, { date: today, amountCents: -200_000, note: 'Aluguel' }] } });
+  const ov = (await c('GET', '/api/account/coach/overview')).json;
+  assert.equal(ov.plan, 'controle');
+  assert.ok(ov.health.score > 0 && ov.health.parts.length === 4);
+  assert.equal(ov.journeys.find((j: any) => j.id === 'organizar').locked, false);
+  assert.equal(ov.journeys.find((j: any) => j.id === 'sair_do_vermelho').locked, true);
+  assert.equal(ov.journeys.find((j: any) => j.id === 'organizar').missions[3].done, true, 'gastou menos do que ganhou');
+  assert.equal((await c('POST', '/api/account/coach/journeys/organizar/start')).status, 204);
+  assert.equal((await c('POST', '/api/account/coach/journeys/sair_do_vermelho/start')).status, 403);
+  assert.equal((await c('POST', '/api/account/coach/journeys/inexistente/start')).status, 422);
+  assert.equal((await c('GET', '/api/account/coach/overview')).json.focus.kind, 'missao');
+
+  const m = (await c('GET', '/api/account/market')).json;
+  assert.equal(m.indicators.selicPct, 14.75);
+  assert.equal(m.indicators.selicTrend, -0.5);
+  assert.equal(m.indicators.usdBrl, null, 'dólar é do Desbravador');
+  assert.equal(m.history, null);
+  assert.ok(m.insights.some((i: any) => i.id === 'selic' && !i.locked));
+  assert.ok(m.insights.some((i: any) => i.id === 'juro_real' && i.locked));
+
+  const d = client();
+  await login(d, 'coach-desb@exemplo.com');
+  const o2 = await d('POST', '/api/account/subscription-order', { body: { plan: 'desbravador' }, headers: { 'idempotency-key': 'sub-coach-00002' } });
+  await pay(o2.json.orderId, 'sub-coach2');
+  const md = (await d('GET', '/api/account/market')).json;
+  assert.equal(md.indicators.usdBrl, 5.4);
+  assert.ok(md.history.selic.length >= 1);
+  assert.equal((await d('POST', '/api/account/coach/journeys/investir/start')).status, 204);
+  await d('POST', '/api/account/simulate', { body: { initialCents: 100_000, monthlyCents: 50_000, months: 12, scenarios: [{ name: 'A', annualPct: 10 }], inflationAnnualPct: 4 } });
+  const inv = (await d('GET', '/api/account/coach/overview')).json.journeys.find((j: any) => j.id === 'investir');
+  assert.equal(inv.missions[3].done, true, 'usar o simulador confirma a missão');
 });

@@ -5,12 +5,14 @@ import { brl } from './format.js';
 import { moneyInput } from './money.js';
 import { confirmDialog } from './confirm.js';
 import { viewCarteiras, viewLembretes, viewDividas } from './account-extras-views.js';
+import { viewCoach, viewMercado } from './account-coach-views.js';
 import { PLANS, CATEGORIES, CATEGORY_LABEL, categorize, parseExtract } from '../vendor/engine.js';
 
-export const FEATURE_LABEL = { ledger: 'Controle de gastos', import: 'Importar extrato', alerts: 'Alertas de limite', coach_limited: 'Treinador (3 dicas)', goals: 'Metas com aportes', coach: 'Treinador completo', simulator: 'Simulador de investimento', planner: 'Planejador com IA' };
+export const FEATURE_LABEL = { ledger: 'Controle de gastos', import: 'Importar extrato', alerts: 'Alertas de limite', coach_limited: 'Treinador (3 dicas)', goals: 'Metas com aportes', coach: 'Treinador completo', simulator: 'Simulador de investimento', planner: 'Planejador com IA', journeys: 'Todas as jornadas do coach', market: 'Cenário econômico (Selic, inflação, CDI)', market_pro: 'Dólar e histórico de 12 meses' };
 
 /** Abas da conta. `needs` = recurso do plano exigido (a aba aparece sempre; sem o recurso mostra o que o upgrade traz). */
 export const TABS = [
+  { id: 'coach', label: 'Coach' },
   { id: 'geral', label: 'Visão geral' },
   { id: 'lancamentos', label: 'Lançamentos' },
   { id: 'dividas', label: 'Dívidas' },
@@ -18,6 +20,7 @@ export const TABS = [
   { id: 'lembretes', label: 'Lembretes' },
   { id: 'orcamento', label: 'Orçamento' },
   { id: 'metas', label: 'Metas', needs: 'goals' },
+  { id: 'mercado', label: 'Mercado' },
   { id: 'treinador', label: 'Treinador' },
   { id: 'planejador', label: 'Planejador', needs: 'planner' },
   { id: 'simulador', label: 'Simulador', needs: 'simulator' },
@@ -198,7 +201,7 @@ export function viewLancamentos(ctx) {
       const { entries: parsed, skipped } = parseExtract(await file.text(), file.name);
       if (parsed.length === 0) return toast('Não consegui ler nenhum lançamento desse arquivo.');
       try {
-        const res = await ctx.api.addEntries(parsed.map((x) => ({ ...x, source: 'import', category: categorize(x.note, x.amountCents) })));
+        const res = await ctx.api.addEntries(parsed.map((x) => ({ ...x, source: 'import', category: categorize(x.note, x.amountCents), walletId: walletSel?.value || null })));
         toast(`${res.added} lançamentos importados${res.duplicates ? `, ${res.duplicates} repetidos ignorados` : ''}${skipped ? `, ${skipped} linhas não reconhecidas` : ''}.`);
         ctx.refresh();
       } catch {
@@ -569,6 +572,6 @@ export function viewPlanejador(ctx) {
   return card(el('h2', {}, 'Pergunte ao Fôlego'), el('p', { class: 'section-sub' }, 'A resposta usa os lançamentos do mês, suas dívidas e os próximos vencimentos.'), form, out);
 }
 
-export const VIEWS = { geral: viewGeral, lancamentos: viewLancamentos, orcamento: viewOrcamento, dividas: viewDividas, carteiras: viewCarteiras, lembretes: viewLembretes, metas: viewMetas, treinador: viewTreinador, simulador: viewSimulador, planejador: viewPlanejador, plano: viewPlano };
+export const VIEWS = { coach: viewCoach, mercado: viewMercado, geral: viewGeral, lancamentos: viewLancamentos, orcamento: viewOrcamento, dividas: viewDividas, carteiras: viewCarteiras, lembretes: viewLembretes, metas: viewMetas, treinador: viewTreinador, simulador: viewSimulador, planejador: viewPlanejador, plano: viewPlano };
 export const NEEDS_MONTH = new Set(['geral', 'lancamentos', 'orcamento', 'metas']);
 export { monthNow };

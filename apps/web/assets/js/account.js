@@ -10,11 +10,11 @@ import { FEATURE_LABEL, TABS, VIEWS, NEEDS_MONTH, monthNow } from './account-vie
 
 const card = (...c) => el('section', { class: 'card d-section' }, ...c.filter(Boolean));
 const TAB_IDS = TABS.map((t) => t.id);
-const hashFor = (id) => (id === 'geral' ? '#/conta' : `#/conta/${id}`);
+const hashFor = (id) => (id === 'coach' ? '#/conta' : `#/conta/${id}`);
 
 export function renderAccount(root, { api, tab: initialTab = null }) {
   let month = monthNow();
-  let wantedTab = TAB_IDS.includes(initialTab) ? initialTab : 'geral';
+  let wantedTab = TAB_IDS.includes(initialTab) ? initialTab : 'coach';
 
   async function boot() {
     let acc;
@@ -248,6 +248,8 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
       try {
         if (NEEDS_MONTH.has(id)) ctx.data = await api.getMonth(month);
         if (id === 'lancamentos') ctx.wallets = await ctx.api.getWallets().catch(() => null);
+        if (id === 'coach') ctx.overview = await api.getCoachOverview();
+        if (id === 'mercado') ctx.market = await api.getMarket();
         if (id === 'dividas') ctx.debts = await ctx.api.getDebts(ctx.debtExtra ?? 0);
         if (id === 'carteiras') ctx.wallets = await ctx.api.getWallets();
         if (id === 'lembretes') ctx.reminders = (await ctx.api.getReminders()).reminders;

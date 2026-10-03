@@ -57,3 +57,7 @@ export const payDebt = impl.payDebt;
 export const setMonthLimit = impl.setMonthLimit;
 export const copyBudgetMonth = impl.copyBudgetMonth;
 export const askPlanner = impl.askPlanner;
+export const getCoachOverview = impl.getCoachOverview;
+export const startJourney = impl.startJourney;
+export const stopJourney = impl.stopJourney;
+export const getMarket = impl.getMarket;

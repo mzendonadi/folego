@@ -213,3 +213,15 @@ export async function copyBudgetMonth(month) {
 export async function askPlanner(question) {
   return request('POST', '/account/planner', { body: { question } });
 }
+export async function getCoachOverview() {
+  return request('GET', '/account/coach/overview');
+}
+export async function startJourney(id) {
+  return request('POST', `/account/coach/journeys/${id}/start`);
+}
+export async function stopJourney(id) {
+  return request('DELETE', `/account/coach/journeys/${id}`);
+}
+export async function getMarket() {
+  return request('GET', '/account/market');
+}

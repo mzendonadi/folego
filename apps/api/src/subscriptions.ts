@@ -12,6 +12,7 @@ import { audit, num, orderView, todaySaoPaulo } from './services.ts';
 import type { Queryable } from './db.ts';
 import { ownedWalletId } from './account-extras.ts';
 import { monthLimits } from './account-debts.ts';
+import { markMissionDone } from './coach-program.ts';
 
 const CODE_TTL_MIN = 10;
 const PIX_TTL_MS = 30 * 60 * 1000;
@@ -380,6 +381,7 @@ export interface SimulateArgs {
 
 export async function simulate(ctx: Ctx, subscriberId: string, args: SimulateArgs) {
   await requireFeature(ctx, subscriberId, 'simulator');
+  await markMissionDone(ctx, subscriberId, 'i4');
   return {
     results: simulateInvestment(args),
     notice: 'Simulação educativa com as taxas que você informou. Não é recomendação de investimento nem previsão de resultado. Rendimentos passados e hipóteses não garantem o futuro.',

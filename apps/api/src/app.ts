@@ -20,6 +20,7 @@ import * as campaigns from './admin/campaigns.ts';
 import * as extras from './account-extras.ts';
 import * as debts from './account-debts.ts';
 import { askPlanner } from './planner.ts';
+import * as program from './coach-program.ts';
 import { eventSchema, recordEvent } from './admin/events.ts';
 import { publicCatalog } from './admin/manage.ts';
 import { refreshRuntime } from './runtime.ts';
@@ -355,6 +356,17 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     return { copied: await debts.copyPreviousMonthLimits(ctx, await requireSubscriber(req), month) };
   });
   app.post('/api/account/planner', { config: { rateLimit: { max: 12, timeWindow: '10 minutes' } } }, async (req) => askPlanner(ctx, await requireSubscriber(req), plannerSchema.parse(req.body).question));
+  // Coach: nota de saúde, jornadas, métodos e cenário econômico
+  app.get('/api/account/coach/overview', async (req) => program.coachOverview(ctx, await requireSubscriber(req)));
+  app.post('/api/account/coach/journeys/:id/start', async (req, reply) => {
+    await program.startJourney(ctx, await requireSubscriber(req), (req.params as { id: string }).id);
+    return reply.status(204).send();
+  });
+  app.delete('/api/account/coach/journeys/:id', async (req, reply) => {
+    await program.stopJourney(ctx, await requireSubscriber(req), (req.params as { id: string }).id);
+    return reply.status(204).send();
+  });
+  app.get('/api/account/market', async (req) => program.marketView(ctx, await requireSubscriber(req)));
   // Carteiras e lembretes
   app.get('/api/account/wallets', async (req) => extras.listWallets(ctx, await requireSubscriber(req)));
   app.post('/api/account/wallets', async (req, reply) => {

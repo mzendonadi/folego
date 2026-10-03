@@ -149,3 +149,7 @@ export const payDebt = notAvailable;
 export const setMonthLimit = notAvailable;
 export const copyBudgetMonth = notAvailable;
 export const askPlanner = notAvailable;
+export const getCoachOverview = notAvailable;
+export const startJourney = notAvailable;
+export const stopJourney = notAvailable;
+export const getMarket = notAvailable;

@@ -20,3 +20,5 @@ export { buildStrategies } from './strategies.ts';
 export type { Strategies, StrategyScenario, WhatIfExtra, LumpSumScenario, SettlementOption, MonthPlanRow, Milestone, PlaybookItem } from './strategies.ts';
 export { buildPayoffPlan, MAX_PAYOFF_MONTHS } from './payoff.ts';
 export type { AccountDebt, PayoffPlan, PayoffResult, PayoffMethod } from './payoff.ts';
+export { healthScore, evaluatePrograms, applyMethods, marketInsights, annualFromMonthlyPct, planAtLeast, emergencyMonths, savingsRatePct, PROGRAMS, METHODS } from './coach.ts';
+export type { CoachFacts, CoachPlan, HealthScore, HealthPart, Program, ProgramProgress, Mission, Method, MethodApplied, Indicators, MarketInsight } from './coach.ts';

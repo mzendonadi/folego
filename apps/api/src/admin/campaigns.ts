@@ -17,6 +17,7 @@ const ACTIVE = `s.status = 'active' AND s.current_period_end > now()`;
 export const AUDIENCES: { id: string; name: string; where: string }[] = [
   { id: 'renovar_7d', name: 'Assinantes que vencem em 7 dias', where: `${ACTIVE} AND NOT s.cancel_at_period_end AND s.current_period_end < now() + interval '7 days'` },
   { id: 'em_debito', name: 'Assinantes em débito (venceram sem renovar)', where: `NOT (${ACTIVE})` },
+  { id: 'recuperar_30d', name: 'Assinaturas vencidas nos últimos 30 dias (recuperar)', where: `NOT (${ACTIVE}) AND s.current_period_end > now() - interval '30 days'` },
   { id: 'sem_uso_14d', name: 'Assinantes sem lançamento há 14 dias', where: `${ACTIVE} AND NOT EXISTS (SELECT 1 FROM app.ledger_entries l WHERE l.subscriber_id = s.subscriber_id AND l.created_at > now() - interval '14 days')` },
   { id: 'upgrade_ousado', name: 'Plano Controle há mais de 20 dias (candidatos ao Ousado)', where: `${ACTIVE} AND s.plan = 'controle' AND s.created_at < now() - interval '20 days'` },
   { id: 'todos_ativos', name: 'Todos os assinantes ativos', where: ACTIVE },
