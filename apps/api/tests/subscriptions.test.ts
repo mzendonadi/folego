@@ -401,6 +401,11 @@ test('coach: nota, jornadas por plano, missão confirmada pelos dados e cenário
   const again = (await c('GET', '/api/account/coach/overview')).json;
   assert.equal(again.focus.kind, 'missao');
   assert.equal(again.streak, 1, 'lançou hoje: sequência de 1 dia');
+  assert.equal(again.objective, null);
+  assert.equal((await c('POST', '/api/account/coach/objective', { body: { objective: 'sair_do_vermelho' } })).json.journey, 'organizar', 'plano Controle cai na jornada Organizar');
+  assert.equal((await c('GET', '/api/account/coach/overview')).json.objective, 'sair_do_vermelho');
+  assert.equal((await c('POST', '/api/account/coach/objective', { body: { objective: 'x' } })).status, 400);
+  assert.equal((await c('GET', '/api/account/goal-templates')).status, 403, 'Controle não tem metas');
   assert.equal(again.challenges[0].id, 'w_registrar');
   assert.equal(again.compare.verdict, 'sem_base', 'sem mês anterior não há base');
 
@@ -418,6 +423,8 @@ test('coach: nota, jornadas por plano, missão confirmada pelos dados e cenário
   await pay(o2.json.orderId, 'sub-coach2');
   const md = (await d('GET', '/api/account/market')).json;
   assert.equal(md.indicators.usdBrl, 5.4);
+  const tpl = (await d('GET', '/api/account/goal-templates')).json.templates;
+  assert.ok(tpl.some((t: any) => t.id === 'reserva_6') && tpl.some((t: any) => t.id === 'viagem' && t.targetCents === null));
   assert.ok(md.history.selic.length >= 1);
   assert.equal((await d('POST', '/api/account/coach/journeys/investir/start')).status, 204);
   await d('POST', '/api/account/simulate', { body: { initialCents: 100_000, monthlyCents: 50_000, months: 12, scenarios: [{ name: 'A', annualPct: 10 }], inflationAnnualPct: 4 } });

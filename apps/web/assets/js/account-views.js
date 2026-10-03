@@ -363,6 +363,7 @@ export function viewMetas(ctx) {
     });
   }
   const goals = ctx.data.goals ?? [];
+  const templatesBox = el('div', { class: 'goal-templates no-print' });
   const active = goals.filter((g) => !g.completedAt);
   const finished = goals.filter((g) => g.completedAt);
 
@@ -394,13 +395,28 @@ export function viewMetas(ctx) {
     }
   });
 
+  const applyTemplate = (t) => {
+    name.value = t.name;
+    target.input.value = t.targetCents ? (t.targetCents / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '';
+    target.input.dispatchEvent(new Event('input', { bubbles: true }));
+    const d = new Date();
+    d.setMonth(d.getMonth() + t.months);
+    due.value = d.toISOString().slice(0, 10);
+    form.closest('details').open = true;
+    (t.targetCents ? btn : target.input).focus();
+  };
+  ctx.api.getGoalTemplates().then((r) => templatesBox.replaceChildren(el('p', { class: 'fine muted' }, 'Comece por um modelo pronto (os valores usam o seu gasto médio):'), el('div', { class: 'button-row' }, ...r.templates.map((t) => {
+    const b = el('button', { class: 'btn btn-quiet btn-sm', type: 'button', title: t.hint }, t.name);
+    b.addEventListener('click', () => applyTemplate(t));
+    return b;
+  })))).catch(() => {});
   return el(
     'div', { class: 'acc-stack' },
     card(
       el('h2', {}, 'Suas metas'),
       active.length > 0 ? el('div', { class: 'goal-list' }, ...active.map((g) => goalCard(ctx, g))) : empty('Nenhuma meta em andamento', 'Comece com algo pequeno e concreto: uma reserva de um mês de gastos, por exemplo.'),
     ),
-    el('details', { class: 'card d-section new-goal', open: active.length === 0 }, el('summary', {}, icon('plus'), 'Nova meta'), form),
+    el('details', { class: 'card d-section new-goal', open: active.length === 0 }, el('summary', {}, icon('plus'), 'Nova meta'), templatesBox, form),
     finished.length > 0 ? card(el('h2', {}, 'Concluídas'), el('div', { class: 'goal-list' }, ...finished.map((g) => goalCard(ctx, g)))) : null,
   );
 }

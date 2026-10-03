@@ -3,7 +3,7 @@
 import { AppError } from './errors.ts';
 import type { Ctx } from './services.ts';
 import { num, todaySaoPaulo } from './services.ts';
-import { PROGRAMS, applyMethods, compareMonths, evaluatePrograms, healthScore, marketInsights, monthOf, planAtLeast, weekIndexOf, weeklyChallenges } from './engine.ts';
+import { OBJECTIVES, goalTemplates, PROGRAMS, applyMethods, compareMonths, evaluatePrograms, healthScore, marketInsights, monthOf, planAtLeast, weekIndexOf, weeklyChallenges } from './engine.ts';
 import type { CoachFacts, CoachPlan } from './engine.ts';
 import { requireFeature } from './subscriptions.ts';
 import { listDebts, monthLimits } from './account-debts.ts';
@@ -81,6 +81,7 @@ export async function coachOverview(ctx: Ctx, subscriberId: string) {
   const active = await ctx.db.query<{ program: string; started_at: Date }>(`SELECT program, started_at FROM app.journeys WHERE subscriber_id = $1 ORDER BY started_at`, [subscriberId]);
   const manual = await ctx.db.query<{ mission_id: string }>(`SELECT mission_id FROM app.journey_done WHERE subscriber_id = $1`, [subscriberId]);
   const started = new Set(active.rows.map((r) => r.program));
+  const obj = await ctx.db.query<{ objective: string | null }>(`SELECT objective FROM app.subscribers WHERE id = $1`, [subscriberId]);
   const journeys = evaluatePrograms(facts, plan, new Set(manual.rows.map((r) => r.mission_id))).map((j) => ({ ...j, started: started.has(j.id), complete: j.progressPct === 100 }));
   const health = healthScore(facts);
   const today = todaySaoPaulo();
@@ -104,6 +105,8 @@ export async function coachOverview(ctx: Ctx, subscriberId: string) {
   return {
     plan,
     health,
+    objective: obj.rows[0]?.objective ?? null,
+    objectives: OBJECTIVES.map((o) => ({ ...o, locked: !planAtLeast(plan, PROGRAMS.find((p) => p.id === o.id)!.minPlan) })),
     streak: facts.streakDays,
     challenges: weeklyChallenges(facts, weekIndexOf(today)),
     compare: compareMonths(side('cur'), side('prev')),
@@ -176,4 +179,21 @@ export async function sendWelcomes(ctx: Ctx, opts: { log?: (e: Record<string, un
     }
   }
   return sent;
+}
+
+/** Guarda o objetivo e liga a jornada correspondente (se o plano não permitir, cai na jornada Organizar o mês). */
+export async function setObjective(ctx: Ctx, subscriberId: string, objective: string): Promise<{ journey: string }> {
+  const plan = await planOf(ctx, subscriberId);
+  const p = PROGRAMS.find((x) => x.id === objective);
+  if (!p) throw new AppError(422, 'invalid_objective', 'Objetivo inválido.');
+  const journey = planAtLeast(plan, p.minPlan) ? p.id : 'organizar';
+  await ctx.db.query(`UPDATE app.subscribers SET objective = $2 WHERE id = $1`, [subscriberId, objective]);
+  await ctx.db.query(`INSERT INTO app.journeys(subscriber_id, program) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [subscriberId, journey]);
+  return { journey };
+}
+
+export async function goalTemplatesFor(ctx: Ctx, subscriberId: string) {
+  await requireFeature(ctx, subscriberId, 'goals');
+  const { facts } = await loadCoachFacts(ctx, subscriberId);
+  return { templates: goalTemplates(facts) };
 }

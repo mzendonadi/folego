@@ -24,7 +24,7 @@ import * as program from './coach-program.ts';
 import { eventSchema, recordEvent } from './admin/events.ts';
 import { publicCatalog } from './admin/manage.ts';
 import { refreshRuntime } from './runtime.ts';
-import { accessSchema, addEntriesSchema, cancelSchema, contributionSchema, createCaseSchema, entryWalletSchema, accountDebtSchema, accountDebtPatchSchema, debtPaymentSchema, monthLimitSchema, plannerSchema, reminderPatchSchema, reminderSchema, walletSchema, createOrderSchema, emailLinkSchema, emailOnlySchema, goalSchema, incomeInterviewSchema, leadSchema, loginCodeSchema, newPartnerSchema, partnerLoginSchema, partnerStatusSchema, setCategorySchema, setLimitSchema, simulateSchema, subscriptionOrderSchema, toggleIncomeTaskSchema, translationSchema, uuidParam } from './schemas.ts';
+import { accessSchema, addEntriesSchema, cancelSchema, contributionSchema, createCaseSchema, entryWalletSchema, accountDebtSchema, accountDebtPatchSchema, debtPaymentSchema, monthLimitSchema, plannerSchema, objectiveSchema, reminderPatchSchema, reminderSchema, walletSchema, createOrderSchema, emailLinkSchema, emailOnlySchema, goalSchema, incomeInterviewSchema, leadSchema, loginCodeSchema, newPartnerSchema, partnerLoginSchema, partnerStatusSchema, setCategorySchema, setLimitSchema, simulateSchema, subscriptionOrderSchema, toggleIncomeTaskSchema, translationSchema, uuidParam } from './schemas.ts';
 import { CSP } from './security.ts';
 import * as svc from './services.ts';
 import type { Ctx } from './services.ts';
@@ -366,6 +366,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     await program.stopJourney(ctx, await requireSubscriber(req), (req.params as { id: string }).id);
     return reply.status(204).send();
   });
+  app.post('/api/account/coach/objective', async (req) => program.setObjective(ctx, await requireSubscriber(req), objectiveSchema.parse(req.body).objective));
+  app.get('/api/account/goal-templates', async (req) => program.goalTemplatesFor(ctx, await requireSubscriber(req)));
   app.get('/api/account/market', async (req) => program.marketView(ctx, await requireSubscriber(req)));
   // Carteiras e lembretes
   app.get('/api/account/wallets', async (req) => extras.listWallets(ctx, await requireSubscriber(req)));

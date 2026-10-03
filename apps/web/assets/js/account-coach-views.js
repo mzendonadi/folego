@@ -59,6 +59,25 @@ export function viewCoach(ctx) {
     doIt ? el('div', { class: 'button-row no-print' }, doIt) : null,
   );
 
+  const objectiveCard = o.objective
+    ? null
+    : card(
+      el('h2', {}, 'Qual é o seu objetivo agora?'),
+      el('p', { class: 'section-sub' }, 'Escolha uma: eu monto a sua jornada e o foco do dia em cima disso. Você pode mudar quando quiser.'),
+      el('div', { class: 'objectives' }, ...o.objectives.map((x) => {
+        const b = el('button', { class: 'objective', type: 'button' }, el('strong', {}, x.label), el('span', { class: 'fine muted' }, x.hint), x.locked ? el('span', { class: 'pill' }, 'Começa pela jornada Organizar o mês') : null);
+        b.addEventListener('click', async () => {
+          try {
+            await ctx.api.setObjective(x.id);
+            toast('Pronto! Sua jornada foi iniciada.');
+            ctx.refresh();
+          } catch {
+            toast('Não consegui agora.');
+          }
+        });
+        return b;
+      })),
+    );
   const streak = el('p', { class: 'streak', role: 'status' }, el('strong', {}, String(o.streak)), o.streak === 1 ? ' dia seguido lançando' : ' dias seguidos lançando', o.streak === 0 ? el('span', { class: 'fine muted' }, ' · lance hoje para começar a sequência') : null);
   const challenges = card(
     el('h2', {}, 'Desafios da semana'),
@@ -115,6 +134,7 @@ export function viewCoach(ctx) {
 
   return el(
     'div', { class: 'acc-stack' },
+    objectiveCard,
     card(gauge, parts),
     focus,
     challenges,

@@ -24,3 +24,5 @@ export { healthScore, evaluatePrograms, applyMethods, marketInsights, annualFrom
 export type { CoachFacts, CoachPlan, HealthScore, HealthPart, Program, ProgramProgress, Mission, Method, MethodApplied, Indicators, MarketInsight } from './coach.ts';
 export { weeklyChallenges, weekIndexOf, compareMonths } from './coach.ts';
 export type { Challenge, MonthComparison, CategoryChange } from './coach.ts';
+export { OBJECTIVES, goalTemplates } from './coach.ts';
+export type { GoalTemplate } from './coach.ts';

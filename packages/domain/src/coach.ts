@@ -316,3 +316,39 @@ export function compareMonths(current: Record<string, number>, previous: Record<
   const verdict = prev === 0 ? 'sem_base' : Math.abs(cur - prev) <= prev * 0.03 ? 'igual' : cur < prev ? 'menos' : 'mais';
   return { currentCents: cur, previousCents: prev, deltaCents: cur - prev, deltaPct, verdict, changes };
 }
+
+// ---------------------------------------------------------------------------
+// Objetivo e modelos de meta
+// ---------------------------------------------------------------------------
+export const OBJECTIVES: { id: Program['id']; label: string; hint: string }[] = [
+  { id: 'organizar', label: 'Organizar o meu dinheiro', hint: 'Saber para onde vai cada real e parar de ser surpreendido por contas.' },
+  { id: 'sair_do_vermelho', label: 'Sair do vermelho', hint: 'Quitar dívidas na ordem certa, pagando o mínimo de juros.' },
+  { id: 'reserva', label: 'Montar uma reserva de emergência', hint: 'Ter colchão para o imprevisto sem recorrer ao cartão.' },
+  { id: 'investir', label: 'Começar a investir', hint: 'Construir a base certa e só então fazer o dinheiro render.' },
+];
+
+export interface GoalTemplate {
+  id: string;
+  name: string;
+  hint: string;
+  targetCents: number | null; // null = a pessoa define
+  months: number; // prazo sugerido
+}
+
+/** Modelos de meta com o valor calculado da conta: reserva = N meses do gasto médio; quitar = o que se deve. */
+export function goalTemplates(f: Pick<CoachFacts, 'avgMonthlySpendCents' | 'debtOwedCents'>): GoalTemplate[] {
+  const spend = f.avgMonthlySpendCents;
+  const months = (n: number) => (spend > 0 ? Math.round(spend * n) : null);
+  const list: GoalTemplate[] = [
+    { id: 'reserva_1', name: 'Reserva de emergência: 1 mês', hint: 'Primeiro degrau: um mês de gastos guardado.', targetCents: months(1), months: 4 },
+    { id: 'reserva_3', name: 'Reserva de emergência: 3 meses', hint: 'Cobre a maioria dos imprevistos de renda.', targetCents: months(3), months: 12 },
+    { id: 'reserva_6', name: 'Reserva de emergência completa: 6 meses', hint: 'O alvo completo para negociar sem pressão.', targetCents: months(6), months: 24 },
+  ];
+  if (f.debtOwedCents > 0) list.push({ id: 'quitar', name: 'Quitar minhas dívidas', hint: 'O total que você ainda deve, para acompanhar junto com a aba Dívidas.', targetCents: f.debtOwedCents, months: 18 });
+  list.push(
+    { id: 'viagem', name: 'Viagem', hint: 'Defina o valor do roteiro e o prazo.', targetCents: null, months: 12 },
+    { id: 'estudo', name: 'Curso ou estudo', hint: 'Investir em você é o que mais rende.', targetCents: null, months: 8 },
+    { id: 'imprevistos', name: 'Fundo para manutenção da casa/carro', hint: 'Evita que um conserto vire dívida de cartão.', targetCents: null, months: 10 },
+  );
+  return list;
+}

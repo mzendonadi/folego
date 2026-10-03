@@ -842,3 +842,7 @@ ul, ol { margin: 0; padding: 0; }
 .compare-list li { display: flex; justify-content: space-between; gap: var(--s3); border-bottom: 1px solid var(--line); padding-bottom: 6px; }
 .compare-list .neg { color: var(--danger-ink, #b3261e); }
 .compare-list .pos { color: var(--ok-ink); }
+.objectives { display: grid; gap: var(--s3); grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.objective { display: grid; gap: 6px; text-align: left; padding: var(--s4); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--paper); cursor: pointer; font: inherit; color: inherit; }
+.objective:hover, .objective:focus-visible { border-color: var(--primary); }
+.goal-templates { margin-bottom: var(--s3); }

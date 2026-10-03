@@ -225,3 +225,9 @@ export async function stopJourney(id) {
 export async function getMarket() {
   return request('GET', '/account/market');
 }
+export async function setObjective(objective) {
+  return request('POST', '/account/coach/objective', { body: { objective } });
+}
+export async function getGoalTemplates() {
+  return request('GET', '/account/goal-templates');
+}

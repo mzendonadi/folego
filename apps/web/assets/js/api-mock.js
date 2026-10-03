@@ -153,3 +153,5 @@ export const getCoachOverview = notAvailable;
 export const startJourney = notAvailable;
 export const stopJourney = notAvailable;
 export const getMarket = notAvailable;
+export const setObjective = notAvailable;
+export const getGoalTemplates = notAvailable;

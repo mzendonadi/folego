@@ -61,3 +61,5 @@ export const getCoachOverview = impl.getCoachOverview;
 export const startJourney = impl.startJourney;
 export const stopJourney = impl.stopJourney;
 export const getMarket = impl.getMarket;
+export const setObjective = impl.setObjective;
+export const getGoalTemplates = impl.getGoalTemplates;
