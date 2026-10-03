@@ -231,3 +231,71 @@ export function viewDividas(ctx) {
     card(el('h2', {}, 'Suas dívidas'), rows.length ? el('ul', { class: 'entries' }, ...rows) : el('p', { class: 'muted' }, 'Nenhuma dívida cadastrada ainda.')),
   );
 }
+
+export function viewFamilia(ctx, locked) {
+  const h = ctx.household;
+  const stack = (...c) => el('div', { class: 'acc-stack' }, ...c.filter(Boolean));
+  if (h.role === 'member') {
+    const leave = el('button', { class: 'btn btn-secondary', type: 'button' }, 'Sair da conta compartilhada');
+    leave.addEventListener('click', async () => {
+      if (!(await confirmDialog({ title: 'Sair da conta compartilhada?', text: 'Você volta para a sua própria conta (sem os dados de ' + h.ownerEmail + ').', confirmLabel: 'Sair' }))) return;
+      try {
+        await ctx.api.leaveHousehold();
+        toast('Você saiu da conta compartilhada.');
+        ctx.reloadAccount();
+      } catch {
+        toast('Não consegui agora.');
+      }
+    });
+    return stack(card(el('h2', {}, 'Conta compartilhada'), el('p', {}, 'Você usa a conta de ', el('strong', {}, h.ownerEmail), '. Lançamentos, dívidas, metas e lembretes são os mesmos dela. Só o titular paga, cancela e convida.'), el('div', { class: 'button-row' }, leave)));
+  }
+  const accept = h.invite
+    ? (() => {
+      const b = el('button', { class: 'btn btn-primary', type: 'button' }, 'Aceitar convite');
+      b.addEventListener('click', async () => {
+        try {
+          await ctx.api.acceptHousehold();
+          ctx.reloadAccount();
+        } catch (e) {
+          toast(e?.message || 'Não consegui aceitar agora.');
+        }
+      });
+      return card(el('h2', {}, 'Você recebeu um convite'), el('p', {}, el('strong', {}, h.invite.ownerEmail), ' convidou você para a conta dela(e). Ao aceitar, você passa a usar os dados da conta de lá e deixa de usar a sua.'), el('div', { class: 'button-row' }, b));
+    })()
+    : null;
+  if (!h.canInvite) {
+    return stack(accept, locked ? locked() : stack(card(el('h2', {}, 'Conta compartilhada'), el('p', { class: 'muted' }, 'Disponível nos planos Ousado e Desbravador.'))));
+  }
+  let body;
+  if (h.member) {
+    const rm = el('button', { class: 'btn btn-secondary', type: 'button' }, h.member.status === 'pending' ? 'Cancelar convite' : 'Remover da conta');
+    rm.addEventListener('click', async () => {
+      if (!(await confirmDialog({ title: h.member.status === 'pending' ? 'Cancelar o convite?' : 'Remover ' + h.member.email + '?', text: 'A pessoa deixa de ver os dados da conta. Nada é apagado.', confirmLabel: 'Confirmar' }))) return;
+      try {
+        await ctx.api.removeHouseholdMember();
+        ctx.refresh();
+      } catch {
+        toast('Não consegui agora.');
+      }
+    });
+    body = card(el('h2', {}, 'Quem divide a conta com você'), el('p', {}, el('strong', {}, h.member.email), h.member.status === 'pending' ? ' · convite enviado, aguardando aceite.' : ' · ativa(o).'), el('div', { class: 'button-row' }, rm));
+  } else {
+    const email = el('input', { class: 'input', id: 'hh-email', type: 'email', autocomplete: 'off', placeholder: 'email@dapessoa.com', required: true });
+    const send = el('button', { class: 'btn btn-primary', type: 'submit' }, 'Enviar convite');
+    const form = el('form', { class: 'entry-form' }, el('div', { class: 'field field-wide' }, el('label', { class: 'label', for: 'hh-email' }, 'E-mail de quem vai dividir a conta'), email), send);
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      send.disabled = true;
+      try {
+        await ctx.api.inviteHousehold(email.value.trim());
+        toast('Convite enviado.');
+        ctx.refresh();
+      } catch (err) {
+        send.disabled = false;
+        toast(err?.message || 'Não consegui enviar agora.');
+      }
+    });
+    body = card(el('h2', {}, 'Convidar pessoa para a conta'), el('p', { class: 'muted' }, 'Ideal para casal ou família que divide as contas de casa. A pessoa entra com o e-mail dela e passa a ver e editar a mesma conta: lançamentos, dívidas, metas e lembretes. Só você paga, cancela e convida. Uma pessoa por conta.'), form);
+  }
+  return stack(accept, body);
+}

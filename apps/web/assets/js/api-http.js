@@ -231,3 +231,18 @@ export async function setObjective(objective) {
 export async function getGoalTemplates() {
   return request('GET', '/account/goal-templates');
 }
+export async function getHousehold() {
+  return request('GET', '/account/household');
+}
+export async function inviteHousehold(email) {
+  return request('POST', '/account/household/invite', { body: { email } });
+}
+export async function removeHouseholdMember() {
+  return request('DELETE', '/account/household/member');
+}
+export async function acceptHousehold() {
+  return request('POST', '/account/household/accept');
+}
+export async function leaveHousehold() {
+  return request('POST', '/account/household/leave');
+}

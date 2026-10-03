@@ -6,7 +6,7 @@ import { addDaysIso, formatBrl } from './calendar.ts';
 // Planos
 // ---------------------------------------------------------------------------
 export type PlanCode = 'controle' | 'ousado' | 'desbravador';
-export type Feature = 'ledger' | 'import' | 'alerts' | 'coach_limited' | 'goals' | 'coach' | 'simulator' | 'planner' | 'journeys' | 'market' | 'market_pro';
+export type Feature = 'ledger' | 'import' | 'alerts' | 'coach_limited' | 'goals' | 'coach' | 'simulator' | 'planner' | 'journeys' | 'market' | 'market_pro' | 'household';
 
 export interface Plan {
   code: PlanCode;
@@ -29,13 +29,13 @@ export const PLANS: Plan[] = [
   {
     code: 'ousado', name: 'Ousado', priceCents: 3999, productCode: 'sub_ousado',
     tagline: 'Sair do vermelho, criar reserva e cumprir metas',
-    features: ['ledger', 'import', 'alerts', 'goals', 'coach', 'market', 'journeys'],
+    features: ['ledger', 'import', 'alerts', 'goals', 'coach', 'market', 'journeys', 'household'],
     soon: [],
   },
   {
     code: 'desbravador', name: 'Desbravador', priceCents: 5999, productCode: 'sub_desbravador',
     tagline: 'Tudo, mais planejador com IA, dólar e histórico de mercado',
-    features: ['ledger', 'import', 'alerts', 'goals', 'coach', 'simulator', 'planner', 'market', 'journeys', 'market_pro'],
+    features: ['ledger', 'import', 'alerts', 'goals', 'coach', 'simulator', 'planner', 'market', 'journeys', 'market_pro', 'household'],
     soon: ['Contas conectadas (Open Finance): depende de parceiro autorizado pelo Banco Central.'],
   },
 ];

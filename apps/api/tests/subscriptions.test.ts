@@ -437,3 +437,44 @@ test('coach: nota, jornadas por plano, missão confirmada pelos dados e cenário
   assert.match(mailbox.sent[0].subject, /pronta/);
   assert.equal(await sendWelcomes({ db, config, gateway, email: mailbox }), 0, 'só uma vez');
 });
+
+test('conta compartilhada: titular convida, o convidado aceita e usa os mesmos dados, mas não paga nem cancela; sair devolve a conta própria', async () => {
+  const owner = client();
+  await login(owner, 'titular@exemplo.com');
+  const up = await owner('POST', '/api/account/subscription-order', { body: { plan: 'ousado' }, headers: { 'idempotency-key': 'sub-casa-00000002' } });
+  await pay(up.json.orderId, 'sub-casa2');
+  const basic = client();
+  await login(basic, 'basico-casa@exemplo.com');
+  const bo = await basic('POST', '/api/account/subscription-order', { body: { plan: 'controle' }, headers: { 'idempotency-key': 'sub-casa-00000009' } });
+  await pay(bo.json.orderId, 'sub-casa9');
+  assert.equal((await basic('POST', '/api/account/household/invite', { body: { email: 'parceira@exemplo.com' } })).status, 403, 'Controle não compartilha');
+  assert.equal((await owner('POST', '/api/account/household/invite', { body: { email: 'titular@exemplo.com' } })).status, 422, 'não convida a si mesmo');
+  mailbox.sent.length = 0;
+  assert.equal((await owner('POST', '/api/account/household/invite', { body: { email: 'Parceira@Exemplo.com' } })).status, 204);
+  assert.ok(mailbox.sent.some((m) => m.to === 'parceira@exemplo.com' && /compartilhada/.test(m.subject)));
+  assert.equal((await owner('POST', '/api/account/household/invite', { body: { email: 'outra@exemplo.com' } })).status, 409, 'só uma pessoa');
+  const today = todaySaoPaulo();
+  await owner('POST', '/api/account/entries', { body: { entries: [{ date: today, amountCents: 300_000, note: 'Salario' }] } });
+
+  const partner = client();
+  await login(partner, 'parceira@exemplo.com');
+  assert.equal((await partner('GET', '/api/account/household')).json.invite.ownerEmail, 'titular@exemplo.com');
+  assert.equal((await partner('GET', `/api/account/month/${today.slice(0, 7)}`)).status, 402, 'antes de aceitar não vê nada');
+  assert.equal((await partner('POST', '/api/account/household/accept')).status, 204);
+  const acc = (await partner('GET', '/api/account')).json;
+  assert.equal(acc.role, 'member');
+  assert.equal(acc.email, 'parceira@exemplo.com');
+  assert.equal(acc.subscription.plan, 'ousado');
+  const month = (await partner('GET', `/api/account/month/${today.slice(0, 7)}`)).json;
+  assert.equal(month.entries.length, 1, 'vê os lançamentos do titular');
+  await partner('POST', '/api/account/entries', { body: { entries: [{ date: today, amountCents: -5_000, note: 'Padaria' }] } });
+  assert.equal((await owner('GET', `/api/account/month/${today.slice(0, 7)}`)).json.entries.length, 2, 'o titular vê o que ela lançou');
+  assert.equal((await partner('POST', '/api/account/subscription-order', { body: { plan: 'ousado' }, headers: { 'idempotency-key': 'sub-casa-00000003' } })).status, 409);
+  assert.equal((await partner('GET', '/api/account/household')).json.role, 'member');
+  assert.equal((await partner('POST', '/api/account/household/invite', { body: { email: 'x@exemplo.com' } })).status, 409);
+
+  assert.equal((await partner('POST', '/api/account/household/leave')).status, 204);
+  assert.equal((await partner('GET', '/api/account')).json.subscription, null, 'volta à própria conta, sem assinatura');
+  assert.equal((await partner('GET', `/api/account/month/${today.slice(0, 7)}`)).status, 402);
+  assert.equal((await owner('DELETE', '/api/account/household/member')).status, 404, 'ao sair, o vínculo some');
+});

@@ -4,27 +4,28 @@ import { el, icon, toast } from './dom.js';
 import { brl } from './format.js';
 import { moneyInput } from './money.js';
 import { confirmDialog } from './confirm.js';
-import { viewCarteiras, viewLembretes, viewDividas } from './account-extras-views.js';
+import { viewCarteiras, viewLembretes, viewDividas, viewFamilia } from './account-extras-views.js';
 import { viewCoach, viewMercado } from './account-coach-views.js';
 import { PLANS, CATEGORIES, CATEGORY_LABEL, categorize, parseExtract } from '../vendor/engine.js';
 
-export const FEATURE_LABEL = { ledger: 'Controle de gastos', import: 'Importar extrato', alerts: 'Alertas de limite', coach_limited: 'Treinador (3 dicas)', goals: 'Metas com aportes', coach: 'Treinador completo', simulator: 'Simulador de investimento', planner: 'Planejador com IA', journeys: 'Todas as jornadas do coach', market: 'Cenário econômico (Selic, inflação, CDI)', market_pro: 'Dólar e histórico de 12 meses' };
+export const FEATURE_LABEL = { ledger: 'Controle de gastos', import: 'Importar extrato', alerts: 'Alertas de limite', coach_limited: 'Treinador (3 dicas)', goals: 'Metas com aportes', coach: 'Treinador completo', simulator: 'Simulador de investimento', planner: 'Planejador com IA', household: 'Conta compartilhada com uma pessoa', journeys: 'Todas as jornadas do coach', market: 'Cenário econômico (Selic, inflação, CDI)', market_pro: 'Dólar e histórico de 12 meses' };
 
 /** Abas da conta. `needs` = recurso do plano exigido (a aba aparece sempre; sem o recurso mostra o que o upgrade traz). */
 export const TABS = [
-  { id: 'coach', label: 'Coach' },
-  { id: 'geral', label: 'Visão geral' },
-  { id: 'lancamentos', label: 'Lançamentos' },
-  { id: 'dividas', label: 'Dívidas' },
-  { id: 'carteiras', label: 'Carteiras' },
-  { id: 'lembretes', label: 'Lembretes' },
-  { id: 'orcamento', label: 'Orçamento' },
-  { id: 'metas', label: 'Metas', needs: 'goals' },
-  { id: 'mercado', label: 'Mercado' },
-  { id: 'treinador', label: 'Treinador' },
-  { id: 'planejador', label: 'Planejador', needs: 'planner' },
-  { id: 'simulador', label: 'Simulador', needs: 'simulator' },
-  { id: 'plano', label: 'Plano' },
+  { id: 'coach', label: 'Coach', group: 'Hoje' },
+  { id: 'geral', label: 'Visão geral', group: 'Hoje' },
+  { id: 'lancamentos', label: 'Lançamentos', group: 'Dinheiro' },
+  { id: 'orcamento', label: 'Orçamento', group: 'Dinheiro' },
+  { id: 'carteiras', label: 'Carteiras', group: 'Dinheiro' },
+  { id: 'lembretes', label: 'Lembretes', group: 'Dinheiro' },
+  { id: 'dividas', label: 'Dívidas', group: 'Dívidas e metas' },
+  { id: 'metas', label: 'Metas', needs: 'goals', group: 'Dívidas e metas' },
+  { id: 'planejador', label: 'Planejador', needs: 'planner', group: 'Inteligência' },
+  { id: 'mercado', label: 'Mercado', group: 'Inteligência' },
+  { id: 'treinador', label: 'Treinador', group: 'Inteligência' },
+  { id: 'simulador', label: 'Simulador', needs: 'simulator', group: 'Inteligência' },
+  { id: 'familia', label: 'Compartilhar', needs: 'household', group: 'Conta' },
+  { id: 'plano', label: 'Plano', group: 'Conta' },
 ];
 
 const card = (...c) => el('section', { class: 'card d-section' }, ...c.filter(Boolean));
@@ -588,6 +589,10 @@ export function viewPlanejador(ctx) {
   return card(el('h2', {}, 'Pergunte ao Fôlego'), el('p', { class: 'section-sub' }, 'A resposta usa os lançamentos do mês, suas dívidas e os próximos vencimentos.'), form, out);
 }
 
-export const VIEWS = { coach: viewCoach, mercado: viewMercado, geral: viewGeral, lancamentos: viewLancamentos, orcamento: viewOrcamento, dividas: viewDividas, carteiras: viewCarteiras, lembretes: viewLembretes, metas: viewMetas, treinador: viewTreinador, simulador: viewSimulador, planejador: viewPlanejador, plano: viewPlano };
+export function viewCompartilhar(ctx) {
+  return viewFamilia(ctx, () => locked(ctx, { title: 'Conta compartilhada', feature: 'household', blurb: 'Divida o controle do dinheiro de casa com quem divide as contas com você.', bullets: ['Convide uma pessoa pelo e-mail', 'Vocês veem e editam a mesma conta', 'Só o titular paga e cancela'] }));
+}
+
+export const VIEWS = { familia: viewCompartilhar, coach: viewCoach, mercado: viewMercado, geral: viewGeral, lancamentos: viewLancamentos, orcamento: viewOrcamento, dividas: viewDividas, carteiras: viewCarteiras, lembretes: viewLembretes, metas: viewMetas, treinador: viewTreinador, simulador: viewSimulador, planejador: viewPlanejador, plano: viewPlano };
 export const NEEDS_MONTH = new Set(['geral', 'lancamentos', 'orcamento', 'metas']);
 export { monthNow };

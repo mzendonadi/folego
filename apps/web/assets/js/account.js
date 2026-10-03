@@ -23,7 +23,10 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
     } catch {
       return drawLogin();
     }
-    if (!acc.subscription?.active) return drawPlans(acc);
+    if (!acc.subscription?.active) {
+      const hh = await api.getHousehold().catch(() => null);
+      return hh?.invite ? drawInvite(acc, hh) : drawPlans(acc);
+    }
     return drawApp(acc);
   }
 
@@ -176,6 +179,24 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
     );
   }
 
+  // ---------- convite para conta compartilhada (quem ainda não assina) ----------
+  function drawInvite(acc, hh) {
+    const accept = el('button', { class: 'btn btn-primary', type: 'button' }, 'Aceitar convite');
+    accept.addEventListener('click', async () => {
+      accept.disabled = true;
+      try {
+        await api.acceptHousehold();
+        boot();
+      } catch (e) {
+        accept.disabled = false;
+        toast(e?.message || 'Não consegui aceitar agora.');
+      }
+    });
+    const plans = el('button', { class: 'btn btn-quiet', type: 'button' }, 'Prefiro ter a minha própria conta');
+    plans.addEventListener('click', () => drawPlans(acc));
+    root.replaceChildren(card(el('h2', {}, 'Você recebeu um convite'), el('p', {}, el('strong', {}, hh.invite.ownerEmail), ' convidou você para dividir a conta de finanças dela(e) no Prumo. Ao aceitar, vocês veem e editam os mesmos lançamentos, dívidas, metas e lembretes. Só o titular paga.'), el('div', { class: 'button-row' }, accept, plans)));
+  }
+
   // ---------- área da assinatura (com abas) ----------
   function drawApp(acc) {
     const plan = PLANS.find((p) => p.code === acc.subscription.plan);
@@ -191,7 +212,11 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
       b.addEventListener('click', () => showTab(t.id));
       return b;
     });
-    const tabbar = el('div', { class: 'acc-tabs no-print', role: 'tablist', 'aria-label': 'Áreas da sua conta' }, ...tabButtons);
+    const groups = [...new Set(TABS.map((t) => t.group))];
+    const tabbar = el(
+      'div', { class: 'acc-tabs no-print', role: 'tablist', 'aria-label': 'Áreas do Prumo' },
+      ...groups.map((g) => el('div', { class: 'acc-group', role: 'presentation' }, el('span', { class: 'acc-group-label', 'aria-hidden': 'true' }, g), ...tabButtons.filter((b) => TABS.find((t) => t.id === b.dataset.tab).group === g))),
+    );
     tabbar.addEventListener('keydown', (e) => {
       const i = TAB_IDS.indexOf(current);
       const next = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: TAB_IDS.length - 1 }[e.key];
@@ -208,6 +233,7 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
     const bar = el(
       'header', { class: 'acc-bar' },
       el('div', {}, el('span', { class: 'pill tone-ok' }, `Plano ${plan.name}`), el('p', { class: 'muted acc-mail' }, acc.email)),
+      acc.role === 'member' ? el('p', { class: 'fine muted' }, 'Conta compartilhada de ' + acc.ownerEmail) : null,
       el('p', { class: 'muted acc-until' }, days === 0 ? 'Vence hoje' : `${days} ${days === 1 ? 'dia' : 'dias'} restantes`, acc.subscription.cancelAtPeriodEnd ? ' · não renova' : ''),
     );
     const warn = days <= 3 ? el('div', { class: 'note note-amber no-print' }, icon('alert'), el('div', { class: 'warn-row' }, el('span', {}, days === 0 ? 'Seu plano vence hoje.' : `Seu plano vence em ${days} ${days === 1 ? 'dia' : 'dias'}.`), renewBtn)) : null;
@@ -241,6 +267,7 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
         const on = b.dataset.tab === id;
         b.setAttribute('aria-selected', String(on));
         b.tabIndex = on ? 0 : -1;
+        if (on && !window.matchMedia('(min-width: 960px)').matches) tabbar.scrollTo({ left: Math.max(0, b.offsetLeft - 24), behavior: 'smooth' });
       });
       panel.setAttribute('aria-labelledby', `acc-tab-${id}`);
       if (location.hash.startsWith('#/conta')) history.replaceState(history.state, '', hashFor(id));
@@ -250,6 +277,7 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
         if (id === 'lancamentos') ctx.wallets = await ctx.api.getWallets().catch(() => null);
         if (id === 'coach') ctx.overview = await api.getCoachOverview();
         if (id === 'mercado') ctx.market = await api.getMarket();
+        if (id === 'familia') ctx.household = await api.getHousehold();
         if (id === 'dividas') ctx.debts = await ctx.api.getDebts(ctx.debtExtra ?? 0);
         if (id === 'carteiras') ctx.wallets = await ctx.api.getWallets();
         if (id === 'lembretes') ctx.reminders = (await ctx.api.getReminders()).reminders;
@@ -266,7 +294,7 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
     }
 
     // replaceChildren() é API nativa: diferente do nosso el(), não ignora null — por isso o filter.
-    root.replaceChildren(...[bar, warn, tabbar, panel].filter(Boolean));
+    root.replaceChildren(...[bar, warn, el('div', { class: 'acc-shell' }, tabbar, panel)].filter(Boolean));
     showTab(current);
   }
 

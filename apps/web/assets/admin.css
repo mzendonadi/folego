@@ -27,8 +27,8 @@
 
 @media (max-width: 900px) {
   .bo-shell { grid-template-columns: minmax(0, 1fr); }
-  .bo-side { position: fixed; z-index: 60; inset: 0 auto 0 0; width: min(300px, 86vw); transform: translateX(-102%); transition: transform 0.22s var(--ease); box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.5); }
-  .bo-side.is-open { transform: none; }
+  .bo-side { position: fixed; z-index: 60; inset: 0 auto 0 0; width: min(300px, 86vw); transform: translateX(-102%); visibility: hidden; box-shadow: none; transition: transform 0.22s var(--ease), visibility 0s linear 0.22s, box-shadow 0.22s var(--ease); }
+  .bo-side.is-open { transform: none; visibility: visible; box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.5); transition: transform 0.22s var(--ease), visibility 0s, box-shadow 0.22s var(--ease); }
   .bo-burger { display: inline-flex; }
   .bo-top, .bo-content { padding-inline: var(--s4); }
 }

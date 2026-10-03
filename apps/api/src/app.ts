@@ -21,10 +21,11 @@ import * as extras from './account-extras.ts';
 import * as debts from './account-debts.ts';
 import { askPlanner } from './planner.ts';
 import * as program from './coach-program.ts';
+import * as household from './household.ts';
 import { eventSchema, recordEvent } from './admin/events.ts';
 import { publicCatalog } from './admin/manage.ts';
 import { refreshRuntime } from './runtime.ts';
-import { accessSchema, addEntriesSchema, cancelSchema, contributionSchema, createCaseSchema, entryWalletSchema, accountDebtSchema, accountDebtPatchSchema, debtPaymentSchema, monthLimitSchema, plannerSchema, objectiveSchema, reminderPatchSchema, reminderSchema, walletSchema, createOrderSchema, emailLinkSchema, emailOnlySchema, goalSchema, incomeInterviewSchema, leadSchema, loginCodeSchema, newPartnerSchema, partnerLoginSchema, partnerStatusSchema, setCategorySchema, setLimitSchema, simulateSchema, subscriptionOrderSchema, toggleIncomeTaskSchema, translationSchema, uuidParam } from './schemas.ts';
+import { accessSchema, addEntriesSchema, cancelSchema, contributionSchema, createCaseSchema, entryWalletSchema, accountDebtSchema, accountDebtPatchSchema, debtPaymentSchema, monthLimitSchema, plannerSchema, objectiveSchema, inviteSchema, reminderPatchSchema, reminderSchema, walletSchema, createOrderSchema, emailLinkSchema, emailOnlySchema, goalSchema, incomeInterviewSchema, leadSchema, loginCodeSchema, newPartnerSchema, partnerLoginSchema, partnerStatusSchema, setCategorySchema, setLimitSchema, simulateSchema, subscriptionOrderSchema, toggleIncomeTaskSchema, translationSchema, uuidParam } from './schemas.ts';
 import { CSP } from './security.ts';
 import * as svc from './services.ts';
 import type { Ctx } from './services.ts';
@@ -255,12 +256,15 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   }
 
   // ---------- assinatura (desligada por padrão; exige e-mail configurado) ----------
-  const requireSubscriber = async (req: FastifyRequest): Promise<string> => {
+  /** A pessoa que está logada (sempre ela mesma). */
+  const requireSelf = async (req: FastifyRequest): Promise<string> => {
     const sessionId = await requireSession(req);
     const subscriberId = await sub.subscriberOf(ctx, sessionId);
     if (!subscriberId) throw new AppError(401, 'not_logged_in', 'Entre com seu e-mail para continuar.');
     return subscriberId;
   };
+  /** A conta cujos dados ela usa: a do titular, se ela for membro de uma conta compartilhada. */
+  const requireSubscriber = async (req: FastifyRequest): Promise<string> => household.effectiveAccountId(ctx, await requireSelf(req));
 
   app.post('/api/account/login-code', { config: { rateLimit: { max: 5 * scale, timeWindow: '10 minutes' } } }, async (req) => {
     const { email } = emailOnlySchema.parse(req.body);
@@ -270,23 +274,24 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     const { email, code } = loginCodeSchema.parse(req.body);
     const sessionId = await createSession(req, reply);
     await sub.verifyLoginCode(ctx, sessionId, email, code);
-    return sub.accountView(ctx, await sub.subscriberOf(ctx, sessionId) as string);
+    return household.accountViewFor(ctx, await sub.subscriberOf(ctx, sessionId) as string);
   });
   app.post('/api/account/logout', async (req, reply) => {
     const sessionId = await requireSession(req);
     await sub.logout(ctx, sessionId);
     return reply.status(204).send();
   });
-  app.get('/api/account', async (req) => sub.accountView(ctx, await requireSubscriber(req)));
+  app.get('/api/account', async (req) => household.accountViewFor(ctx, await requireSelf(req)));
   app.delete('/api/account', async (req, reply) => {
     const sessionId = await requireSession(req);
-    await sub.deleteAccount(ctx, sessionId, await requireSubscriber(req));
+    await sub.deleteAccount(ctx, sessionId, await requireSelf(req));
     return reply.status(204).send();
   });
 
   app.post('/api/account/subscription-order', { config: { rateLimit: { max: 10 * scale, timeWindow: '1 minute' } } }, async (req, reply) => {
     const sessionId = await requireSession(req);
-    const subscriberId = await requireSubscriber(req);
+    const subscriberId = await requireSelf(req);
+    await household.assertNotMember(ctx, subscriberId);
     const key = req.headers['idempotency-key'];
     if (typeof key !== 'string' || key.length < 8 || key.length > 100) throw new AppError(400, 'idempotency_key', 'Cabeçalho Idempotency-Key obrigatório');
     const { plan } = subscriptionOrderSchema.parse(req.body);
@@ -294,7 +299,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
   app.post('/api/account/subscription-cancel', async (req) => {
     const { cancel } = cancelSchema.parse(req.body);
-    await sub.setCancel(ctx, await requireSubscriber(req), cancel);
+    await sub.setCancel(ctx, await requireSelf(req), cancel);
     return { ok: true };
   });
 
@@ -356,6 +361,24 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     return { copied: await debts.copyPreviousMonthLimits(ctx, await requireSubscriber(req), month) };
   });
   app.post('/api/account/planner', { config: { rateLimit: { max: 12, timeWindow: '10 minutes' } } }, async (req) => askPlanner(ctx, await requireSubscriber(req), plannerSchema.parse(req.body).question));
+  // Conta compartilhada
+  app.get('/api/account/household', async (req) => household.householdView(ctx, await requireSelf(req)));
+  app.post('/api/account/household/invite', { config: { rateLimit: { max: 6 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => {
+    await household.invite(ctx, await requireSelf(req), inviteSchema.parse(req.body).email);
+    return reply.status(204).send();
+  });
+  app.delete('/api/account/household/member', async (req, reply) => {
+    await household.removeMember(ctx, await requireSelf(req));
+    return reply.status(204).send();
+  });
+  app.post('/api/account/household/accept', async (req, reply) => {
+    await household.accept(ctx, await requireSelf(req));
+    return reply.status(204).send();
+  });
+  app.post('/api/account/household/leave', async (req, reply) => {
+    await household.leave(ctx, await requireSelf(req));
+    return reply.status(204).send();
+  });
   // Coach: nota de saúde, jornadas, métodos e cenário econômico
   app.get('/api/account/coach/overview', async (req) => program.coachOverview(ctx, await requireSubscriber(req)));
   app.post('/api/account/coach/journeys/:id/start', async (req, reply) => {

@@ -9,7 +9,7 @@ const kindBadge = (p) => (p.kind === 'subscription' ? badge('Assinatura (recorre
 function productCard(p, reload) {
   const price = moneyInput({ id: `pr-${p.code}`, ariaLabel: `Preço de ${p.name}`, value: p.priceCents });
   const name = el('input', { class: 'input', type: 'text', maxlength: '80', value: p.name, 'aria-label': 'Nome' });
-  const days = el('input', { class: 'input input-sm', type: 'number', min: '1', max: '365', value: String(p.accessDays), 'aria-label': 'Dias de acesso' });
+  const days = el('input', { class: 'input', type: 'number', min: '1', max: '365', value: String(p.accessDays), 'aria-label': 'Dias de acesso' });
   const desc = el('textarea', { class: 'input', rows: '2', maxlength: '400', 'aria-label': 'Descrição' });
   desc.value = p.description;
   const active = el('input', { type: 'checkbox', id: `ac-${p.code}` });

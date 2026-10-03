@@ -41,7 +41,7 @@ const TITLES = {
   tools: 'Ferramentas grátis — Fôlego',
   translator: 'Tradutor de cobrança — Fôlego',
   partner: 'Portal do parceiro — Fôlego',
-  account: 'Minha conta — Fôlego',
+  account: 'Prumo, o app de finanças — Fôlego',
   unsubscribe: 'Cancelar e-mails — Fôlego',
 };
 const HEADINGS = { intake: '#intake-title', processing: '#processing-title', preview: '#preview-title', checkout: '#checkout-title', addon: '#checkout-title', translator: '#translator-title', delivery: '#delivery-title', tools: '#tools-title' };
@@ -71,7 +71,7 @@ function show(view, { focus = true, scroll = true } = {}) {
   const inFlow = view !== 'landing';
   $('.header-cta').hidden = inFlow || !heroGone;
   $('.header-exit').hidden = !inFlow;
-  $('[data-landing-only]').hidden = inFlow;
+  document.querySelectorAll('[data-landing-only]').forEach((n) => { n.hidden = inFlow; });
   document.body.dataset.route = view;
   // O roteador roda duas vezes por navegação (hashchange e popstate): a mesma tela em menos de 1,5 s conta uma vez só.
   if (view !== lastTrackedView || Date.now() - lastTrackedAt > 1500) track('view', { view });
