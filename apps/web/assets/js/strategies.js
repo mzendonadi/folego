@@ -1,6 +1,7 @@
 // Estratégias do Mapa: comparação de caminhos, quanto pagar em cada dívida mês a mês, o efeito de cada real a mais,
 // dinheiro extraordinário, quitação com desconto, troca por crédito mais barato, marcos e o roteiro de estratégias.
 // Todos os números vêm do motor (servidor); aqui é só apresentação.
+import { partnerButton } from './partner-cta.js';
 import { el, icon } from './dom.js';
 import { brl, formatMonths } from './format.js';
 
@@ -135,6 +136,7 @@ export function strategiesSection(s) {
             el('p', {}, p.why),
             el('ol', { class: 'strat-steps' }, ...p.steps.map((st) => el('li', {}, st))),
             p.caution ? el('p', { class: 'note note-amber' }, icon('alert'), el('span', {}, p.caution)) : null,
+            p.caution?.includes('parceiro Fôlego') ? partnerButton() : null,
           ),
         ),
       ),

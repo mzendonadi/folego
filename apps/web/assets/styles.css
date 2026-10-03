@@ -888,3 +888,4 @@ ul, ol { margin: 0; padding: 0; }
 .prumo .micro { margin-top: var(--s5); }
 .objectives { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
 @media (max-width: 1139px) { .header-nav a[data-nav="tools"], .header-nav a[data-nav="translator"] { display: none; } }
+.partner-cta { margin-top: var(--s2); }

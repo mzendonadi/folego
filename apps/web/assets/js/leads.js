@@ -5,12 +5,12 @@ import { brl } from './format.js';
 
 const CAT = {
   consignado: { label: 'Crédito consignado (trocar dívida cara por uma com juros menores)', short: 'consignado' },
-  renegotiation: { label: 'Renegociação das dívidas em atraso', short: 'renegociação' },
+  renegotiation: { label: 'Renegociação das dívidas e orientação para buscar recursos com consciência', short: 'renegociação e orientação' },
 };
 
 export function leadsSection(state, { onSubmit, onRevoke }) {
   if (!state?.enabled || (!state.available && !state.active)) return null;
-  const card = (...c) => el('section', { class: 'card d-section', id: 'propostas', 'aria-labelledby': 'propostas-t' }, el('h2', { id: 'propostas-t' }, 'Propostas para você'), ...c);
+  const card = (...c) => el('section', { class: 'card d-section', id: 'propostas', tabindex: '-1', 'aria-labelledby': 'propostas-t' }, el('h2', { id: 'propostas-t' }, 'Fale com um parceiro Fôlego'), ...c);
 
   if (state.active) {
     const btn = el('button', { class: 'btn btn-secondary', type: 'button' }, 'Revogar minha autorização');

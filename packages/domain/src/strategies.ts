@@ -202,7 +202,7 @@ export function buildStrategies(input: DiagnoseInput, rules: Rules = RULES, give
       id: 'fechar_conta', title: 'Primeiro, fechar a conta do mês',
       why: `Suas despesas e parcelas passam da renda em ${formatBrl(b.gapCents)} por mês. Sem resolver isso, qualquer acordo novo vira atraso de novo.`,
       steps: ['Liste as despesas fixas e marque o que dá para cortar ou pausar por 90 dias (assinaturas, planos, tarifas de banco).', 'Peça ao credor da parcela mais pesada para alongar o prazo e reduzir a parcela — parcela menor agora, mesmo com prazo maior, é melhor do que atrasar.', `Procure uma renda extra de pelo menos ${formatBrl(b.gapCents)} por mês (o Criador de Renda Extra monta esse plano).`],
-      caution: 'Não pegue empréstimo novo para pagar despesa do mês: troca um aperto por uma dívida.',
+      caution: 'Busque recursos de forma consciente: compare o custo efetivo total (CET) e confirme que a parcela cabe no seu mês. Se precisar de mais ajuda, podemos te direcionar para um parceiro Fôlego!',
     });
   }
   if (dsr >= 50 || (b.deficit && included.length >= 2)) {

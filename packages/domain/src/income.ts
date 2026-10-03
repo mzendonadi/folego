@@ -170,7 +170,7 @@ const WEEK_TEMPLATES: Record<IncomeCategory, { title: string; tasks: string[] }[
 const CAUTIONS = [
   'Nunca pague para começar a trabalhar, e desconfie de "renda fácil", "retorno garantido" ou pirâmides.',
   'Renda extra tem impostos e limites: se vender ou prestar serviço com frequência, procure um contador para entender o MEI e o Imposto de Renda — formalizar abre portas (crédito, nota fiscal, fornecedor melhor), não é burocracia à toa.',
-  'Não se endivide para começar. Use o que você já tem ou peça pagamento antecipado antes de comprar material.',
+  'Busque recursos de forma consciente para começar: use primeiro o que você já tem ou peça pagamento antecipado antes de comprar material. Se precisar de mais ajuda, podemos te direcionar para um parceiro Fôlego!',
   'Proteja o que já paga as contas: seu emprego, sua saúde e seu descanso vêm antes.',
 ];
 

@@ -1,5 +1,6 @@
 // Criador de Renda Extra 2.0: sem IA antes da compra. Depois de pagar, uma entrevista curta personaliza
 // um plano de verdade (a IA só escreve texto sobre os números e as ideias que o motor já calculou).
+import { partnerButton } from './partner-cta.js';
 import { el, icon, toast, copyText } from './dom.js';
 import { fieldToCents, centsToField } from './format.js';
 
@@ -151,6 +152,7 @@ function planContent(g, onToggleTask) {
     c.risks?.length ? list(c.risks) : null,
     el('h3', {}, 'Cuidados gerais'),
     list(c.cautions),
+    c.cautions?.some((x) => x.includes('parceiro Fôlego')) ? partnerButton() : null,
     c.encouragement ? el('p', { class: 'note' }, icon('info'), el('span', {}, c.encouragement)) : null,
     el('p', { class: 'fine' }, 'Não prometemos ganhos: o resultado depende do seu esforço, da sua região e do seu tempo.'),
   ];

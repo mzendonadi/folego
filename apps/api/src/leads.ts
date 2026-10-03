@@ -41,6 +41,8 @@ export function offeredCategories(diagnosis: Diagnosis, debts: DebtInput[]): Lea
   const out: LeadCategory[] = [];
   if (diagnosis.refinance.suitabilityOk) out.push('consignado');
   if (debts.some((d) => d.daysOverdue > 0)) out.push('renegotiation');
+  // Mesmo sem atraso ou perfil de consignado, quem quiser ajuda para buscar recursos com consciência pode falar com um parceiro.
+  if (out.length === 0) out.push('renegotiation');
   return out;
 }
 
