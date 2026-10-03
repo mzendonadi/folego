@@ -11,7 +11,7 @@ const MENU = [
   { id: 'parcerias', label: 'Parcerias', icon: 'link', perm: ['parcerias'], load: () => import('./screens/parcerias.js').then((m) => m.parceriasScreen) },
   { id: 'produtos', label: 'Produtos e preços', icon: 'tag', perm: ['precos'], load: () => import('./screens/produtos.js').then((m) => m.produtosScreen) },
   { id: 'marketing', label: 'Marketing', icon: 'megaphone', perm: ['marketing'], load: () => import('./screens/marketing.js').then((m) => m.marketingScreen) },
-  { id: 'config', label: 'Configurações', icon: 'gear', perm: ['config_site', 'config_usuarios', 'auditoria'], load: () => import('./screens/config.js').then((m) => m.configScreen) },
+  { id: 'config', label: 'Configurações', icon: 'gear', perm: ['config_site', 'config_usuarios', 'auditoria'], load: () => import('./screens/configuracoes.js').then((m) => m.configScreen) },
 ];
 
 const root = document.getElementById('bo-root');
@@ -45,9 +45,8 @@ function drawLogin(message = '') {
     e.preventDefault();
     send.disabled = true;
     try {
-      const addr = email.value.trim().toLowerCase();
-      const out = await api.loginPassword(addr, password.value);
-      drawCode(addr, out.devCode);
+      await api.loginPassword(email.value.trim().toLowerCase(), password.value);
+      boot();
     } catch (err) {
       send.disabled = false;
       password.value = '';
@@ -55,31 +54,8 @@ function drawLogin(message = '') {
       toast(err.message);
     }
   });
-  root.replaceChildren(loginCard('Entrar', 'Área restrita. Entre com a senha; em seguida mandamos um código de 6 dígitos para o seu e-mail.', message, form));
+  root.replaceChildren(loginCard('Entrar', 'Área restrita. Entre com e-mail e senha. No primeiro acesso, ou se esqueceu a senha, use o link abaixo: confirmamos seu e-mail por um código.', message, form));
   email.focus();
-}
-
-function drawCode(addr, devCode) {
-  const code = el('input', { class: 'input', id: 'bo-code', type: 'text', inputmode: 'numeric', maxlength: '6', autocomplete: 'one-time-code', required: true });
-  const btn = el('button', { class: 'btn btn-primary btn-block', type: 'submit' }, 'Entrar');
-  const back = el('button', { class: 'link', type: 'button' }, 'Voltar');
-  back.addEventListener('click', () => drawLogin());
-  const form = el('form', { class: 'tool-form' },
-    devCode ? el('p', { class: 'fine' }, `Ambiente de desenvolvimento: código ${devCode}`) : null,
-    el('div', { class: 'field' }, el('label', { class: 'label', for: 'bo-code' }, 'Código de 6 dígitos'), code), btn, el('p', { class: 'fine' }, back));
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    btn.disabled = true;
-    try {
-      await api.login(addr, code.value.trim());
-      boot();
-    } catch (err) {
-      btn.disabled = false;
-      toast(err.message);
-    }
-  });
-  root.replaceChildren(loginCard('Confirme o código', `Senha conferida. O código foi enviado para ${addr} e vale por 10 minutos.`, '', form));
-  code.focus();
 }
 
 function drawSetup(prefill = '') {

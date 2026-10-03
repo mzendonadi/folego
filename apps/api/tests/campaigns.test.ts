@@ -51,9 +51,7 @@ async function adminLogin(c: Client, email: string) {
     assert.equal((await c('POST', '/api/gestao/setup', { body: { email, code: lastCode(), password: PW } })).status, 204);
     passwords.add(email);
   }
-  mailbox.sent.length = 0;
   assert.equal((await c('POST', '/api/gestao/login-password', { body: { email, password: PW } })).status, 200);
-  assert.equal((await c('POST', '/api/gestao/login', { body: { email, code: lastCode() } })).status, 200);
 }
 let owner: Client | null = null;
 async function ownerClient() {

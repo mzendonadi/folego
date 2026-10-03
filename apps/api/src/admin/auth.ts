@@ -106,8 +106,8 @@ async function credentials(ctx: Ctx, email: string): Promise<CredRow | null> {
   return row && row.active ? row : null;
 }
 
-/** ETAPA 1 do login: confere e-mail e senha. Só com a senha certa é que o código chega por e-mail (etapa 2). */
-export async function startPasswordLogin(ctx: Ctx, email: string, password: string): Promise<{ sent: true; devCode?: string }> {
+/** Login: e-mail + senha. O e-mail já foi provado por código no primeiro acesso (ou na redefinição), então aqui não há 2º código. */
+export async function passwordLogin(ctx: Ctx, sessionId: string, email: string, password: string): Promise<AdminUser> {
   const u = await credentials(ctx, email);
   const locked = Boolean(u?.locked_until && new Date(u.locked_until).getTime() > Date.now());
   const ok = verifyPassword(password, u?.password_hash ?? DUMMY_HASH) && Boolean(u?.password_hash) && !locked;
@@ -119,8 +119,12 @@ export async function startPasswordLogin(ctx: Ctx, email: string, password: stri
     }
     throw new AppError(401, 'invalid_credentials', GENERIC_LOGIN_ERROR);
   }
-  await ctx.db.query(`UPDATE app.admin_users SET failed_attempts = 0, locked_until = NULL WHERE id = $1`, [u.id]);
-  return sendCode(ctx, email, 'admin');
+  await ctx.db.tx(async (q) => {
+    await q.query(`UPDATE app.admin_users SET failed_attempts = 0, locked_until = NULL, last_login_at = now() WHERE id = $1`, [u.id]);
+    await q.query(`UPDATE app.sessions SET admin_user_id = $2, admin_login_at = now() WHERE id = $1`, [sessionId, u.id]);
+    await audit(q, `admin:${u.id}`, 'admin_login', 'admin_user', u.id);
+  });
+  return toAdminUser(u as never);
 }
 
 /** Primeiro acesso ou senha liberada pelo dono: manda um código para provar que o e-mail é da pessoa. Resposta sempre igual. */

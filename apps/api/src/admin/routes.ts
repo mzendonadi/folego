@@ -5,7 +5,7 @@ import { AppError } from '../errors.ts';
 import { currentSettings, refreshRuntime, runtimeSchema, saveRuntime } from '../runtime.ts';
 import type { Ctx } from '../services.ts';
 import { audit } from '../services.ts';
-import { adminLogout, adminOf, can, changePassword, completeSetup, releasePasswordReset, requestSetupCode, requirePermission, startPasswordLogin, verifyAdminCode } from './auth.ts';
+import { adminLogout, adminOf, can, changePassword, completeSetup, releasePasswordReset, requestSetupCode, passwordLogin, requirePermission } from './auth.ts';
 import type { AdminUser } from './auth.ts';
 import * as campaigns from './campaigns.ts';
 import * as customers from './customers.ts';
@@ -79,9 +79,10 @@ export function registerGestao(app: FastifyInstance, deps: AdminRouteDeps): void
 
   // ---------- entrada ----------
   // Etapa 1: e-mail + senha (o código só é enviado se a senha estiver certa). Etapa 2: o código, em /login.
-  app.post(`${P}/login-password`, { config: { rateLimit: { max: 8 * scale, timeWindow: '10 minutes' } } }, async (req) => {
+  app.post(`${P}/login-password`, { config: { rateLimit: { max: 8 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => {
     const { email, password } = passwordLoginSchema.parse(req.body);
-    return startPasswordLogin(ctx, email, password);
+    const sessionId = await createSession(req, reply);
+    return { user: await passwordLogin(ctx, sessionId, email, password) };
   });
   // Primeiro acesso (ou senha liberada pelo dono): código por e-mail + senha nova. Não entra: depois faz o login normal.
   app.post(`${P}/setup-code`, { config: { rateLimit: { max: 5 * scale, timeWindow: '10 minutes' } } }, async (req) => requestSetupCode(ctx, emailSchema.parse(req.body).email));
@@ -98,12 +99,6 @@ export function registerGestao(app: FastifyInstance, deps: AdminRouteDeps): void
     const { current, next } = changePasswordSchema.parse(req.body);
     await changePassword(ctx, sessionId, a, current, next);
     return reply.status(204).send();
-  });
-  app.post(`${P}/login`, { config: { rateLimit: { max: 10 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => {
-    const { email, code } = loginSchema.parse(req.body);
-    const sessionId = await createSession(req, reply);
-    const user = await verifyAdminCode(ctx, sessionId, email, code);
-    return { user };
   });
   app.post(`${P}/logout`, async (req, reply) => {
     const sessionId = await requireSession(req).catch(() => null);

@@ -165,3 +165,5 @@
 .bo-toolbar .input, .bo-actions .input, .bo-toolbar select { width: auto; min-width: 150px; max-width: 100%; }
 .bo-toolbar input[type="search"] { min-width: 240px; }
 .bo-product-grid { align-items: start; }
+.bo-product-grid .field + .field, .bo-product .field + .field, .bo-actions .field + .field { margin-top: 0; }
+.bo-product-grid .field { align-content: start; }

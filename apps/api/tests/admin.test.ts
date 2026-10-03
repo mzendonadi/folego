@@ -63,14 +63,13 @@ async function adminSetup(c: Client, email: string, password = PW) {
   PASSWORDS.set(email, password);
 }
 
-/** Login completo em duas etapas: senha, depois o código do e-mail. */
+/** Login: e-mail + senha (o código por e-mail só existe no primeiro acesso/redefinição). */
 async function adminLogin(c: Client, email: string) {
   if (!PASSWORDS.has(email)) await adminSetup(c, email);
   mailbox.sent.length = 0;
-  assert.equal((await c('POST', '/api/gestao/login-password', { body: { email, password: PASSWORDS.get(email) } })).status, 200);
-  assert.equal(mailbox.sent.length, 1, 'o código deve chegar por e-mail');
-  const ok = await c('POST', '/api/gestao/login', { body: { email, code: lastCode() } });
+  const ok = await c('POST', '/api/gestao/login-password', { body: { email, password: PASSWORDS.get(email) } });
   assert.equal(ok.status, 200);
+  assert.equal(mailbox.sent.length, 0, 'login normal não manda código');
   return ok.json.user;
 }
 
@@ -106,7 +105,7 @@ test('entrada: só e-mail autorizado recebe código; sem sessão de admin nada a
   mailbox.sent.length = 0;
   assert.equal((await c('POST', '/api/gestao/setup-code', { body: { email: 'intruso@exemplo.com' } })).status, 200); // resposta igual, sem revelar nada
   assert.equal(mailbox.sent.length, 0);
-  assert.equal((await c('POST', '/api/gestao/login', { body: { email: 'intruso@exemplo.com', code: '123456' } })).status, 401);
+  assert.equal((await c('POST', '/api/gestao/login-password', { body: { email: 'intruso@exemplo.com', password: PW } })).status, 401);
 
   const user = await adminLogin(c, 'dono@exemplo.com');
   assert.equal(user.role, 'owner');
@@ -120,7 +119,7 @@ test('código errado é recusado e o assinante comum não vira administrador', a
   const c = client();
   mailbox.sent.length = 0;
   await ownerClient();
-  assert.equal((await c('POST', '/api/gestao/login', { body: { email: 'dono@exemplo.com', code: '000000' } })).status, 401);
+  assert.equal((await c('POST', '/api/gestao/login', { body: { email: 'dono@exemplo.com', code: '000000' } })).status, 404, 'a rota de código não existe mais');
   // sessão de assinante não abre o backoffice
   const sub = client();
   mailbox.sent.length = 0;
@@ -408,15 +407,14 @@ test('parcerias: tamanho do público e do pool com consentimento (sem listar pes
 });
 
 // ---------- segurança do login ----------
-test('login em duas etapas: sem senha certa o código nunca é enviado, e o código sozinho não entra', async () => {
+test('login só com senha: senha errada não entra e nenhum e-mail sai; código sozinho não entra', async () => {
   await ownerClient(); // dono com senha definida
   const c = client();
   mailbox.sent.length = 0;
   assert.equal((await c('POST', '/api/gestao/login-password', { body: { email: 'dono@exemplo.com', password: 'senha-errada-123' } })).status, 401);
   assert.equal((await c('POST', '/api/gestao/login-password', { body: { email: 'intruso@exemplo.com', password: PW } })).status, 401);
   assert.equal(mailbox.sent.length, 0, 'nenhum código sai com senha errada');
-  // um código antigo de OUTRA etapa não vale sem passar pela senha
-  assert.equal((await c('POST', '/api/gestao/login', { body: { email: 'dono@exemplo.com', code: '123456' } })).status, 401);
+  assert.equal((await c('POST', '/api/gestao/login', { body: { email: 'dono@exemplo.com', code: '123456' } })).status, 404);
   assert.equal((await c('GET', '/api/gestao/me')).status, 401);
 });
 
