@@ -164,6 +164,7 @@ export async function buildSubscriberPackage(ctx: Ctx, subscriberId: string, act
   }
   await one('order_items', `SELECT oi.* FROM app.order_items oi JOIN app.orders o ON o.id = oi.order_id WHERE o.subscriber_id = $1`, [subscriberId]);
   await one('payments', `SELECT p.* FROM app.payments p JOIN app.orders o ON o.id = p.order_id WHERE o.subscriber_id = $1 ORDER BY p.created_at`, [subscriberId]);
+  await one('referrals', `SELECT * FROM app.referrals WHERE referrer_subscriber_id = $1 OR converted_subscriber_id = $1 ORDER BY created_at`, [subscriberId]);
   await one('household_members', `SELECT * FROM app.household_members WHERE owner_id = $1 OR member_id = $1`, [subscriberId]);
   await one('audit_log', `SELECT * FROM app.audit_log WHERE entity_id = $1 OR actor = $2 ORDER BY 1`, [subscriberId, `subscriber:${subscriberId}`]).catch(() => undefined);
   const readme = [
@@ -194,6 +195,8 @@ export async function purgeSubscriber(ctx: Ctx, subscriberId: string, actor: str
     let deleted = 0;
     await q.query(`UPDATE app.sessions SET subscriber_id = NULL WHERE subscriber_id = $1`, [subscriberId]);
     await q.query(`DELETE FROM app.household_members WHERE owner_id = $1 OR member_id = $1`, [subscriberId]);
+    // E-mails de amigos que esta pessoa indicou são dados de terceiros: somem junto.
+    await q.query(`DELETE FROM app.referrals WHERE referrer_subscriber_id = $1`, [subscriberId]);
     for (const t of tables) {
       if (NEVER_EXPORT.has(t) || t === 'sessions') continue;
       const r = await q.query(`DELETE FROM app.${t} WHERE subscriber_id = $1`, [subscriberId]);

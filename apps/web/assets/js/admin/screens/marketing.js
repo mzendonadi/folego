@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import { el, icon, toast, int, dt, card, table, tabs, badge, field, periodSelect, loading, errorBox, empty, drawer, day } from '../ui.js';
 import { copyText } from '../../dom.js';
 import { confirmDialog } from '../../confirm.js';
+import { ebookTab } from './ebook.js';
 
 const AREA = { aquisicao: 'Aquisição', conversao: 'Conversão', receita: 'Receita', retencao: 'Retenção', parcerias: 'Parcerias', produto: 'Produto', dados: 'Dados' };
 const PRIORITY = { alta: ['Prioridade alta', 'bad'], media: ['Prioridade média', 'warn'], baixa: ['Prioridade baixa', 'muted'] };
@@ -54,6 +55,10 @@ export async function marketingScreen(ctx) {
         host.replaceChildren(...[header(), await emailsTab()]);
         return;
       }
+      if (st.tab === 'ebook') {
+        host.replaceChildren(...[header(), await ebookTab()]);
+        return;
+      }
       if (st.tab === 'planejamento') {
         const { plans } = await api.planos();
         host.replaceChildren(...[header(), planning(plans)]);
@@ -67,7 +72,7 @@ export async function marketingScreen(ctx) {
   }
 
   function header() {
-    return el('div', { class: 'bo-toolbar' }, tabs([['insights', 'Insights'], ['publicos', 'Públicos e mensagens'], ['emails', 'E-mails'], ['planejamento', 'Planejamento'], ['calendario', 'Calendário']], st.tab, (t) => {
+    return el('div', { class: 'bo-toolbar' }, tabs([['insights', 'Insights'], ['publicos', 'Públicos e mensagens'], ['emails', 'E-mails'], ['ebook', 'eBook de presente'], ['planejamento', 'Planejamento'], ['calendario', 'Calendário']], st.tab, (t) => {
       st.tab = t;
       draw();
     }), st.tab === 'insights' || st.tab === 'publicos' ? periodSelect(ctx.state.days, (v) => ctx.setDays(v)) : null);

@@ -24,10 +24,11 @@ import * as program from './coach-program.ts';
 import * as household from './household.ts';
 import * as billing from './billing.ts';
 import * as accountData from './account-data.ts';
+import * as referrals from './referrals.ts';
 import { eventSchema, recordEvent } from './admin/events.ts';
 import { publicCatalog } from './admin/manage.ts';
 import { refreshRuntime } from './runtime.ts';
-import { accessSchema, addEntriesSchema, cancelSchema, contributionSchema, createCaseSchema, entryWalletSchema, accountDebtSchema, accountDebtPatchSchema, debtPaymentSchema, monthLimitSchema, plannerSchema, objectiveSchema, inviteSchema, checkoutSchema, profileSchema, reminderPatchSchema, reminderSchema, walletSchema, createOrderSchema, emailLinkSchema, emailOnlySchema, goalSchema, incomeInterviewSchema, leadSchema, loginCodeSchema, newPartnerSchema, partnerLoginSchema, partnerStatusSchema, setCategorySchema, setLimitSchema, simulateSchema, subscriptionOrderSchema, toggleIncomeTaskSchema, translationSchema, uuidParam } from './schemas.ts';
+import { accessSchema, addEntriesSchema, cancelSchema, contributionSchema, createCaseSchema, entryWalletSchema, accountDebtSchema, accountDebtPatchSchema, debtPaymentSchema, monthLimitSchema, plannerSchema, objectiveSchema, inviteSchema, checkoutSchema, profileSchema, referralLeadSchema, referralInviteSchema, reminderPatchSchema, reminderSchema, walletSchema, createOrderSchema, emailLinkSchema, emailOnlySchema, goalSchema, incomeInterviewSchema, leadSchema, loginCodeSchema, newPartnerSchema, partnerLoginSchema, partnerStatusSchema, setCategorySchema, setLimitSchema, simulateSchema, subscriptionOrderSchema, toggleIncomeTaskSchema, translationSchema, uuidParam } from './schemas.ts';
 import { CSP } from './security.ts';
 import * as svc from './services.ts';
 import type { Ctx } from './services.ts';
@@ -66,6 +67,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const ipHash = (req: FastifyRequest): Buffer => hmac(config.secret, clientIp(req));
 
   // O Gmail/Outlook mandam o descadastro de um clique como formulário (List-Unsubscribe=One-Click): só lemos como texto; a rota usa o token da URL.
+  // Upload do eBook (backoffice): o PDF chega cru, até 15 MB. O limite global de 64 KB continua valendo para todo o resto.
+  app.addContentTypeParser('application/pdf', { parseAs: 'buffer', bodyLimit: 16 * 1024 * 1024 }, (_req, body, done) => done(null, body));
   app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_req, body, done) => done(null, {}));
   await app.register(cookie);
   await app.register(rateLimit, { global: true, max: 300 * scale, timeWindow: '1 minute', keyGenerator: clientIp });
@@ -194,11 +197,20 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.post('/api/unsubscribe', { config: { rateLimit: { max: 30 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => {
     const q = req.query as { t?: string };
     const body = (req.body ?? {}) as { token?: string };
-    await campaigns.unsubscribe(ctx, String(body.token ?? q.t ?? ''));
+    const token = String(body.token ?? q.t ?? '');
+    if (token.startsWith('r.')) await referrals.referralOptOut(ctx, token);
+    else await campaigns.unsubscribe(ctx, token);
     return reply.status(204).send();
   });
 
-  app.get('/api/features', async () => ({ email: Boolean(deps.email), leads: config.leadsEnabled, subscriptions: config.subscriptionsEnabled && Boolean(deps.email) }));
+  app.post('/api/referrals/lead', { config: { rateLimit: { max: 5 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => {
+    const sessionId = await requireSession(req);
+    const b = referralLeadSchema.parse(req.body);
+    await referrals.inviteLead(ctx, { sessionId, friendEmail: b.friendEmail, yourName: b.yourName });
+    return reply.status(204).send();
+  });
+
+  app.get('/api/features', async () => ({ email: Boolean(deps.email), leads: config.leadsEnabled, subscriptions: config.subscriptionsEnabled && Boolean(deps.email), referrals: config.referralEnabled && Boolean(deps.email) }));
 
 
   // Manda o link de acesso por e-mail. O endereço é usado para enviar e descartado (não é gravado).
@@ -303,8 +315,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.post('/api/account/subscription-checkout', { config: { rateLimit: { max: 6 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => {
     const selfId = await requireSelf(req);
     await household.assertNotMember(ctx, selfId);
-    const { plan, acceptTerms } = checkoutSchema.parse(req.body);
-    return reply.status(201).send(await billing.startCardCheckout(ctx, { subscriberId: selfId, plan, acceptTerms }));
+    const { plan, acceptTerms, referralCode } = checkoutSchema.parse(req.body);
+    return reply.status(201).send(await billing.startCardCheckout(ctx, { subscriberId: selfId, plan, acceptTerms, referralCode }));
   });
   app.post('/api/account/subscription-cancel', async (req) => {
     const { cancel } = cancelSchema.parse(req.body);
@@ -329,6 +341,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     reply.header('Content-Disposition', `attachment; filename="prumo-meus-dados-${new Date().toISOString().slice(0, 10)}.xlsx"`);
     reply.header('Cache-Control', 'no-store');
     return reply.send(buf);
+  });
+  // Indicações: assinante (com desconto na próxima fatura) e comprador de produto Pix (só gera lead).
+  app.get('/api/account/referrals', async (req) => referrals.overview(ctx, await requireSubscriber(req)));
+  app.post('/api/account/referrals', { config: { rateLimit: { max: 10 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => {
+    await referrals.inviteBySubscriber(ctx, await requireSelf(req), referralInviteSchema.parse(req.body).email);
+    return reply.status(204).send();
   });
   // Perfil e preferências de notificação.
   app.put('/api/account/profile', async (req) => {
@@ -510,7 +528,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       if (!bp.rows[0]) throw notFound();
       const paymentId = fake.newRenewalPayment();
       fake.markPaid(paymentId);
-      const outcome = await svc.handleWebhook(ctx, { 'x-webhook-secret': config.webhookSecret }, { eventId: `evt_${randomUUID()}`, paymentId, subscriptionId: bp.rows[0].provider_subscription_id });
+      const value = fake.valueOf(bp.rows[0].provider_subscription_id);
+      const outcome = await svc.handleWebhook(ctx, { 'x-webhook-secret': config.webhookSecret }, { eventId: `evt_${randomUUID()}`, paymentId, subscriptionId: bp.rows[0].provider_subscription_id, ...(value ? { valueCents: value } : {}) });
       return { ok: true, outcome };
     });
   }

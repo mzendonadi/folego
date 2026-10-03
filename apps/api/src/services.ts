@@ -1,3 +1,4 @@
+import { onSubscriptionPaid } from './referrals.ts';
 import { handleBillingEvent, registerRenewal } from './billing.ts';
 import type { Config } from './config.ts';
 import type { Db, Queryable } from './db.ts';
@@ -314,6 +315,8 @@ async function confirmPayment(ctx: Ctx, providerPaymentId: string): Promise<Webh
     if (pay.subscriber_id) {
       // Pedido de assinatura: não tem caso, entregáveis nem entitlements. Ativa o período no próprio app.subscriptions.
       await activateSubscription(q, pay.subscriber_id, pay.order_id);
+      const paidRow = await q.query<{ amount_cents: string }>(`SELECT amount_cents FROM app.payments WHERE id = $1`, [pay.id]);
+      await onSubscriptionPaid(ctx, q, pay.subscriber_id, { id: pay.id, amountCents: num(paidRow.rows[0]?.amount_cents ?? 0) });
       await audit(q, 'system', 'payment_confirmed', 'order', pay.order_id, { provider: ctx.gateway.name, kind: 'subscription' });
       return 'confirmed';
     }

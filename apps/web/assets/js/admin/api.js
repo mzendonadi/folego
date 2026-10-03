@@ -21,6 +21,13 @@ async function call(method, path, body) {
   return json;
 }
 
+async function uploadPdf(method, path, file) {
+  const res = await fetch(`/api/gestao${path}`, { method, credentials: 'same-origin', headers: { 'x-folego': '1', 'content-type': 'application/pdf' }, body: file });
+  const json = await res.json().catch(() => null);
+  if (!res.ok) throw new ApiError(json?.message ?? (res.status === 413 ? 'O PDF passa de 15 MB.' : 'Não foi possível enviar o arquivo'), res.status, json?.error);
+  return json;
+}
+
 const qs = (o = {}) => {
   const p = new URLSearchParams(Object.entries(o).filter(([, v]) => v !== undefined && v !== null && v !== ''));
   const s = p.toString();
@@ -44,6 +51,20 @@ export const api = {
   contato: (caseId) => call('POST', `/contato/${caseId}`, {}),
   assinaturas: (o) => call('GET', `/assinaturas${qs(o)}`),
   cancelados: () => call('GET', '/assinaturas/cancelados'),
+  ebooks: () => call('GET', '/ebooks'),
+  editarEbook: (id, body) => call('PATCH', `/ebooks/${id}`, body),
+  apagarEbook: (id) => call('DELETE', `/ebooks/${id}`),
+  testarEbook: (id) => call('POST', `/ebooks/${id}/teste`, {}),
+  async baixarEbook(id) {
+    const res = await fetch(`/api/gestao/ebooks/${id}/arquivo`, { credentials: 'same-origin', headers: { 'x-folego': '1' } });
+    if (!res.ok) throw new ApiError('Não foi possível baixar', res.status);
+    const cd = res.headers.get('content-disposition') ?? '';
+    return { blob: await res.blob(), filename: /filename="([^"]+)"/.exec(cd)?.[1] ?? 'ebook.pdf' };
+  },
+  subirEbook: ({ file, title, activate }) => uploadPdf('POST', `/ebooks?titulo=${encodeURIComponent(title)}&arquivo=${encodeURIComponent(file.name)}&ativar=${activate ? 1 : 0}`, file),
+  atualizarEbook: (id, file) => uploadPdf('PUT', `/ebooks/${id}/arquivo?arquivo=${encodeURIComponent(file.name)}`, file),
+  indicacoes: () => call('GET', '/indicacoes'),
+  ajustarCreditos: (body) => call('POST', '/indicacoes/creditos', body),
   excluirDados: (id, confirmEmail) => call('DELETE', `/assinaturas/cancelados/${id}`, { confirmEmail }),
   async baixarDados(id) {
     const res = await fetch(`/api/gestao/assinaturas/cancelados/${id}/dados.zip`, { credentials: 'same-origin', headers: { 'x-folego': '1' } });

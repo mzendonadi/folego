@@ -1,5 +1,8 @@
 // Rotas do backoffice (/api/gestao/*). Todas exigem sessão de administrador (código por e-mail) e a permissão da seção.
 import * as accountData from '../account-data.ts';
+import * as ebooks from '../ebook.ts';
+import * as referrals from '../referrals.ts';
+import { creditAdjustSchema, ebookPatchSchema, ebookTestSchema } from '../schemas.ts';
 import { purgeSchema } from '../schemas.ts';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -186,6 +189,57 @@ export function registerGestao(app: FastifyInstance, deps: AdminRouteDeps): void
     const a = await admin(req, 'assinaturas');
     await customers.subscriptionAction(ctx, a, idParam((req.params as { id: string }).id), subAction.parse(req.body));
     return { ok: true };
+  });
+
+  // ---------- eBook de presente (repositório) ----------
+  app.get(`${P}/ebooks`, async (req) => {
+    await admin(req, 'marketing');
+    return ebooks.listEbooks(ctx);
+  });
+  app.post(`${P}/ebooks`, { bodyLimit: 16 * 1024 * 1024 }, async (req, reply) => {
+    const a = await admin(req, 'marketing');
+    const q = req.query as { titulo?: string; arquivo?: string; ativar?: string };
+    if (!Buffer.isBuffer(req.body)) throw new AppError(415, 'pdf_required', 'Envie o arquivo PDF.');
+    const row = await ebooks.uploadEbook(ctx, { title: q.titulo ?? '', filename: q.arquivo ?? 'ebook.pdf', buf: req.body, by: a.id, activate: q.ativar !== '0' });
+    return reply.status(201).send(row);
+  });
+  app.put(`${P}/ebooks/:id/arquivo`, { bodyLimit: 16 * 1024 * 1024 }, async (req) => {
+    const a = await admin(req, 'marketing');
+    if (!Buffer.isBuffer(req.body)) throw new AppError(415, 'pdf_required', 'Envie o arquivo PDF.');
+    return ebooks.replaceEbookFile(ctx, idParam((req.params as { id: string }).id), { filename: (req.query as { arquivo?: string }).arquivo ?? 'ebook.pdf', buf: req.body, by: a.id });
+  });
+  app.patch(`${P}/ebooks/:id`, async (req) => {
+    const a = await admin(req, 'marketing');
+    return ebooks.updateEbook(ctx, idParam((req.params as { id: string }).id), ebookPatchSchema.parse(req.body), a.id);
+  });
+  app.delete(`${P}/ebooks/:id`, async (req, reply) => {
+    const a = await admin(req, 'marketing');
+    await ebooks.deleteEbook(ctx, idParam((req.params as { id: string }).id), a.id);
+    return reply.status(204).send();
+  });
+  app.get(`${P}/ebooks/:id/arquivo`, async (req, reply) => {
+    await admin(req, 'marketing');
+    const f = await ebooks.ebookFile(ctx, idParam((req.params as { id: string }).id));
+    reply.header('Content-Type', 'application/pdf');
+    reply.header('Content-Disposition', `attachment; filename="${f.filename}"`);
+    reply.header('Cache-Control', 'no-store');
+    return reply.send(f.content);
+  });
+  app.post(`${P}/ebooks/:id/teste`, async (req) => {
+    const a = await admin(req, 'marketing');
+    await ebooks.sendEbookTest(ctx, idParam((req.params as { id: string }).id), ebookTestSchema.parse(req.body ?? {}).to ?? a.email, a.id);
+    return { ok: true, to: a.email };
+  });
+
+  // ---------- indicações ----------
+  app.get(`${P}/indicacoes`, async (req) => {
+    await admin(req, 'marketing', 'assinaturas');
+    return referrals.adminOverview(ctx);
+  });
+  app.post(`${P}/indicacoes/creditos`, async (req) => {
+    const a = await admin(req, 'assinaturas');
+    const b = creditAdjustSchema.parse(req.body);
+    return referrals.adjustCredits(ctx, a.id, b.subscriberId, b.delta, b.reason);
   });
 
   // ---------- parcerias ----------

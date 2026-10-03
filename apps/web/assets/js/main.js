@@ -16,6 +16,14 @@ import { track } from './track.js';
 
 document.documentElement.classList.add('js');
 
+// Link de indicação de amigo (?ind=CODIGO): guardamos o código para usar se a pessoa assinar o Prumo.
+try {
+  const ind = new URLSearchParams(location.search).get('ind');
+  if (ind && /^[a-z0-9]{8}$/i.test(ind)) localStorage.setItem('folego_ind', ind.toLowerCase());
+} catch {
+  /* sem armazenamento: a indicação por convite de e-mail continua valendo */
+}
+
 const ROUTES = {
   landing: '#/',
   intake: '#/diagnostico',
@@ -144,6 +152,7 @@ async function openDelivery({ scrollTo = null } = {}) {
   const features = await api.getFeatures().catch(() => ({}));
   renderDelivery($('#delivery-root'), delivery, {
     onWipe: askWipe,
+    onInviteFriend: async (body) => api.inviteLeadFriend(body),
     onLead: async (body) => {
       await api.submitLead(state.caseId, body);
       await openDelivery({ scrollTo: 'propostas' });

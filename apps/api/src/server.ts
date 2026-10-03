@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { buildApp } from './app.ts';
 import { loadConfig } from './config.ts';
 import { createPgliteDb, createPostgresDb, ensureSchema } from './db.ts';
+import { ensureDefaultEbook } from './ebook.ts';
 import type { Db } from './db.ts';
 import { AsaasGateway, FakeGateway } from './gateway.ts';
 import { ConsoleSender, ResendSender } from './email.ts';
@@ -22,7 +23,8 @@ if (config.databaseUrl) {
 } else {
   db = await createPgliteDb();
 }
-await ensureSchema(db); // banco vazio recebe o schema; migrações pendentes entram sempre (db/migrations)
+await ensureSchema(db);
+await ensureDefaultEbook(db).catch(() => false); // primeira subida: importa o eBook que vem com o sistema // banco vazio recebe o schema; migrações pendentes entram sempre (db/migrations)
 
 const gateway: PaymentGateway = config.asaas ? new AsaasGateway(config.asaas) : new FakeGateway(config.webhookSecret);
 const email = config.email ? new ResendSender(config.email) : (config.env !== 'production' && (config.leadsEnabled || config.subscriptionsEnabled) ? new ConsoleSender() : undefined);

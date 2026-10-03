@@ -7,6 +7,7 @@ import { confirmDialog } from './confirm.js';
 import { viewCarteiras, viewLembretes, viewDividas, viewFamilia } from './account-extras-views.js';
 import { viewCoach, viewMercado } from './account-coach-views.js';
 import { viewPlano as viewPlanoBilling, viewPerfil } from './account-billing.js';
+import { viewIndicar } from './referral.js';
 import { PLANS, CATEGORIES, CATEGORY_LABEL, categorize, parseExtract } from '../vendor/engine.js';
 
 export const FEATURE_LABEL = { ledger: 'Controle de gastos', import: 'Importar extrato', alerts: 'Alertas de limite', coach_limited: 'Treinador (3 dicas)', goals: 'Metas com aportes', coach: 'Treinador completo', simulator: 'Simulador de investimento', planner: 'Planejador com IA', household: 'Conta compartilhada com uma pessoa', journeys: 'Todas as jornadas do coach', market: 'Cenário econômico (Selic, inflação, CDI)', market_pro: 'Dólar e histórico de 12 meses' };
@@ -26,6 +27,7 @@ export const TABS = [
   { id: 'treinador', label: 'Treinador', group: 'Inteligência' },
   { id: 'simulador', label: 'Simulador', needs: 'simulator', group: 'Inteligência' },
   { id: 'familia', label: 'Compartilhar', needs: 'household', group: 'Conta' },
+  { id: 'indicar', label: 'Indique e ganhe', group: 'Conta' },
   { id: 'perfil', label: 'Perfil', group: 'Conta' },
   { id: 'plano', label: 'Plano e dados', group: 'Conta' },
 ];
@@ -536,6 +538,6 @@ export function viewCompartilhar(ctx) {
   return viewFamilia(ctx, () => locked(ctx, { title: 'Conta compartilhada', feature: 'household', blurb: 'Divida o controle do dinheiro de casa com quem divide as contas com você.', bullets: ['Convide uma pessoa pelo e-mail', 'Vocês veem e editam a mesma conta', 'Só o titular paga e cancela'] }));
 }
 
-export const VIEWS = { perfil: viewPerfil, familia: viewCompartilhar, coach: viewCoach, mercado: viewMercado, geral: viewGeral, lancamentos: viewLancamentos, orcamento: viewOrcamento, dividas: viewDividas, carteiras: viewCarteiras, lembretes: viewLembretes, metas: viewMetas, treinador: viewTreinador, simulador: viewSimulador, planejador: viewPlanejador, plano: viewPlano };
+export const VIEWS = { indicar: viewIndicar, perfil: viewPerfil, familia: viewCompartilhar, coach: viewCoach, mercado: viewMercado, geral: viewGeral, lancamentos: viewLancamentos, orcamento: viewOrcamento, dividas: viewDividas, carteiras: viewCarteiras, lembretes: viewLembretes, metas: viewMetas, treinador: viewTreinador, simulador: viewSimulador, planejador: viewPlanejador, plano: viewPlano };
 export const NEEDS_MONTH = new Set(['geral', 'lancamentos', 'orcamento', 'metas']);
 export { monthNow };

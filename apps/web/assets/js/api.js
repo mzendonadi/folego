@@ -72,3 +72,6 @@ export const createCheckout = impl.createCheckout;
 export const getExport = impl.getExport;
 export const downloadExportXlsx = impl.downloadExportXlsx;
 export const updateProfile = impl.updateProfile;
+export const inviteLeadFriend = impl.inviteLeadFriend;
+export const getReferrals = impl.getReferrals;
+export const inviteSubscriberFriend = impl.inviteSubscriberFriend;

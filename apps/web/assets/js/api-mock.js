@@ -164,3 +164,6 @@ export const createCheckout = notAvailable;
 export const getExport = notAvailable;
 export const downloadExportXlsx = notAvailable;
 export const updateProfile = notAvailable;
+export const inviteLeadFriend = notAvailable;
+export const getReferrals = notAvailable;
+export const inviteSubscriberFriend = notAvailable;

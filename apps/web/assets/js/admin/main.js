@@ -10,6 +10,7 @@ const MENU = [
   { id: 'jornada', label: 'Jornada e funil', icon: 'route', perm: ['jornada', 'dashboard'], load: () => import('./screens/jornada.js').then((m) => m.jornadaScreen) },
   { id: 'parcerias', label: 'Parcerias', icon: 'link', perm: ['parcerias'], load: () => import('./screens/parcerias.js').then((m) => m.parceriasScreen) },
   { id: 'produtos', label: 'Produtos e preços', icon: 'tag', perm: ['precos'], load: () => import('./screens/produtos.js').then((m) => m.produtosScreen) },
+  { id: 'indicacoes', label: 'Indicações', icon: 'users', perm: ['marketing', 'assinaturas'], load: () => import('./screens/indicacoes.js').then((m) => m.indicacoesScreen) },
   { id: 'marketing', label: 'Marketing', icon: 'megaphone', perm: ['marketing'], load: () => import('./screens/marketing.js').then((m) => m.marketingScreen) },
   { id: 'config', label: 'Configurações', icon: 'gear', perm: ['config_site', 'config_usuarios', 'auditoria'], load: () => import('./screens/configuracoes.js').then((m) => m.configScreen) },
 ];

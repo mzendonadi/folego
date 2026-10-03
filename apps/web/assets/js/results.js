@@ -10,6 +10,7 @@ import { incomeSection } from './income.js';
 import { strategiesSection } from './strategies.js';
 import { kindText } from './copy.js';
 import { leadsSection } from './leads.js';
+import { referralCard } from './referral.js';
 import { CATALOG, priceLabel } from './catalog.js';
 
 // ---------- componentes ----------
@@ -191,7 +192,7 @@ function section(id, title, ...children) {
   return el('section', { class: 'card d-section', id, 'aria-labelledby': `${id}-t` }, el('h2', { id: `${id}-t` }, title), ...children);
 }
 
-export function renderDelivery(root, { input, diagnosis: d, items, generated, extras = {}, strategies = null, accessUntil, lettersEligible = 0, leads = null }, { onLead = async () => {}, onLeadRevoke = async () => {}, onWipe, onAddon = () => {}, makeLink = async () => '', sendEmail = null, onIncomeInterview = async () => {}, onIncomeTask = async () => {} }) {
+export function renderDelivery(root, { input, diagnosis: d, items, generated, extras = {}, strategies = null, accessUntil, lettersEligible = 0, leads = null }, { onLead = async () => {}, onLeadRevoke = async () => {}, onInviteFriend = null, onWipe, onAddon = () => {}, makeLink = async () => '', sendEmail = null, onIncomeInterview = async () => {}, onIncomeTask = async () => {} }) {
   const debtById = new Map(input.debts.map((x) => [x.id, x]));
   const diagById = new Map(d.debts.map((x) => [x.debtId, x]));
   const band = d.health.band;
@@ -324,11 +325,12 @@ export function renderDelivery(root, { input, diagnosis: d, items, generated, ex
   const renda = generated.income ? incomeSection(generated.income, { onSubmitInterview: onIncomeInterview, onToggleTask: onIncomeTask }) : null;
   const complementos = addonsSection(items, { lettersEligible }, onAddon);
   const propostas = leadsSection(leads, { onSubmit: onLead, onRevoke: onLeadRevoke });
+  const indicar = onInviteFriend ? referralCard({ onInvite: onInviteFriend }) : null;
 
   // replaceChildren() é API nativa: diferente do nosso el(), ela NÃO ignora null/undefined — transforma em texto "null" na tela. Por isso filtramos aqui.
   root.replaceChildren(
     ...[
-      header, acesso, nav, resumo, ordem, orcamento, linha, estrategias, roteiros, cartas, calendario, renda, complementos, propostas, dinheiro,
+      header, acesso, nav, resumo, ordem, orcamento, linha, estrategias, roteiros, cartas, calendario, renda, complementos, propostas, indicar, dinheiro,
       el('p', { class: 'fine' }, 'Estimativas educativas, calculadas com o que você informou. O Fôlego não é escritório de advocacia, banco ou consultoria de investimentos, e não negocia por você.'),
     ].filter(Boolean),
   );

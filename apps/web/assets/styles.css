@@ -889,3 +889,14 @@ ul, ol { margin: 0; padding: 0; }
 .objectives { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
 @media (max-width: 1139px) { .header-nav a[data-nav="tools"], .header-nav a[data-nav="translator"] { display: none; } }
 .partner-cta { margin-top: var(--s2); }
+
+/* Indicações */
+.ref-stats { display: grid; gap: var(--s3); grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); margin-bottom: var(--s4); }
+.ref-stats > div { display: grid; gap: 2px; padding: var(--s3); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--paper); }
+.ref-stats strong { font-size: 1.6rem; line-height: 1.1; color: var(--primary); }
+.note-green { background: color-mix(in srgb, var(--ok-ink) 10%, var(--surface)); border-color: color-mix(in srgb, var(--ok-ink) 35%, var(--line)); }
+
+.prumo-perks { display: grid; gap: var(--s4); grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); margin-top: var(--s5); }
+.perk { padding: var(--s5); border-radius: var(--radius); background: color-mix(in srgb, var(--primary) 8%, var(--surface)); border: 1px solid color-mix(in srgb, var(--primary) 22%, var(--line)); }
+.perk h3 { margin: 0 0 var(--s2); }
+.perk p { margin: 0; }

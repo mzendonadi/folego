@@ -65,6 +65,8 @@ export interface PaymentGateway {
   createCardSubscription(input: CardSubscriptionInput): Promise<CardSubscription>;
   /** Para de cobrar na hora. Não estorna o mês que já foi pago. */
   cancelCardSubscription(providerSubscriptionId: string): Promise<void>;
+  /** Muda o valor das próximas cobranças da assinatura (desconto de indicação, ou volta ao preço cheio). */
+  updateCardSubscriptionValue(providerSubscriptionId: string, valueCents: number): Promise<void>;
 }
 
 /** Provedor de mentira para desenvolvimento e testes. NÃO move dinheiro. */
@@ -112,6 +114,16 @@ export class FakeGateway implements PaymentGateway {
   }
 
   readonly subscriptions = new Set<string>();
+  private readonly values = new Map<string, number>();
+
+  async updateCardSubscriptionValue(providerSubscriptionId: string, valueCents: number): Promise<void> {
+    this.values.set(providerSubscriptionId, valueCents);
+  }
+
+  /** Só no provedor de mentira: o valor que a próxima cobrança teria (undefined = preço cheio do plano). */
+  valueOf(providerSubscriptionId: string): number | undefined {
+    return this.values.get(providerSubscriptionId);
+  }
 
   async createCardSubscription(input: CardSubscriptionInput): Promise<CardSubscription> {
     const id = randomBytes(6).toString('hex');
@@ -234,6 +246,11 @@ export class AsaasGateway implements PaymentGateway {
     const first = pays.data?.[0];
     if (!first || typeof first.id !== 'string' || typeof first.invoiceUrl !== 'string') throw new AppError(502, 'gateway_error', 'Resposta inesperada do provedor de pagamento.');
     return { providerCustomerId: customer.id, providerSubscriptionId: sub.id, providerPaymentId: first.id, checkoutUrl: first.invoiceUrl };
+  }
+
+  async updateCardSubscriptionValue(providerSubscriptionId: string, valueCents: number): Promise<void> {
+    // updatePendingPayments: a cobrança do próximo mês, se já foi gerada, também muda para o valor novo.
+    await this.call('POST', `/subscriptions/${encodeURIComponent(providerSubscriptionId)}`, { value: valueCents / 100, updatePendingPayments: true });
   }
 
   async cancelCardSubscription(providerSubscriptionId: string): Promise<void> {

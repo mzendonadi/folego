@@ -247,7 +247,13 @@ export async function leaveHousehold() {
   return request('POST', '/account/household/leave');
 }
 export async function createCheckout(plan) {
-  return request('POST', '/account/subscription-checkout', { body: { plan, acceptTerms: true } });
+  let referralCode;
+  try {
+    referralCode = localStorage.getItem('folego_ind') || undefined;
+  } catch {
+    referralCode = undefined;
+  }
+  return request('POST', '/account/subscription-checkout', { body: { plan, acceptTerms: true, ...(referralCode && /^[a-z0-9]{8}$/.test(referralCode) ? { referralCode } : {}) } });
 }
 export async function getExport() {
   return request('GET', '/account/export');
@@ -259,4 +265,13 @@ export async function downloadExportXlsx() {
 }
 export async function updateProfile(body) {
   return request('PUT', '/account/profile', { body });
+}
+export async function inviteLeadFriend({ friendEmail, yourName }) {
+  return request('POST', '/referrals/lead', { body: { friendEmail, yourName } });
+}
+export async function getReferrals() {
+  return request('GET', '/account/referrals');
+}
+export async function inviteSubscriberFriend({ friendEmail }) {
+  return request('POST', '/account/referrals', { body: { email: friendEmail } });
 }

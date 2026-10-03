@@ -3,6 +3,7 @@
 // - Cada mensalidade confirmada estende o acesso em 1 mês (calendário). Cancelar para a cobrança NA HORA, não devolve o
 //   mês corrente e mantém o acesso (e o download dos dados) até o fim do mês já pago. Depois o acesso encerra e os dados
 //   são apagados (pelo backoffice, após o download de segurança, ou automaticamente depois da janela de retenção).
+import { attribute } from './referrals.ts';
 import { AppError, notFound } from './errors.ts';
 import { layout } from './email.ts';
 import type { Ctx } from './services.ts';
@@ -25,7 +26,7 @@ export interface CheckoutView {
 }
 
 /** Começa a assinatura mensal: registra o aceite dos termos, cria a assinatura no provedor e devolve a página do cartão. */
-export async function startCardCheckout(ctx: Ctx, args: { subscriberId: string; plan: string; acceptTerms: boolean }): Promise<CheckoutView> {
+export async function startCardCheckout(ctx: Ctx, args: { subscriberId: string; plan: string; acceptTerms: boolean; referralCode?: string | undefined }): Promise<CheckoutView> {
   if (!ctx.config.subscriptionsEnabled) throw notFound();
   if (!args.acceptTerms) throw new AppError(422, 'terms_required', 'Para assinar, aceite os termos e a cobrança mensal no cartão.');
   const plan = planByCode(args.plan);
@@ -74,8 +75,10 @@ export async function startCardCheckout(ctx: Ctx, args: { subscriberId: string; 
          plan = EXCLUDED.plan, status = 'pending', terms_accepted_at = now(), terms_version = EXCLUDED.terms_version, canceled_at = NULL, past_due_since = NULL, data_exported_at = NULL`,
       [args.subscriberId, ctx.gateway.name, card.providerCustomerId, card.providerSubscriptionId, plan.code, TERMS_VERSION],
     );
+    await q.query(`UPDATE app.billing_profiles SET synced_value_cents = $2 WHERE subscriber_id = $1`, [args.subscriberId, valueCents]);
     await audit(q, `subscriber:${args.subscriberId}`, 'subscription_checkout_started', 'order', orderId, { plan: plan.code, termsVersion: TERMS_VERSION });
   });
+  await attribute(ctx, args.subscriberId, args.referralCode);
   return { orderId, checkoutUrl: card.checkoutUrl, totalCents: valueCents, plan: plan.code, status: 'pending' };
 }
 

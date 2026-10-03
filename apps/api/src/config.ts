@@ -53,6 +53,10 @@ export interface Config {
   campaignDailyCap: number;
   /** Dias depois do fim do acesso de quem cancelou em que os dados ainda ficam guardados para o download de segurança no backoffice. Passado esse prazo, são apagados sozinhos. */
   canceledPurgeDays: number;
+  /** Programa de indicações (convites por e-mail e desconto para assinantes). */
+  referralEnabled: boolean;
+  /** Desconto (%) na próxima fatura por indicação que assina. */
+  referralDiscountPct: number;
 }
 
 const ASAAS_PRODUCTION_URL = 'https://api.asaas.com/v3';
@@ -115,5 +119,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     reminderDaysBefore: 3,
     campaignDailyCap: 200,
     canceledPurgeDays: 15,
+    referralEnabled: true,
+    referralDiscountPct: 10,
   };
 }
