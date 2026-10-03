@@ -1,0 +1,752 @@
+[
+  {
+    "area": "seguranca",
+    "nome": "GET /dashboard sem login = 401",
+    "ok": true,
+    "detalhe": "401"
+  },
+  {
+    "area": "seguranca",
+    "nome": "GET /jornada/resumo sem login = 401",
+    "ok": true,
+    "detalhe": "401"
+  },
+  {
+    "area": "seguranca",
+    "nome": "GET /clientes/avulsos sem login = 401",
+    "ok": true,
+    "detalhe": "401"
+  },
+  {
+    "area": "seguranca",
+    "nome": "GET /assinaturas sem login = 401",
+    "ok": true,
+    "detalhe": "401"
+  },
+  {
+    "area": "seguranca",
+    "nome": "GET /assinaturas/resumo sem login = 401",
+    "ok": true,
+    "detalhe": "401"
+  },
+  {
+    "area": "seguranca",
+    "nome": "GET /assinaturas/cancelados sem login = 401",
+    "ok": true,
+    "detalhe": "401"
+  },
+  {
+    "area": "seguranca",
+    "nome": "GET /ebooks sem login = 401",
+    "ok": true,
+    "detalhe": "401"
+  },
+  {
+    "area": "seguranca",
+    "nome": "GET /saude sem login = 401",
+    "ok": true,
+    "detalhe": "401"
+  },
+  {
+    "area": "seguranca",
+    "nome": "GET /mercado sem login = 401",
+    "ok": true,
+    "detalhe": "401"
+  },
+  {
+    "area": "seguranca",
+    "nome": "GET /indicacoes sem login = 401",
+    "ok": true,
+    "detalhe": "401"
+  },
+  {
+    "area": "seguranca",
+    "nome": "GET /indicacoes/creditos sem login = 401",
+    "ok": false,
+    "detalhe": "404"
+  },
+  {
+    "area": "seguranca",
+    "nome": "GET /parcerias sem login = 401",
+    "ok": true,
+    "detalhe": "401"
+  },
+  {
+    "area": "seguranca",
+    "nome": "GET /parcerias/contatos sem login = 401",
+    "ok": true,
+    "detalhe": "401"
+  },
+  {
+    "area": "seguranca",
+    "nome": "GET /produtos sem login = 401",
+    "ok": true,
+    "detalhe": "401"
+  },
+  {
+    "area": "seguranca",
+    "nome": "GET /config sem login = 401",
+    "ok": true,
+    "detalhe": "401"
+  },
+  {
+    "area": "seguranca",
+    "nome": "GET /usuarios sem login = 401",
+    "ok": true,
+    "detalhe": "401"
+  },
+  {
+    "area": "seguranca",
+    "nome": "GET /auditoria sem login = 401",
+    "ok": true,
+    "detalhe": "401"
+  },
+  {
+    "area": "seguranca",
+    "nome": "GET /marketing/insights sem login = 401",
+    "ok": true,
+    "detalhe": "401"
+  },
+  {
+    "area": "seguranca",
+    "nome": "GET /marketing/emails sem login = 401",
+    "ok": true,
+    "detalhe": "401"
+  },
+  {
+    "area": "seguranca",
+    "nome": "GET /marketing/planos sem login = 401",
+    "ok": true,
+    "detalhe": "401"
+  },
+  {
+    "area": "seguranca",
+    "nome": "GET /me sem login = 401",
+    "ok": true,
+    "detalhe": "401"
+  },
+  {
+    "area": "seguranca",
+    "nome": "POST /mercado/atualizar sem login = 401",
+    "ok": true,
+    "detalhe": "401"
+  },
+  {
+    "area": "seguranca",
+    "nome": "POST /usuarios sem login = 401",
+    "ok": true,
+    "detalhe": "401"
+  },
+  {
+    "area": "seguranca",
+    "nome": "PUT /config sem login = 401",
+    "ok": true,
+    "detalhe": "401"
+  },
+  {
+    "area": "seguranca",
+    "nome": "POST /marketing/emails sem login = 401",
+    "ok": true,
+    "detalhe": "401"
+  },
+  {
+    "area": "seguranca",
+    "nome": "login com conta sem senha definida é recusado (mensagem genérica)",
+    "ok": true,
+    "detalhe": "401 {\"error\":\"invalid_credentials\",\"message\":\"E-mail ou senha incorretos, ou acesso bloqueado por tentat"
+  },
+  {
+    "area": "admin",
+    "nome": "pede código de primeiro acesso",
+    "ok": true,
+    "detalhe": "200 {\"sent\":true,\"devCode\":\"812025\"}"
+  },
+  {
+    "area": "seguranca",
+    "nome": "senha curta recusada no cadastro",
+    "ok": true,
+    "detalhe": "422 {\"error\":\"weak_password\",\"message\":\"A senha precisa ter pelo menos 12 caracteres.\"}"
+  },
+  {
+    "area": "seguranca",
+    "nome": "senha sem número recusada",
+    "ok": true,
+    "detalhe": "422"
+  },
+  {
+    "area": "seguranca",
+    "nome": "senha comum recusada",
+    "ok": true,
+    "detalhe": "422"
+  },
+  {
+    "area": "seguranca",
+    "nome": "setup com código errado recusado",
+    "ok": true,
+    "detalhe": "401"
+  },
+  {
+    "area": "admin",
+    "nome": "define a senha do dono",
+    "ok": true,
+    "detalhe": "204 "
+  },
+  {
+    "area": "admin",
+    "nome": "etapa 1 do login (senha) ok",
+    "ok": true,
+    "detalhe": "200 {\"user\":{\"id\":\"2f081ede-eb4b-47cd-96f4-3fd559d1b505\",\"email\":\"qa@exemplo.com\",\"name\":\"\",\"role\":\"owner\",\"permissions\":[\"dashboard\",\"clientes\",\"clientes_pii\",\"ass"
+  },
+  {
+    "area": "seguranca",
+    "nome": "só com a senha (sem o código) NÃO entra no backoffice",
+    "ok": false,
+    "detalhe": "200 {\"user\":{\"id\":\"2f081ede-eb4b-47cd-96f4-3fd559d1b505\",\"email\":\"qa@exemplo.com\",\"name\":\"\",\"role\":\"owner\",\"permissions\":[\"d"
+  },
+  {
+    "area": "admin",
+    "nome": "etapa 2 do login (código) ok",
+    "ok": false,
+    "detalhe": "404 {\"message\":\"Route POST:/api/gestao/login not found\",\"error\":\"Not Found\",\"statusCode\":404}"
+  },
+  {
+    "area": "admin",
+    "nome": "/me traz usuário e seções",
+    "ok": true,
+    "detalhe": "{\"user\":{\"id\":\"2f081ede-eb4b-47cd-96f4-3fd559d1b505\",\"email\":\"qa@exemplo.com\",\"name\":\"\",\"role\":\"owner\",\"permissions\":[\"dashboard\",\"clientes\",\"clientes_pii\",\"ass"
+  },
+  {
+    "area": "seguranca",
+    "nome": "senha errada = 401 genérico",
+    "ok": true,
+    "detalhe": "401"
+  },
+  {
+    "area": "seguranca",
+    "nome": "depois de várias tentativas erradas a senha CERTA também é barrada (bloqueio de 15 min)",
+    "ok": true,
+    "detalhe": "status senha certa após brute: 401"
+  },
+  {
+    "area": "admin",
+    "nome": "GET /dashboard como dono = 200",
+    "ok": true,
+    "detalhe": "200 {\"days\":30,\"generatedAt\":\"2026-10-03T16:43:00.003Z\",\"funnel\":{\"steps\":[{\"key\":\"visitors\",\"label\":\"Visitaram o site\",\"cou"
+  },
+  {
+    "area": "admin",
+    "nome": "GET /jornada/resumo como dono = 200",
+    "ok": true,
+    "detalhe": "200 {\"days\":30,\"funnel\":{\"steps\":[{\"key\":\"visitors\",\"label\":\"Visitaram o site\",\"count\":1,\"pctOfPrev\":null,\"pctOfFirst\":100},"
+  },
+  {
+    "area": "admin",
+    "nome": "GET /clientes/avulsos como dono = 200",
+    "ok": true,
+    "detalhe": "200 {\"total\":34,\"page\":0,\"pageSize\":40,\"items\":[{\"id\":\"c0d6f460-51da-483b-9fed-57c42cc26bda\",\"createdAt\":\"2026-10-03T16:41:5"
+  },
+  {
+    "area": "admin",
+    "nome": "GET /assinaturas como dono = 200",
+    "ok": true,
+    "detalhe": "200 {\"total\":2,\"page\":0,\"pageSize\":40,\"counts\":{\"em_dia\":2},\"items\":[{\"id\":\"b3f24028-9f71-4ec3-9dca-ab9496202ae9\",\"email\":\"q"
+  },
+  {
+    "area": "admin",
+    "nome": "GET /assinaturas/resumo como dono = 200",
+    "ok": true,
+    "detalhe": "200 {\"subscribers\":2,\"newSubscribers\":2,\"payingCount\":2,\"upToDate\":2,\"expiringSoon\":0,\"cancelling\":0,\"delinquent\":0,\"mrrCent"
+  },
+  {
+    "area": "admin",
+    "nome": "GET /assinaturas/cancelados como dono = 200",
+    "ok": true,
+    "detalhe": "200 {\"rows\":[],\"purgeDays\":15}"
+  },
+  {
+    "area": "admin",
+    "nome": "GET /ebooks como dono = 200",
+    "ok": true,
+    "detalhe": "200 {\"ebooks\":[{\"id\":\"442929d5-9c83-4f60-9614-bc61df684e3e\",\"title\":\"Respira. Organiza. Avança. O guia do Fôlego para organi"
+  },
+  {
+    "area": "admin",
+    "nome": "GET /saude como dono = 200",
+    "ok": true,
+    "detalhe": "200 {\"ok\":true,\"at\":\"2026-10-03T16:43:00.126Z\",\"checks\":{\"banco\":{\"ok\":true,\"detail\":\"responde\"},\"worker\":{\"ok\":true,\"detail"
+  },
+  {
+    "area": "admin",
+    "nome": "GET /mercado como dono = 200",
+    "ok": true,
+    "detalhe": "200 {\"updatedAt\":\"2026-10-03T16:39:05.691Z\",\"indicators\":{\"selicPct\":13.75,\"ipca12Pct\":4.22,\"cdiPct\":13.65,\"usdBrl\":5.2214,\""
+  },
+  {
+    "area": "admin",
+    "nome": "GET /indicacoes como dono = 200",
+    "ok": true,
+    "detalhe": "200 {\"enabled\":true,\"percent\":10,\"kpis\":{\"leadInvites\":0,\"subscriberInvites\":0,\"converted\":0,\"conversionPct\":0,\"creditsAvail"
+  },
+  {
+    "area": "admin",
+    "nome": "GET /indicacoes/creditos como dono = 200",
+    "ok": false,
+    "detalhe": "404 {\"message\":\"Route GET:/api/gestao/indicacoes/creditos not found\",\"error\":\"Not Found\",\"statusCode\":404}"
+  },
+  {
+    "area": "admin",
+    "nome": "GET /parcerias como dono = 200",
+    "ok": true,
+    "detalhe": "200 {\"consentedCases\":0,\"consentedByCategory\":[],\"consentedByUf\":[],\"consentedByEmployment\":[],\"potential\":{\"cases\":34,\"rene"
+  },
+  {
+    "area": "admin",
+    "nome": "GET /parcerias/contatos como dono = 200",
+    "ok": true,
+    "detalhe": "200 {\"items\":[]}"
+  },
+  {
+    "area": "admin",
+    "nome": "GET /produtos como dono = 200",
+    "ok": true,
+    "detalhe": "200 {\"products\":[{\"code\":\"recovery_map\",\"name\":\"Mapa da Virada\",\"kind\":\"one_off\",\"priceCents\":2900,\"accessDays\":30,\"active\":"
+  },
+  {
+    "area": "admin",
+    "nome": "GET /config como dono = 200",
+    "ok": true,
+    "detalhe": "200 {\"settings\":{\"subscriptionsEnabled\":true,\"leadsEnabled\":true,\"aiEnabled\":true,\"aiMaxCallsPerDay\":200,\"salesPaused\":false"
+  },
+  {
+    "area": "admin",
+    "nome": "GET /usuarios como dono = 200",
+    "ok": true,
+    "detalhe": "200 {\"users\":[{\"id\":\"2f081ede-eb4b-47cd-96f4-3fd559d1b505\",\"email\":\"qa@exemplo.com\",\"name\":\"\",\"role\":\"owner\",\"permissions\":["
+  },
+  {
+    "area": "admin",
+    "nome": "GET /auditoria como dono = 200",
+    "ok": true,
+    "detalhe": "200 {\"items\":[{\"id\":107,\"at\":\"2026-10-03T16:42:59.683Z\",\"actor\":\"qa@exemplo.com\",\"action\":\"admin_login_failed\",\"entity\":\"adm"
+  },
+  {
+    "area": "admin",
+    "nome": "GET /marketing/insights como dono = 200",
+    "ok": true,
+    "detalhe": "200 {\"days\":30,\"insights\":[{\"id\":\"abandono_preview\",\"area\":\"conversao\",\"priority\":\"media\",\"title\":\"25 pessoas preencheram o "
+  },
+  {
+    "area": "admin",
+    "nome": "GET /marketing/emails como dono = 200",
+    "ok": true,
+    "detalhe": "200 {\"campaigns\":[],\"audiences\":[{\"id\":\"renovar_7d\",\"name\":\"Assinantes que vencem em 7 dias\",\"total\":0,\"eligible\":0},{\"id\":\""
+  },
+  {
+    "area": "admin",
+    "nome": "GET /marketing/planos como dono = 200",
+    "ok": true,
+    "detalhe": "200 {\"plans\":[]}"
+  },
+  {
+    "area": "admin",
+    "nome": "GET /me como dono = 200",
+    "ok": true,
+    "detalhe": "200 {\"user\":{\"id\":\"2f081ede-eb4b-47cd-96f4-3fd559d1b505\",\"email\":\"qa@exemplo.com\",\"name\":\"\",\"role\":\"owner\",\"permissions\":[\"d"
+  },
+  {
+    "area": "admin",
+    "nome": "dashboard ?dias=1",
+    "ok": true,
+    "detalhe": "200"
+  },
+  {
+    "area": "admin",
+    "nome": "dashboard ?dias=7",
+    "ok": true,
+    "detalhe": "200"
+  },
+  {
+    "area": "admin",
+    "nome": "dashboard ?dias=30",
+    "ok": true,
+    "detalhe": "200"
+  },
+  {
+    "area": "admin",
+    "nome": "dashboard ?dias=365",
+    "ok": true,
+    "detalhe": "200"
+  },
+  {
+    "area": "admin",
+    "nome": "dashboard ?dias=3650",
+    "ok": true,
+    "detalhe": "200"
+  },
+  {
+    "area": "validacao",
+    "nome": "dashboard ?dias=0 não gera 5xx",
+    "ok": true,
+    "detalhe": "200"
+  },
+  {
+    "area": "validacao",
+    "nome": "dashboard ?dias=-5 não gera 5xx",
+    "ok": true,
+    "detalhe": "200"
+  },
+  {
+    "area": "validacao",
+    "nome": "dashboard ?dias=abc não gera 5xx",
+    "ok": true,
+    "detalhe": "200"
+  },
+  {
+    "area": "validacao",
+    "nome": "dashboard ?dias=99999999 não gera 5xx",
+    "ok": true,
+    "detalhe": "200"
+  },
+  {
+    "area": "validacao",
+    "nome": "dashboard ?dias=1; DROP TABLE app.cases não gera 5xx",
+    "ok": true,
+    "detalhe": "200"
+  },
+  {
+    "area": "validacao",
+    "nome": "GET /clientes/avulsos?pagina=-1 não gera 5xx",
+    "ok": true,
+    "detalhe": "200 {\"total\":34,\"page\":0,\"pageSize\":40,\"items\":[{\"id\":\"c0d6f460-51da-483b-9fed-57c42cc26bda\",\"createdAt\""
+  },
+  {
+    "area": "validacao",
+    "nome": "GET /clientes/avulsos?pagina=abc não gera 5xx",
+    "ok": true,
+    "detalhe": "200 {\"total\":34,\"page\":0,\"pageSize\":40,\"items\":[{\"id\":\"c0d6f460-51da-483b-9fed-57c42cc26bda\",\"createdAt\""
+  },
+  {
+    "area": "validacao",
+    "nome": "GET /assinaturas?pagina=999999 não gera 5xx",
+    "ok": true,
+    "detalhe": "200 {\"total\":2,\"page\":999999,\"pageSize\":40,\"counts\":{\"em_dia\":2},\"items\":[]}"
+  },
+  {
+    "area": "validacao",
+    "nome": "GET /clientes/avulsos?busca='%20OR%201%3D1%20-- não gera 5xx",
+    "ok": true,
+    "detalhe": "200 {\"total\":34,\"page\":0,\"pageSize\":40,\"items\":[{\"id\":\"c0d6f460-51da-483b-9fed-57c42cc26bda\",\"createdAt\""
+  },
+  {
+    "area": "validacao",
+    "nome": "GET /assinaturas?busca=%25 não gera 5xx",
+    "ok": true,
+    "detalhe": "200 {\"total\":2,\"page\":0,\"pageSize\":40,\"counts\":{\"em_dia\":2},\"items\":[{\"id\":\"b3f24028-9f71-4ec3-9dca-ab94"
+  },
+  {
+    "area": "validacao",
+    "nome": "GET /clientes/avulsos/nao-uuid não gera 5xx",
+    "ok": true,
+    "detalhe": "400 {\"error\":\"invalid_input\",\"message\":\"Dados inválidos\",\"issues\":[{\"path\":\"\",\"message\":\"Invalid UUID\"}]"
+  },
+  {
+    "area": "validacao",
+    "nome": "GET /assinaturas/nao-uuid não gera 5xx",
+    "ok": true,
+    "detalhe": "400 {\"error\":\"invalid_input\",\"message\":\"Dados inválidos\",\"issues\":[{\"path\":\"\",\"message\":\"Invalid UUID\"}]"
+  },
+  {
+    "area": "validacao",
+    "nome": "GET /jornada/caso/nao-uuid não gera 5xx",
+    "ok": true,
+    "detalhe": "400 {\"error\":\"invalid_input\",\"message\":\"Dados inválidos\",\"issues\":[{\"path\":\"\",\"message\":\"Invalid UUID\"}]"
+  },
+  {
+    "area": "admin",
+    "nome": "saúde: todos os checks ok",
+    "ok": true,
+    "detalhe": "{\"banco\":{\"ok\":true,\"detail\":\"responde\"},\"worker\":{\"ok\":true,\"detail\":\"ignorado fora de produção\"},\"fila\":{\"ok\":true,\"detail\":\"0 entrega(s) parada(s) há mais de 15 min\"},\"webhooks\":{\"ok\":true,\"detail\":\"0 evento(s) de pagamento sem processar há mais de 10 min\"},\"ebook\":{\"ok\":true,\"detail\":\"e-mail não"
+  },
+  {
+    "area": "admin",
+    "nome": "config lista chaves",
+    "ok": true,
+    "detalhe": "{\"settings\":{\"subscriptionsEnabled\":true,\"leadsEnabled\":true,\"aiEnabled\":true,\"aiMaxCallsPerDay\":200,\"salesPaused\":false,\"announcement\":null,\"bundlePriceCents\":5990,\"reminderDaysBefore\":3,\"campaignDai"
+  },
+  {
+    "area": "admin",
+    "nome": "PUT config com o mesmo conteúdo não quebra",
+    "ok": true,
+    "detalhe": "200 {\"settings\":{\"subscriptionsEnabled\":true,\"leadsEnabled\":true,\"aiEnabled\":true,\"aiMaxCallsPerDay\":200,\"salesPaused\":false,\"announcement\":null,\"bundlePriceCents\":"
+  },
+  {
+    "area": "validacao",
+    "nome": "PUT config inválido = 4xx",
+    "ok": true,
+    "detalhe": "400 {\"error\":\"invalid_input\",\"message\":\"Dados inválidos\",\"issues\":[{\"path\":\"aiMaxCallsPerDay\",\"message\":"
+  },
+  {
+    "area": "admin",
+    "nome": "produtos listados",
+    "ok": true,
+    "detalhe": "[{\"code\":\"recovery_map\",\"name\":\"Mapa da Virada\",\"kind\":\"one_off\",\"priceCents\":2900,\"accessDays\":30,\"active\":true,\"usesAi\":true,\"description\":\"Diagnóst"
+  },
+  {
+    "area": "validacao",
+    "nome": "preço negativo recusado",
+    "ok": true,
+    "detalhe": "400 {\"error\":\"invalid_input\",\"message\":\"Dados inválidos\",\"issues\":[{\"path\":\"priceCents\",\"message\":\"Too s"
+  },
+  {
+    "area": "validacao",
+    "nome": "preço zero recusado (ou tratado)",
+    "ok": false,
+    "detalhe": "status 200"
+  },
+  {
+    "area": "validacao",
+    "nome": "preço absurdo recusado",
+    "ok": true,
+    "detalhe": "400"
+  },
+  {
+    "area": "validacao",
+    "nome": "produto inexistente = 404",
+    "ok": true,
+    "detalhe": "404"
+  },
+  {
+    "area": "admin",
+    "nome": "dono cria usuário Suporte",
+    "ok": true,
+    "detalhe": "201 {\"id\":\"fe2ef6b2-e987-48e4-93de-2a6e07605732\"}"
+  },
+  {
+    "area": "validacao",
+    "nome": "e-mail duplicado de usuário = 4xx",
+    "ok": true,
+    "detalhe": "409"
+  },
+  {
+    "area": "validacao",
+    "nome": "papel inexistente recusado",
+    "ok": true,
+    "detalhe": "400"
+  },
+  {
+    "area": "validacao",
+    "nome": "permissão inexistente recusada (ou ignorada sem 5xx)",
+    "ok": true,
+    "detalhe": "201"
+  },
+  {
+    "area": "admin",
+    "nome": "usuário Suporte define senha",
+    "ok": true,
+    "detalhe": "204 "
+  },
+  {
+    "area": "admin",
+    "nome": "usuário Suporte entra",
+    "ok": false,
+    "detalhe": "404 {\"message\":\"Route POST:/api/gestao/login not found\",\"error\":\"Not Found\",\"statusCode\":404}"
+  },
+  {
+    "area": "permissao",
+    "nome": "Suporte acessa /clientes/avulsos",
+    "ok": true,
+    "detalhe": "200"
+  },
+  {
+    "area": "permissao",
+    "nome": "Suporte acessa /assinaturas",
+    "ok": true,
+    "detalhe": "200"
+  },
+  {
+    "area": "permissao",
+    "nome": "Suporte acessa /jornada/resumo",
+    "ok": true,
+    "detalhe": "200"
+  },
+  {
+    "area": "permissao",
+    "nome": "Suporte NÃO acessa /dashboard (403)",
+    "ok": true,
+    "detalhe": "403 {\"error\":\"forbidden\",\"message\":\"Você não tem permissão para esta área.\"}"
+  },
+  {
+    "area": "permissao",
+    "nome": "Suporte NÃO acessa /config (403)",
+    "ok": true,
+    "detalhe": "403 {\"error\":\"forbidden\",\"message\":\"Você não tem permissão para esta área.\"}"
+  },
+  {
+    "area": "permissao",
+    "nome": "Suporte NÃO acessa /usuarios (403)",
+    "ok": true,
+    "detalhe": "403 {\"error\":\"forbidden\",\"message\":\"Você não tem permissão para esta área.\"}"
+  },
+  {
+    "area": "permissao",
+    "nome": "Suporte NÃO acessa /produtos (403)",
+    "ok": true,
+    "detalhe": "403 {\"error\":\"forbidden\",\"message\":\"Você não tem permissão para esta área.\"}"
+  },
+  {
+    "area": "permissao",
+    "nome": "Suporte NÃO acessa /auditoria (403)",
+    "ok": true,
+    "detalhe": "403 {\"error\":\"forbidden\",\"message\":\"Você não tem permissão para esta área.\"}"
+  },
+  {
+    "area": "permissao",
+    "nome": "Suporte NÃO acessa /marketing/emails (403)",
+    "ok": true,
+    "detalhe": "403 {\"error\":\"forbidden\",\"message\":\"Você não tem permissão para esta área.\"}"
+  },
+  {
+    "area": "permissao",
+    "nome": "Suporte NÃO acessa /marketing/planos (403)",
+    "ok": true,
+    "detalhe": "403 {\"error\":\"forbidden\",\"message\":\"Você não tem permissão para esta área.\"}"
+  },
+  {
+    "area": "permissao",
+    "nome": "Suporte NÃO acessa /ebooks (403)",
+    "ok": true,
+    "detalhe": "403 {\"error\":\"forbidden\",\"message\":\"Você não tem permissão para esta área.\"}"
+  },
+  {
+    "area": "permissao",
+    "nome": "Suporte NÃO acessa /mercado (403)",
+    "ok": true,
+    "detalhe": "403 {\"error\":\"forbidden\",\"message\":\"Você não tem permissão para esta área.\"}"
+  },
+  {
+    "area": "permissao",
+    "nome": "Suporte NÃO acessa /indicacoes (403)",
+    "ok": false,
+    "detalhe": "200 {\"enabled\":true,\"percent\":10,\"kpis\":{\"leadInvites\":0,\"subscriberInvites\":0,\"conv"
+  },
+  {
+    "area": "permissao",
+    "nome": "Suporte NÃO acessa /saude (403)",
+    "ok": true,
+    "detalhe": "403 {\"error\":\"forbidden\",\"message\":\"Você não tem permissão para esta área.\"}"
+  },
+  {
+    "area": "permissao",
+    "nome": "Suporte NÃO acessa /parcerias (403)",
+    "ok": true,
+    "detalhe": "403 {\"error\":\"forbidden\",\"message\":\"Você não tem permissão para esta área.\"}"
+  },
+  {
+    "area": "permissao",
+    "nome": "Suporte NÃO executa POST /usuarios",
+    "ok": true,
+    "detalhe": "403"
+  },
+  {
+    "area": "permissao",
+    "nome": "Suporte NÃO executa PUT /config",
+    "ok": true,
+    "detalhe": "403"
+  },
+  {
+    "area": "permissao",
+    "nome": "Suporte NÃO executa POST /mercado/atualizar",
+    "ok": true,
+    "detalhe": "403"
+  },
+  {
+    "area": "permissao",
+    "nome": "Suporte NÃO executa POST /marketing/emails",
+    "ok": true,
+    "detalhe": "403"
+  },
+  {
+    "area": "seguranca",
+    "nome": "escalonamento: Suporte não promove a si mesmo a dono",
+    "ok": true,
+    "detalhe": "403"
+  },
+  {
+    "area": "admin",
+    "nome": "dono desativa usuário",
+    "ok": true,
+    "detalhe": "200"
+  },
+  {
+    "area": "seguranca",
+    "nome": "usuário desativado perde acesso na hora",
+    "ok": true,
+    "detalhe": "401"
+  },
+  {
+    "area": "seguranca",
+    "nome": "dono não consegue desativar a si mesmo (ficaria sem dono)",
+    "ok": true,
+    "detalhe": "409"
+  },
+  {
+    "area": "seguranca",
+    "nome": "dono único não pode se rebaixar",
+    "ok": true,
+    "detalhe": "409"
+  },
+  {
+    "area": "integracao",
+    "nome": "atualizar indicadores (BCB/IBGE/etc.) não gera 5xx",
+    "ok": true,
+    "detalhe": "200 {\"saved\":157,\"lastRun\":{\"at\":\"2026-10-03T16:43:02.707Z\",\"saved\":157,\"errors\":{}}}"
+  },
+  {
+    "area": "integracao",
+    "nome": "mercado traz Selic/IPCA após atualizar",
+    "ok": true,
+    "detalhe": "{\"updatedAt\":\"2026-10-03T16:43:03.223Z\",\"indicators\":{\"selicPct\":13.75,\"ipca12Pct\":4.22,\"cdiPct\":13.65,\"usdBrl\":5.2214,\"selicTrend\":null,\"ipcaTrend\":-0.5,\"usdTrend\":0.0252},\"lastRun\":{\"at\":\"2026-10-03"
+  },
+  {
+    "area": "admin",
+    "nome": "repositório de eBooks tem um ativo",
+    "ok": true,
+    "detalhe": "{\"ebooks\":[{\"id\":\"442929d5-9c83-4f60-9614-bc61df684e3e\",\"title\":\"Respira. Organiza. Avança. O guia do Fôlego para organizar o dinheiro e conquistar tranquilidade\",\"filename\":\"Folego-eBook-Respira-Orga"
+  },
+  {
+    "area": "marketing",
+    "nome": "criar campanha rascunho",
+    "ok": true,
+    "detalhe": "400 {\"error\":\"invalid_input\",\"message\":\"Dados inválidos\",\"issues\":[{\"path\":\"name\",\"message\":\"Invalid input: expected string, received undefined\"},{\"path\":\"audience\",\"message\":\"Invalid input: expected stri"
+  },
+  {
+    "area": "marketing",
+    "nome": "criar plano de marketing",
+    "ok": true,
+    "detalhe": "201 {\"id\":\"af7ad4f4-7241-4cf6-a5ac-e51d11b91192\"}"
+  },
+  {
+    "area": "validacao",
+    "nome": "plano com título curto recusado",
+    "ok": true,
+    "detalhe": "400"
+  },
+  {
+    "area": "admin",
+    "nome": "auditoria registra as ações acima",
+    "ok": true,
+    "detalhe": "{\"items\":[{\"id\":115,\"at\":\"2026-10-03T16:43:03.274Z\",\"actor\":\"qa@exemplo.com\",\"action\":\"admin_plan_create\",\"entity\":\"marketing_plan\",\"entityId\":\"af7ad4f4-7241-4cf6-a5ac-e51d11b91192\",\"data\":{\"by\":\"qa@e"
+  },
+  {
+    "area": "admin",
+    "nome": "logout",
+    "ok": true,
+    "detalhe": "204"
+  },
+  {
+    "area": "seguranca",
+    "nome": "após logout /me = 401",
+    "ok": true,
+    "detalhe": "401"
+  }
+]

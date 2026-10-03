@@ -1,0 +1,775 @@
+[
+  {
+    "area": "infra",
+    "nome": "GET /api/health = 200",
+    "ok": true,
+    "detalhe": "esperado 200, veio 200"
+  },
+  {
+    "area": "infra",
+    "nome": "GET /api/health/deep responde JSON com checks",
+    "ok": true,
+    "detalhe": "{\"ok\":true,\"at\":\"2026-10-03T16:41:14.700Z\",\"checks\":{\"banco\":{\"ok\":true,\"detail\":\"responde\"},\"worker\":{\"ok\":true,\"detail\":\"ignorado fora de produção\"},\"fila\":{\"ok\":true,\"detail\":\"0 entrega(s) parada(s) há mais de 15 min\"},\"webhooks\":{\"ok\":true,\"detail\":\"0 evento(s) de pagamento sem processar há mais de 10 min\"},\"ebook\":{\"ok\":true,\"detail\":\"e-mail não configurado\"},\"backup\":{\"ok\":true,\"detail\":\"ign"
+  },
+  {
+    "area": "infra",
+    "nome": "GET / = 200",
+    "ok": true,
+    "detalhe": "esperado 200, veio 200"
+  },
+  {
+    "area": "seguranca",
+    "nome": "cabeçalho content-security-policy presente na home",
+    "ok": true,
+    "detalhe": "accept-ranges,connection,content-length,content-security-policy,content-type,date,etag,keep-alive,last-modified,referrer-policy,x-content-type-options,x-frame-options,x-ratelimit-limit,x-ratelimit-remaining,x-ratelimit-reset"
+  },
+  {
+    "area": "seguranca",
+    "nome": "cabeçalho x-content-type-options presente na home",
+    "ok": true,
+    "detalhe": "accept-ranges,connection,content-length,content-security-policy,content-type,date,etag,keep-alive,last-modified,referrer-policy,x-content-type-options,x-frame-options,x-ratelimit-limit,x-ratelimit-remaining,x-ratelimit-reset"
+  },
+  {
+    "area": "seguranca",
+    "nome": "cabeçalho referrer-policy presente na home",
+    "ok": true,
+    "detalhe": "accept-ranges,connection,content-length,content-security-policy,content-type,date,etag,keep-alive,last-modified,referrer-policy,x-content-type-options,x-frame-options,x-ratelimit-limit,x-ratelimit-remaining,x-ratelimit-reset"
+  },
+  {
+    "area": "seguranca",
+    "nome": "home com X-Frame-Options ou frame-ancestors",
+    "ok": true,
+    "detalhe": ""
+  },
+  {
+    "area": "infra",
+    "nome": "rota inexistente = 404",
+    "ok": true,
+    "detalhe": "esperado 404, veio 404"
+  },
+  {
+    "area": "infra",
+    "nome": "404 da API é JSON (não HTML/stack)",
+    "ok": true,
+    "detalhe": "{\"message\":\"Route GET:/api/nao-existe not found\",\"error\":\"Not Found\",\"statusCode\":404}"
+  },
+  {
+    "area": "infra",
+    "nome": "JSON quebrado = 4xx (não 500)",
+    "ok": true,
+    "detalhe": "400 {\"error\":\"FST_ERR_CTP_INVALID_JSON_BODY\",\"message\":\"Body is not valid JSON but content-type is set to 'application/json'\"}"
+  },
+  {
+    "area": "infra",
+    "nome": "corpo de 3 MB recusado (413/4xx)",
+    "ok": true,
+    "detalhe": "413"
+  },
+  {
+    "area": "seguranca",
+    "nome": "POST sem cabeçalho x-folego é recusado (CSRF)",
+    "ok": true,
+    "detalhe": "403 {\"error\":\"csrf\",\"message\":\"Requisição não permitida\"}"
+  },
+  {
+    "area": "seguranca",
+    "nome": "sem CORS aberto para origem alheia",
+    "ok": true,
+    "detalhe": "null"
+  },
+  {
+    "area": "seguranca",
+    "nome": "cookie de sessão HttpOnly + SameSite",
+    "ok": true,
+    "detalhe": "folego_sid=azKtFypdYblMSqV8ifineJ3843OiQFf7rauPVWdQOcI; Max-Age=2592000; Path=/; HttpOnly; SameSite=Lax"
+  },
+  {
+    "area": "seguranca",
+    "nome": "path traversal não vaza arquivos",
+    "ok": true,
+    "detalhe": "404"
+  },
+  {
+    "area": "seguranca",
+    "nome": "arquivo sensível /.env não é servido",
+    "ok": true,
+    "detalhe": "404"
+  },
+  {
+    "area": "seguranca",
+    "nome": "arquivo sensível /deploy/.env não é servido",
+    "ok": true,
+    "detalhe": "404"
+  },
+  {
+    "area": "seguranca",
+    "nome": "arquivo sensível /apps/api/src/app.ts não é servido",
+    "ok": true,
+    "detalhe": "404"
+  },
+  {
+    "area": "seguranca",
+    "nome": "arquivo sensível /db/schema.sql não é servido",
+    "ok": true,
+    "detalhe": "404"
+  },
+  {
+    "area": "seguranca",
+    "nome": "arquivo sensível /.git/config não é servido",
+    "ok": true,
+    "detalhe": "404"
+  },
+  {
+    "area": "catalogo",
+    "nome": "catálogo 200",
+    "ok": true,
+    "detalhe": "esperado 200, veio 200"
+  },
+  {
+    "area": "catalogo",
+    "nome": "Mapa custa R$ 29,00 (2900)",
+    "ok": true,
+    "detalhe": "[{\"code\":\"recovery_map\",\"name\":\"Mapa da Virada\",\"kind\":\"one_off\",\"priceCents\":2900,\"active\":true,\"accessDays\":30},{\"code\":\"defense_letters\",\"name\":\"Kit de Cartas e Defesas\",\"kind\":\"one_off\",\"priceCents\":1900,\"active\":true,\"accessDays\":30},{\"code\":\"calendar_30d\",\"name\":\"Calendário dos 30 dias\",\"kind\""
+  },
+  {
+    "area": "caso",
+    "nome": "criar caso válido = 201/200",
+    "ok": true,
+    "detalhe": "esperado true, veio true"
+  },
+  {
+    "area": "caso",
+    "nome": "resposta traz id do caso",
+    "ok": true,
+    "detalhe": "{\"caseId\":\"f919ab48-5306-4eb0-8a2c-7d81aa9b08c2\",\"preview\":{\"engineVersion\":\"0.1.0\",\"debtCount\":3,\"totalBalanceCents\":660000,\"health\":{\"score\":55,\"band\":\"attention\"},\"headline\":{\"kind\":\"debt_free_in\","
+  },
+  {
+    "area": "caso",
+    "nome": "preview 200",
+    "ok": true,
+    "detalhe": "esperado 200, veio 200"
+  },
+  {
+    "area": "negocio",
+    "nome": "preview NÃO vaza roteiros/conteúdo pago",
+    "ok": true,
+    "detalhe": "{\"health\":{\"band\":\"attention\",\"score\":55},\"headline\":{\"kind\":\"debt_free_in\",\"months\":7},\"debtCount\":3,\"confidence\":\"low\",\"discoveries\":{\"negotiable\":0,\"moreInQueue\":1,\"lettersEligible\":2,\"essentialOve"
+  },
+  {
+    "area": "negocio",
+    "nome": "preview traz nota/score",
+    "ok": true,
+    "detalhe": "{\"health\":{\"band\":\"attention\",\"score\":55},\"headline\":{\"kind\":\"debt_free_in\",\"months\":7},\"debtCount\":3,\"confidence\":\"low\",\"discoveries\":{\"negotiable\":0,\"moreInQueue\":1,\"lettersEligible\":2,\"essentialOve"
+  },
+  {
+    "area": "negocio",
+    "nome": "dívida prescrita sinalizada fora da conta",
+    "ok": true,
+    "detalhe": "{\"health\":{\"band\":\"attention\",\"score\":55},\"headline\":{\"kind\":\"debt_free_in\",\"months\":7},\"debtCount\":3,\"confidence\":\"low\",\"discoveries\":{\"negotiable\":0,\"moreInQueue\":1,\"lettersEligible\":2,\"essentialOve"
+  },
+  {
+    "area": "seguranca",
+    "nome": "IDOR: outra sessão não lê o preview",
+    "ok": true,
+    "detalhe": "404"
+  },
+  {
+    "area": "seguranca",
+    "nome": "IDOR: outra sessão não apaga o caso",
+    "ok": true,
+    "detalhe": "404"
+  },
+  {
+    "area": "validacao",
+    "nome": "caso: sem aceite dos termos",
+    "ok": true,
+    "detalhe": "status 400 {\"error\":\"invalid_input\",\"message\":\"Dados inválidos\",\"issues\":[{\"path\":\"acceptTerms\",\"message\":\"Invalid input: expected "
+  },
+  {
+    "area": "validacao",
+    "nome": "caso: renda negativa",
+    "ok": true,
+    "detalhe": "status 400 {\"error\":\"invalid_input\",\"message\":\"Dados inválidos\",\"issues\":[{\"path\":\"profile.netIncomeCents\",\"message\":\"Too small: ex"
+  },
+  {
+    "area": "validacao",
+    "nome": "caso: renda gigante (1e15)",
+    "ok": true,
+    "detalhe": "status 400 {\"error\":\"invalid_input\",\"message\":\"Dados inválidos\",\"issues\":[{\"path\":\"profile.netIncomeCents\",\"message\":\"Too big: expe"
+  },
+  {
+    "area": "validacao",
+    "nome": "caso: UF inválida",
+    "ok": true,
+    "detalhe": "status 400 {\"error\":\"invalid_input\",\"message\":\"Dados inválidos\",\"issues\":[{\"path\":\"profile.uf\",\"message\":\"Invalid option: expected "
+  },
+  {
+    "area": "validacao",
+    "nome": "caso: sem dívidas",
+    "ok": true,
+    "detalhe": "status 400 {\"error\":\"invalid_input\",\"message\":\"Dados inválidos\",\"issues\":[{\"path\":\"debts\",\"message\":\"Too small: expected array to h"
+  },
+  {
+    "area": "validacao",
+    "nome": "caso: 200 dívidas",
+    "ok": true,
+    "detalhe": "status 400 {\"error\":\"invalid_input\",\"message\":\"Dados inválidos\",\"issues\":[{\"path\":\"debts\",\"message\":\"Too big: expected array to hav"
+  },
+  {
+    "area": "validacao",
+    "nome": "caso: saldo zero",
+    "ok": true,
+    "detalhe": "status 400 {\"error\":\"invalid_input\",\"message\":\"Dados inválidos\",\"issues\":[{\"path\":\"debts.0.balanceCents\",\"message\":\"Too small: expe"
+  },
+  {
+    "area": "validacao",
+    "nome": "caso: saldo negativo",
+    "ok": true,
+    "detalhe": "status 400 {\"error\":\"invalid_input\",\"message\":\"Dados inválidos\",\"issues\":[{\"path\":\"debts.0.balanceCents\",\"message\":\"Too small: expe"
+  },
+  {
+    "area": "validacao",
+    "nome": "caso: taxa absurda",
+    "ok": true,
+    "detalhe": "status 400 {\"error\":\"invalid_input\",\"message\":\"Dados inválidos\",\"issues\":[{\"path\":\"debts.0.monthlyRateBps\",\"message\":\"Too big: expe"
+  },
+  {
+    "area": "validacao",
+    "nome": "caso: dias de atraso negativos",
+    "ok": true,
+    "detalhe": "status 400 {\"error\":\"invalid_input\",\"message\":\"Dados inválidos\",\"issues\":[{\"path\":\"debts.0.daysOverdue\",\"message\":\"Too small: expec"
+  },
+  {
+    "area": "validacao",
+    "nome": "caso: tipo de dívida inventado",
+    "ok": true,
+    "detalhe": "status 400 {\"error\":\"invalid_input\",\"message\":\"Dados inválidos\",\"issues\":[{\"path\":\"debts.0.kind\",\"message\":\"Invalid option: expecte"
+  },
+  {
+    "area": "validacao",
+    "nome": "caso: campo extra desconhecido",
+    "ok": true,
+    "detalhe": "status 201 {\"caseId\":\"ada3ee37-105a-4f7a-b00d-58ea95ab25f4\",\"preview\":{\"engineVersion\":\"0.1.0\",\"debtCount\":3,\"totalBalanceCents\":66"
+  },
+  {
+    "area": "validacao",
+    "nome": "caso: nome com 5000 chars",
+    "ok": true,
+    "detalhe": "status 400 {\"error\":\"invalid_input\",\"message\":\"Dados inválidos\",\"issues\":[{\"path\":\"debts.0.creditorName\",\"message\":\"Too big: expect"
+  },
+  {
+    "area": "validacao",
+    "nome": "caso: nome vazio",
+    "ok": true,
+    "detalhe": "status 400 {\"error\":\"invalid_input\",\"message\":\"Dados inválidos\",\"issues\":[{\"path\":\"debts.0.creditorName\",\"message\":\"Too small: expe"
+  },
+  {
+    "area": "validacao",
+    "nome": "caso: data futura inadimplência",
+    "ok": false,
+    "detalhe": "status 500 {\"error\":\"internal\",\"message\":\"Algo deu errado. Tente de novo.\"}"
+  },
+  {
+    "area": "validacao",
+    "nome": "caso: data inválida",
+    "ok": true,
+    "detalhe": "status 400 {\"error\":\"invalid_input\",\"message\":\"Dados inválidos\",\"issues\":[{\"path\":\"debts.0.firstDefaultOn\",\"message\":\"Invalid strin"
+  },
+  {
+    "area": "seguranca",
+    "nome": "nome de credor com SQLi não gera 500",
+    "ok": true,
+    "detalhe": "201 {\"caseId\":\"80bbaff1-2450-420a-afb6-f090e9c4e432\",\"preview\":{\"engineVersion\":\"0.1.0\",\"debtCount\":3,\"t"
+  },
+  {
+    "area": "seguranca",
+    "nome": "nome de credor com XSS não gera 500",
+    "ok": true,
+    "detalhe": "201 {\"caseId\":\"06c1f3f3-1bfb-46ad-93c0-91ac8da5bdac\",\"preview\":{\"engineVersion\":\"0.1.0\",\"debtCount\":3,\"t"
+  },
+  {
+    "area": "seguranca",
+    "nome": "nome de credor com unicode/emoji não gera 500",
+    "ok": true,
+    "detalhe": "201 {\"caseId\":\"1c0fe148-c3fa-46d7-84dc-9c43a557cfdf\",\"preview\":{\"engineVersion\":\"0.1.0\",\"debtCount\":3,\"t"
+  },
+  {
+    "area": "seguranca",
+    "nome": "nome de credor com null byte não gera 500",
+    "ok": false,
+    "detalhe": "500 {\"error\":\"internal\",\"message\":\"Algo deu errado. Tente de novo.\"}"
+  },
+  {
+    "area": "seguranca",
+    "nome": "banco continua de pé depois das injeções",
+    "ok": true,
+    "detalhe": "esperado 200, veio 200"
+  },
+  {
+    "area": "pedido",
+    "nome": "criar pedido do Mapa",
+    "ok": true,
+    "detalhe": "{\"orderId\":\"1400e7fc-e024-45e6-b2f8-196d63debd25\",\"totalCents\":2900,\"items\":[\"recovery_map\"],\"expiresAt\":1791047475005,\"pixCode\":\"DEMO-FOLEGO-FAKE_A296EBFC7C888696-002900-NAO-E-UM-PIX-REAL\",\"status\":\""
+  },
+  {
+    "area": "pedido",
+    "nome": "mesma Idempotency-Key devolve o mesmo pedido",
+    "detalhe": "{\"error\":\"idempotency_key\",\"message\":\"Cabeçalho Idempotency-Key obrigatório\"} | {\"error\":\"idempotency_key\",\"message\":\"Cabeçalho Idempotency-Key obrigatório\"}"
+  },
+  {
+    "area": "validacao",
+    "nome": "produto inexistente recusado",
+    "ok": true,
+    "detalhe": "400"
+  },
+  {
+    "area": "validacao",
+    "nome": "pedido sem produtos recusado",
+    "ok": true,
+    "detalhe": "400"
+  },
+  {
+    "area": "validacao",
+    "nome": "pedido sem Idempotency-Key recusado",
+    "ok": true,
+    "detalhe": "400"
+  },
+  {
+    "area": "negocio",
+    "nome": "entrega ANTES de pagar é bloqueada (402/403/409)",
+    "ok": true,
+    "detalhe": "402 {\"error\":\"payment_required\",\"message\":\"Pagamento ainda não confirmado\"}"
+  },
+  {
+    "area": "pedido",
+    "nome": "pagamento simulado confirma",
+    "ok": true,
+    "detalhe": "200 {\"ok\":true,\"outcome\":\"confirmed\"}"
+  },
+  {
+    "area": "negocio",
+    "nome": "entrega DEPOIS de pagar é liberada",
+    "ok": true,
+    "detalhe": "200 {\"generated\":{\"scripts\":{\"status\":\"ready\",\"source\":\"template\",\"content\":{\"held\":[{\"id\":\"d3\",\"aviso\":\"Esta dívida pode estar prescrita. Não pague nem n"
+  },
+  {
+    "area": "seguranca",
+    "nome": "IDOR: outra sessão não lê a entrega paga",
+    "ok": true,
+    "detalhe": "404"
+  },
+  {
+    "area": "pedido",
+    "nome": "gera link de acesso em outro aparelho",
+    "ok": true,
+    "detalhe": "200 {\"token\":\"OYTdaOhwBWO8f2QrjdUKruz6_yjDzZfTPsaM93nicmE\",\"expiresAt\":1793637675054}"
+  },
+  {
+    "area": "pedido",
+    "nome": "link de acesso reabre o Mapa em outro navegador",
+    "ok": true,
+    "detalhe": "200 {\"caseId\":\"f919ab48-5306-4eb0-8a2c-7d81aa9b08c2\",\"orderId\":\"1400e7fc-e024-45e6-b2f8-196d63debd25\",\"kind\":\"map\",\"expiresA"
+  },
+  {
+    "area": "seguranca",
+    "nome": "token de acesso adulterado é recusado",
+    "ok": true,
+    "detalhe": "404"
+  },
+  {
+    "area": "seguranca",
+    "nome": "webhook sem segredo = 401/403",
+    "ok": true,
+    "detalhe": "401"
+  },
+  {
+    "area": "seguranca",
+    "nome": "webhook com segredo errado = 401/403",
+    "ok": true,
+    "detalhe": "401"
+  },
+  {
+    "area": "lgpd",
+    "nome": "titular consegue apagar o próprio caso",
+    "ok": false,
+    "detalhe": "404"
+  },
+  {
+    "area": "lgpd",
+    "nome": "caso apagado some (404/410)",
+    "ok": true,
+    "detalhe": "404"
+  },
+  {
+    "area": "rastreamento",
+    "nome": "POST /api/events não gera 5xx",
+    "ok": true,
+    "detalhe": "400 {\"error\":\"invalid_input\",\"message\":\"Dados inválidos\",\"issues\":[{\"path\":\"name\",\"message\":\"Invalid opt"
+  },
+  {
+    "area": "rastreamento",
+    "nome": "evento gigante recusado sem 5xx",
+    "ok": true,
+    "detalhe": "400"
+  },
+  {
+    "area": "validacao",
+    "nome": "unsubscribe com token inválido = 4xx",
+    "ok": true,
+    "detalhe": "400"
+  },
+  {
+    "area": "prumo",
+    "nome": "GET /api/account sem login = 401",
+    "ok": false,
+    "detalhe": "esperado 401, veio 404"
+  },
+  {
+    "area": "info",
+    "nome": "corpo do erro sem login",
+    "ok": "info",
+    "detalhe": "{\"error\":\"not_found\",\"message\":\"Não encontrado\"}"
+  },
+  {
+    "area": "seguranca",
+    "nome": "GET /api/account/export sem login bloqueado",
+    "ok": false,
+    "detalhe": "404 {\"error\":\"not_found\",\"message\":\"Não encontrado\"}"
+  },
+  {
+    "area": "seguranca",
+    "nome": "GET /api/account/debts sem login bloqueado",
+    "ok": false,
+    "detalhe": "404 {\"error\":\"not_found\",\"message\":\"Não encontrado\"}"
+  },
+  {
+    "area": "seguranca",
+    "nome": "POST /api/account/entries sem login bloqueado",
+    "ok": false,
+    "detalhe": "404 {\"error\":\"not_found\",\"message\":\"Não encontrado\"}"
+  },
+  {
+    "area": "seguranca",
+    "nome": "GET /api/account/coach sem login bloqueado",
+    "ok": false,
+    "detalhe": "404 {\"error\":\"not_found\",\"message\":\"Não encontrado\"}"
+  },
+  {
+    "area": "seguranca",
+    "nome": "GET /api/account/market sem login bloqueado",
+    "ok": false,
+    "detalhe": "404 {\"error\":\"not_found\",\"message\":\"Não encontrado\"}"
+  },
+  {
+    "area": "seguranca",
+    "nome": "DELETE /api/account sem login bloqueado",
+    "ok": false,
+    "detalhe": "404 {\"error\":\"not_found\",\"message\":\"Não encontrado\"}"
+  },
+  {
+    "area": "validacao",
+    "nome": "login-code com e-mail inválido = 4xx",
+    "ok": true,
+    "detalhe": "400"
+  },
+  {
+    "area": "prumo",
+    "nome": "pede código de acesso",
+    "ok": true,
+    "detalhe": "200 {\"sent\":true,\"devCode\":\"617273\"}"
+  },
+  {
+    "area": "prumo",
+    "nome": "código de 6 dígitos chegou (log do e-mail de teste)",
+    "ok": true,
+    "detalhe": "sem código no log"
+  },
+  {
+    "area": "seguranca",
+    "nome": "código errado recusado",
+    "ok": true,
+    "detalhe": "401"
+  },
+  {
+    "area": "prumo",
+    "nome": "login com o código certo",
+    "ok": true,
+    "detalhe": "200 {\"email\":\"qa1791045675717@exemplo.com\",\"subscription\":null,\"billing\":null,\"profile\":{\"displayName\":n"
+  },
+  {
+    "area": "seguranca",
+    "nome": "código só vale uma vez",
+    "ok": true,
+    "detalhe": "401"
+  },
+  {
+    "area": "prumo",
+    "nome": "GET /api/account logado = 200",
+    "ok": true,
+    "detalhe": "esperado 200, veio 200"
+  },
+  {
+    "area": "prumo",
+    "nome": "conta sem assinatura ainda (sem plano)",
+    "ok": true,
+    "detalhe": "{\"email\":\"qa1791045675717@exemplo.com\",\"subscription\":null,\"billing\":null,\"profile\":{\"displayName\":null,\"notifyDigest\":true,\"notifyReminders\":true,\"marketing\":true},\"role\":\"owner\",\"ownerEmail\":null}"
+  },
+  {
+    "area": "prumo",
+    "nome": "cria pedido de assinatura Ousado",
+    "ok": true,
+    "detalhe": "201 {\"orderId\":\"cba45c2c-0248-4a45-9d7f-3e3f4104e5db\",\"totalCents\":3999,\"items\":[\"sub_ousado\"],\"expiresAt\":1791047476540,\"pixCode\":\"DEMO-FOLEGO-FAKE_607955E95F11454B-003999-NAO-E-UM-PIX-REAL\",\"status\":\"pe"
+  },
+  {
+    "area": "validacao",
+    "nome": "plano inexistente recusado",
+    "ok": true,
+    "detalhe": "400"
+  },
+  {
+    "area": "prumo",
+    "nome": "simula pagamento da assinatura",
+    "ok": true,
+    "detalhe": "200 {\"ok\":true,\"outcome\":\"confirmed\"}"
+  },
+  {
+    "area": "prumo",
+    "nome": "assinatura ativa no plano Ousado",
+    "ok": true,
+    "detalhe": "{\"plan\":\"ousado\",\"active\":true,\"periodEnd\":1793637676588,\"cancelAtPeriodEnd\":false}"
+  },
+  {
+    "area": "prumo",
+    "nome": "adiciona lançamentos",
+    "ok": true,
+    "detalhe": "200 {\"added\":3,\"duplicates\":0}"
+  },
+  {
+    "area": "prumo",
+    "nome": "visão do mês 200",
+    "ok": true,
+    "detalhe": "esperado 200, veio 200"
+  },
+  {
+    "area": "validacao",
+    "nome": "mês inválido (2020-13) = 4xx",
+    "ok": false,
+    "detalhe": "500"
+  },
+  {
+    "area": "validacao",
+    "nome": "mês \"abc\" = 4xx",
+    "ok": false,
+    "detalhe": "500"
+  },
+  {
+    "area": "validacao",
+    "nome": "lançamento inválido recusado",
+    "ok": true,
+    "detalhe": "400"
+  },
+  {
+    "area": "validacao",
+    "nome": "lote de 5000 lançamentos não gera 5xx",
+    "ok": true,
+    "detalhe": "413 {\"error\":\"FST_ERR_CTP_BODY_TOO_LARGE\",\"message\":\"Request body is too large\"}"
+  },
+  {
+    "area": "prumo",
+    "nome": "cria dívida na conta",
+    "ok": true,
+    "detalhe": "201 {\"id\":\"4715c606-35ef-409b-8c23-923f57ffa83c\"}"
+  },
+  {
+    "area": "prumo",
+    "nome": "lista dívidas com plano de quitação",
+    "ok": true,
+    "detalhe": "{\"debts\":[{\"id\":\"4715c606-35ef-409b-8c23-923f57ffa83c\",\"name\":\"Banco QA\",\"initialCents\":1000000,\"balanceCents\":1000000,\"monthlyRateBps\":450,\"minPaymentCents\":50000,\"dueDay\":null,\"paidOff\":false}],\"tot"
+  },
+  {
+    "area": "prumo",
+    "nome": "cria meta",
+    "ok": true,
+    "detalhe": "201 {\"ok\":true}"
+  },
+  {
+    "area": "validacao",
+    "nome": "meta com valor negativo recusada",
+    "ok": true,
+    "detalhe": "400"
+  },
+  {
+    "area": "prumo",
+    "nome": "cria carteira",
+    "ok": true,
+    "detalhe": "201 {\"id\":\"36ac3c82-5ceb-429f-8971-75433a726e21\"}"
+  },
+  {
+    "area": "prumo",
+    "nome": "cria lembrete",
+    "ok": true,
+    "detalhe": "201 {\"id\":\"d2d3358f-eace-4c23-b953-816e833f7f3c\"}"
+  },
+  {
+    "area": "prumo",
+    "nome": "cobranças recorrentes responde",
+    "ok": true,
+    "detalhe": "{\"items\":[],\"monthlyTotalCents\":0,\"yearlyTotalCents\":0,\"alerts\":{\"priceIncreases\":0,\"duplicates\":0},\"savings\":{\"monthlyCents\":0,\"yearlyCents\":0,\"count\":0},\"hasD"
+  },
+  {
+    "area": "prumo",
+    "nome": "base do \"e se...?\" responde (Ousado)",
+    "ok": true,
+    "detalhe": "200 {\"months\":1,\"base\":{\"incomeCents\":583990,\"essentialCents\":0,\"flexibleCents\":0,\"debtPaymentsCents\":50000,\"reserveCents\":0}}"
+  },
+  {
+    "area": "negocio",
+    "nome": "Mercado bloqueado no Ousado (só Desbravador)",
+    "ok": false,
+    "detalhe": "200 {\"plan\":\"ousado\",\"indicators\":{\"selicPct\":13.75,\"ipca12Pct\":4.22,\"cdiPct\":13.65,\"usdBrl\":null,\"selicTrend\":null,\"ipcaTrend\":-0.5,\"usdTrend\":null},\"updatedAt\":\"2"
+  },
+  {
+    "area": "negocio",
+    "nome": "Planejador IA bloqueado no Ousado",
+    "ok": true,
+    "detalhe": "403"
+  },
+  {
+    "area": "lgpd",
+    "nome": "exportação dos dados (JSON) funciona",
+    "ok": true,
+    "detalhe": "200"
+  },
+  {
+    "area": "lgpd",
+    "nome": "exportação XLSX funciona",
+    "ok": true,
+    "detalhe": "200"
+  },
+  {
+    "area": "prumo",
+    "nome": "atualiza perfil",
+    "ok": true,
+    "detalhe": "200 {\"displayName\":\"QA Teste\",\"notifyDigest\":true,\"notifyReminders\":true,\"marketing\":true}"
+  },
+  {
+    "area": "validacao",
+    "nome": "perfil com nome enorme/script não gera 5xx",
+    "ok": true,
+    "detalhe": "400"
+  },
+  {
+    "area": "prumo",
+    "nome": "convite de conta compartilhada (Ousado)",
+    "ok": true,
+    "detalhe": "204 "
+  },
+  {
+    "area": "validacao",
+    "nome": "não convida a si mesmo",
+    "ok": true,
+    "detalhe": "422"
+  },
+  {
+    "area": "prumo",
+    "nome": "indicações: código/link",
+    "ok": true,
+    "detalhe": "{\"enabled\":true,\"percent\":10,\"code\":\"hbavpuyy\",\"link\":\"https://folego.online/?ind=hbavpuyy#/conta\",\"invited\":0,\"converted\":0,\"credits\":{\"available\":0,\"applied\":0},\"next\":null,\"recent\":[]}"
+  },
+  {
+    "area": "prumo",
+    "nome": "cancela a renovação",
+    "ok": true,
+    "detalhe": "200 {\"ok\":true}"
+  },
+  {
+    "area": "negocio",
+    "nome": "cancelamento: continua ativo até o fim do período",
+    "ok": true,
+    "detalhe": "{\"plan\":\"ousado\",\"active\":true,\"periodEnd\":1793637676588,\"cancelAtPeriodEnd\":true}"
+  },
+  {
+    "area": "prumo",
+    "nome": "desfaz o cancelamento",
+    "ok": true,
+    "detalhe": "200"
+  },
+  {
+    "area": "prumo",
+    "nome": "logout",
+    "ok": true,
+    "detalhe": "204"
+  },
+  {
+    "area": "seguranca",
+    "nome": "após logout, /account = 401",
+    "ok": true,
+    "detalhe": "esperado 401, veio 401"
+  },
+  {
+    "area": "seguranca",
+    "nome": "backoffice /api/admin/dashboard sem login bloqueado",
+    "ok": true,
+    "detalhe": "404"
+  },
+  {
+    "area": "seguranca",
+    "nome": "backoffice /api/admin/saude sem login bloqueado",
+    "ok": true,
+    "detalhe": "404"
+  },
+  {
+    "area": "seguranca",
+    "nome": "backoffice /api/admin/clientes sem login bloqueado",
+    "ok": true,
+    "detalhe": "404"
+  },
+  {
+    "area": "seguranca",
+    "nome": "backoffice /api/admin/pedidos sem login bloqueado",
+    "ok": true,
+    "detalhe": "404"
+  },
+  {
+    "area": "seguranca",
+    "nome": "backoffice /api/admin/configuracoes sem login bloqueado",
+    "ok": true,
+    "detalhe": "404"
+  },
+  {
+    "area": "seguranca",
+    "nome": "backoffice /api/admin/mercado sem login bloqueado",
+    "ok": true,
+    "detalhe": "404"
+  },
+  {
+    "area": "seguranca",
+    "nome": "backoffice /api/admin/ebook sem login bloqueado",
+    "ok": true,
+    "detalhe": "404"
+  },
+  {
+    "area": "seguranca",
+    "nome": "login admin com dados inválidos não gera 5xx",
+    "ok": true,
+    "detalhe": "404"
+  },
+  {
+    "area": "seguranca",
+    "nome": "criar parceiro sem token admin bloqueado",
+    "ok": false,
+    "detalhe": "404"
+  },
+  {
+    "area": "seguranca",
+    "nome": "login de parceiro com token falso recusado",
+    "ok": true,
+    "detalhe": "400"
+  },
+  {
+    "area": "seguranca",
+    "nome": "lista de leads sem login de parceiro bloqueada",
+    "ok": true,
+    "detalhe": "401"
+  }
+]
