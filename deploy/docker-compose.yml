@@ -29,6 +29,9 @@ x-api-env: &api-env
   LEADS_ENABLED: ${LEADS_ENABLED:-0}
   SUBSCRIPTIONS_ENABLED: ${SUBSCRIPTIONS_ENABLED:-0}
   PARTNER_ADMIN_TOKEN: ${PARTNER_ADMIN_TOKEN:-}
+  # Anti-robô (Cloudflare Turnstile). Sem as duas chaves, fica desligado.
+  TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
+  TURNSTILE_SECRET: ${TURNSTILE_SECRET:-}
 
 services:
   postgres:
@@ -104,6 +107,7 @@ services:
     volumes:
       - ./nginx/folego.conf:/etc/nginx/conf.d/default.conf:ro
       - ./nginx/cloudflare-ips.conf:/etc/nginx/cloudflare-ips.conf:ro
+      - ./nginx/seo.conf:/etc/nginx/seo.conf:ro
       - ./site:/var/www/folego:ro
       - ./certs:/etc/ssl/folego:ro
     logging:

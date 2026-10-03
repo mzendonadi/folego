@@ -26,6 +26,8 @@ import * as billing from './billing.ts';
 import * as accountData from './account-data.ts';
 import * as referrals from './referrals.ts';
 import * as insights from './insights.ts';
+import { verifyTurnstile, turnstileEnabled } from './turnstile.ts';
+import { deepHealth } from './health.ts';
 import { eventSchema, recordEvent } from './admin/events.ts';
 import { publicCatalog } from './admin/manage.ts';
 import { refreshRuntime } from './runtime.ts';
@@ -126,9 +128,15 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const idParam = (value: unknown): string => uuidParam.parse(value);
 
   // ---------- rotas ----------
+  // Saúde "profunda" para o monitoramento externo: banco, worker, fila, webhooks, backup e disco. 503 = algo precisa de atenção.
+  app.get('/api/health/deep', async (_req, reply) => {
+    const h = await deepHealth(ctx);
+    return reply.status(h.ok ? 200 : 503).send(h);
+  });
   app.get('/api/health', async () => ({ ok: true, gateway: deps.gateway.name, db: deps.db.dialect, env: config.env }));
 
   app.post('/api/cases', { config: { rateLimit: { max: 12 * scale, timeWindow: '1 minute' } } }, async (req, reply) => {
+    await verifyTurnstile(config, req.headers['x-turnstile'], clientIp(req));
     const input = createCaseSchema.parse(req.body);
     const sessionId = await createSession(req, reply);
     const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null;
@@ -211,11 +219,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     return reply.status(204).send();
   });
 
-  app.get('/api/features', async () => ({ email: Boolean(deps.email), leads: config.leadsEnabled, subscriptions: config.subscriptionsEnabled && Boolean(deps.email), referrals: config.referralEnabled && Boolean(deps.email) }));
+  app.get('/api/features', async () => ({ email: Boolean(deps.email), leads: config.leadsEnabled, subscriptions: config.subscriptionsEnabled && Boolean(deps.email), referrals: config.referralEnabled && Boolean(deps.email), turnstileSiteKey: turnstileEnabled(config) ? config.turnstileSiteKey : null }));
 
 
   // Manda o link de acesso por e-mail. O endereço é usado para enviar e descartado (não é gravado).
   app.post('/api/orders/:id/email-link', { config: { rateLimit: { max: 5 * scale, timeWindow: '10 minutes' } } }, async (req) => {
+    await verifyTurnstile(config, req.headers['x-turnstile'], clientIp(req));
     const sessionId = await requireSession(req);
     const { email } = emailLinkSchema.parse(req.body);
     return svc.emailAccessLink(ctx, sessionId, idParam((req.params as { id: string }).id), email);
@@ -282,6 +291,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const requireSubscriber = async (req: FastifyRequest): Promise<string> => household.effectiveAccountId(ctx, await requireSelf(req));
 
   app.post('/api/account/login-code', { config: { rateLimit: { max: 5 * scale, timeWindow: '10 minutes' } } }, async (req) => {
+    await verifyTurnstile(config, req.headers['x-turnstile'], clientIp(req));
     const { email } = emailOnlySchema.parse(req.body);
     return sub.requestLoginCode(ctx, email);
   });

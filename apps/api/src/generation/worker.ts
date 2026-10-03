@@ -2,6 +2,7 @@ import type { Ctx } from '../services.ts';
 import { deliverPendingLeads } from '../leads.ts';
 import { maintenance } from '../subscriptions.ts';
 import { refreshRuntime } from '../runtime.ts';
+import { workerBeat } from '../health.ts';
 import { dispatchCampaigns } from '../admin/campaigns.ts';
 import { sendDueReminders } from '../account-extras.ts';
 import { sendWeeklyDigests } from '../account-debts.ts';
@@ -227,8 +228,13 @@ async function generateIncome(ctx: Ctx, opts: WorkerOptions, job: Claimed): Prom
 
 /** Laço do worker: processa até esvaziar a fila e dorme quando não há nada. */
 export async function runWorker(ctx: Ctx, opts: WorkerOptions, control: { stopped: boolean }, idleMs = 3000): Promise<void> {
+  let lastBeat = 0;
   while (!control.stopped) {
     let did = false;
+    if (Date.now() - lastBeat > 30_000) {
+      lastBeat = Date.now();
+      await workerBeat(ctx);
+    }
     await refreshRuntime(ctx.db, ctx.config); // lê de novo o que o dono mudou em Configurações (indicações, teto de e-mails etc.)
     try {
       did = await processNext(ctx, opts);

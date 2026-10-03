@@ -932,3 +932,7 @@ ul, ol { margin: 0; padding: 0; }
 .scn-legend { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .scn-key { display: inline-block; width: 22px; height: 0; border-top: 3px solid var(--primary); vertical-align: middle; }
 .scn-key-now { border-top: 2px dashed #8a948f; }
+
+/* Caixa do Turnstile (só aparece quando o Cloudflare pede interação) */
+.ts-box { position: fixed; inset: auto 0 16px 0; display: flex; justify-content: center; z-index: 9999; pointer-events: none; }
+.ts-box > * { pointer-events: auto; }

@@ -107,6 +107,10 @@ await copyVendorRuntime(path.join(dist, 'assets/vendor')); // ver função acima
 await copyFile(rel('assets/favicon.svg'), path.join(dist, 'assets/favicon.svg'));
 await copyFile(rel('assets/config.js'), path.join(dist, 'assets/config.js'));
 await copyFile(rel('robots.txt'), path.join(dist, 'robots.txt'));
+// Usados só quando SEO_OPEN=1 no servidor (deploy.sh troca o robots.txt e publica o sitemap).
+await copyFile(rel('robots-open.txt'), path.join(dist, 'robots-open.txt'));
+await copyFile(rel('sitemap.xml'), path.join(dist, 'sitemap.xml'));
+await copyFile(rel('assets/og-image.png'), path.join(dist, 'assets/og-image.png'));
 
 const css = await readFile(rel('assets/styles.css'));
 const cssHash = createHash('sha256').update(css).digest('hex').slice(0, 10);

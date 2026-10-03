@@ -1,0 +1,48 @@
+# Vigia o Fôlego de fora do servidor a cada 10 minutos. Se algo estiver errado, esta execução FALHA e o GitHub
+# manda e-mail ao dono do repositório ("Run failed"). Também dá para rodar na mão (Run workflow).
+# Confere: site no ar, API saudável, e a saúde profunda (/api/health/deep: banco, worker, fila de entregas,
+# webhooks de pagamento, e-book, backup recente e disco).
+
+name: Monitor
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: monitor
+  cancel-in-progress: true
+
+jobs:
+  vigiar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Conferir o site e a saúde
+        run: |
+          falhas=""
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 https://folego.online/ || echo 000)
+          [ "$code" = "200" ] || falhas="$falhas\n- Página inicial respondeu $code"
+          # duas tentativas: um engasgo isolado não deve acordar ninguém
+          for i in 1 2; do
+            code=$(curl -s -o "$RUNNER_TEMP/deep.json" -w '%{http_code}' --max-time 20 https://folego.online/api/health/deep || echo 000)
+            [ "$code" = "200" ] && break
+            sleep 20
+          done
+          if [ "$code" != "200" ]; then
+            falhas="$falhas\n- Saúde profunda respondeu $code"
+            if [ -s "$RUNNER_TEMP/deep.json" ]; then
+              detalhe=$(node -e "const j=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));for(const [k,v] of Object.entries(j.checks||{}))if(!v.ok)console.log('  * '+k+': '+v.detail)" "$RUNNER_TEMP/deep.json" 2>/dev/null || true)
+              falhas="$falhas\n$detalhe"
+            fi
+          fi
+          if [ -n "$falhas" ]; then
+            echo "::error::Fôlego com problema:"
+            printf "$falhas\n"
+            exit 1
+          fi
+          echo "Tudo certo."

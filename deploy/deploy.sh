@@ -64,6 +64,16 @@ mkdir -p "$DEPLOY/site"
 find "$DEPLOY/site" -mindepth 1 -delete
 tar -C "$ROOT/apps/web/dist" -cf - . | tar -C "$DEPLOY/site" -xf -
 printf "export const API_BASE = '/api';\nexport const DEV = false;\n" > "$DEPLOY/site/assets/config.js"
+# Indexação: SEO_OPEN=1 no .env abre o site aos buscadores (só no lançamento, com o Asaas real). Padrão: fechado.
+if grep -q '^SEO_OPEN=1' "$DEPLOY/.env"; then
+  mv "$DEPLOY/site/robots-open.txt" "$DEPLOY/site/robots.txt"
+  echo '# SEO_OPEN=1: indexacao liberada' > "$DEPLOY/nginx/seo.conf"
+  echo "    indexação: ABERTA"
+else
+  rm -f "$DEPLOY/site/robots-open.txt" "$DEPLOY/site/sitemap.xml"
+  echo 'add_header X-Robots-Tag "noindex, nofollow, noarchive" always;' > "$DEPLOY/nginx/seo.conf"
+  echo "    indexação: fechada (noindex)"
+fi
 chmod -R a+rX "$DEPLOY/site"
 
 echo "==> 5/6 Banco, API e Nginx (Docker Compose)"

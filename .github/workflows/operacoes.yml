@@ -1,0 +1,102 @@
+# Operações do servidor sem precisar de terminal: aba Actions → "Operações" → Run workflow → escolha a ação.
+# Ou: gh workflow run operacoes.yml --repo mzendonadi/folego -f acao=status
+# Usa os mesmos segredos/variáveis da publicação (VPS_SSH_KEY, VPS_HOST, VPS_PORT, VPS_USER, VPS_KNOWN_HOSTS).
+#
+# Ações:
+#   status               situação (containers, disco, backups, saúde)
+#   instalar_rotinas     liga o backup diário e o teste de restauração semanal (cron do servidor)
+#   backup_agora         faz um backup já; se existir o segredo BACKUP_PASSPHRASE, guarda uma cópia CRIPTOGRAFADA fora do servidor (artefato, 14 dias)
+#   testar_restauracao   restaura o último backup num banco temporário e compara com o real
+#   limpar_dados_de_teste  faz backup e APAGA clientes/pedidos/casos de teste (preserva configuração); exige confirmar=LIMPAR
+
+name: Operações
+
+on:
+  schedule:
+    - cron: '30 4 * * *' # backup diário com cópia criptografada fora do servidor (se BACKUP_PASSPHRASE existir)
+  workflow_dispatch:
+    inputs:
+      acao:
+        description: 'O que fazer'
+        required: true
+        type: choice
+        options: [status, instalar_rotinas, backup_agora, testar_restauracao, limpar_dados_de_teste]
+      confirmar:
+        description: 'Só para limpar_dados_de_teste: digite LIMPAR'
+        required: false
+        type: string
+
+concurrency:
+  group: producao
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  operar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Conferir confirmação
+        if: inputs.acao == 'limpar_dados_de_teste' && inputs.confirmar != 'LIMPAR'
+        run: |
+          echo "::error::Para limpar os dados de teste, digite LIMPAR no campo confirmar."
+          exit 1
+
+      - name: Preparar acesso SSH
+        env:
+          SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          KNOWN: ${{ vars.VPS_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN" > ~/.ssh/known_hosts
+
+      - name: Executar no servidor
+        env:
+          HOST: ${{ vars.VPS_HOST }}
+          PORT: ${{ vars.VPS_PORT }}
+          USER_: ${{ vars.VPS_USER }}
+          ACAO: ${{ inputs.acao || 'backup_agora' }}
+        run: |
+          SSH="ssh -i $HOME/.ssh/deploy_key -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=20 -p $PORT $USER_@$HOST"
+          case "$ACAO" in
+            status)               $SSH 'bash ~/folego/deploy/ops/status.sh' ;;
+            instalar_rotinas)     $SSH 'bash ~/folego/deploy/ops/install-cron.sh && bash ~/folego/deploy/ops/backup.sh' ;;
+            backup_agora)         $SSH 'bash ~/folego/deploy/ops/backup.sh' ;;
+            testar_restauracao)   $SSH 'bash ~/folego/deploy/ops/backup.sh && bash ~/folego/deploy/ops/restore-test.sh' ;;
+            limpar_dados_de_teste) $SSH 'bash ~/folego/deploy/ops/limpar-teste.sh LIMPAR' ;;
+          esac
+
+      - name: Há senha de backup externo?
+        id: ext
+        env:
+          PASS: ${{ secrets.BACKUP_PASSPHRASE }}
+          ACAO: ${{ inputs.acao || 'backup_agora' }}
+        run: |
+          if [ -n "$PASS" ] && { [ "$ACAO" = backup_agora ] || [ "$ACAO" = instalar_rotinas ]; }; then echo "usar=sim" >> "$GITHUB_OUTPUT"; else echo "usar=nao" >> "$GITHUB_OUTPUT"; fi
+      - name: Cópia criptografada fora do servidor
+        if: steps.ext.outputs.usar == 'sim'
+        env:
+          PASS: ${{ secrets.BACKUP_PASSPHRASE }}
+          HOST: ${{ vars.VPS_HOST }}
+          PORT: ${{ vars.VPS_PORT }}
+          USER_: ${{ vars.VPS_USER }}
+        run: |
+          SSH="ssh -i $HOME/.ssh/deploy_key -o StrictHostKeyChecking=yes -o BatchMode=yes -p $PORT $USER_@$HOST"
+          $SSH 'cat "$(ls -1t ~/backups/folego-*.sql.gz | head -n1)"' | gpg --batch --yes --pinentry-mode loopback --passphrase "$PASS" -c --cipher-algo AES256 -o "$RUNNER_TEMP/folego-backup.sql.gz.gpg"
+          ls -lh "$RUNNER_TEMP/folego-backup.sql.gz.gpg"
+
+      - name: Guardar o artefato criptografado
+        if: steps.ext.outputs.usar == 'sim'
+        uses: actions/upload-artifact@v4
+        with:
+          name: folego-backup-criptografado
+          path: ${{ runner.temp }}/folego-backup.sql.gz.gpg
+          retention-days: 14
+
+      - name: Apagar a chave do executor
+        if: always()
+        run: rm -f ~/.ssh/deploy_key

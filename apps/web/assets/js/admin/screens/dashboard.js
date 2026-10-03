@@ -4,7 +4,7 @@ import { el, brl, int, pct, duration, card, cardOpts, kpi, kpis, grid, table, ba
 
 export async function dashboardScreen(ctx) {
   const days = ctx.state.days;
-  const d = await api.dashboard(days);
+  const [d, saude] = await Promise.all([api.dashboard(days), api.saude().catch(() => null)]);
   const steps = d.funnel.steps;
   const step = (k) => steps.find((s) => s.key === k)?.count ?? 0;
   const ab = d.funnel.abandonment;
@@ -133,5 +133,17 @@ export async function dashboardScreen(ctx) {
 
   const ai = card('Uso de IA', kpis(kpi('Escritas pela IA', int(d.ai.ai)), kpi('Pelo modelo fixo', int(d.ai.template)), kpi('Tokens de entrada', int(d.ai.inputTokens)), kpi('Tokens de saída', int(d.ai.outputTokens))), el('p', { class: 'fine' }, 'Compare os tokens com o custo da sua conta Anthropic para saber quanto a IA custa por entrega.'));
 
-  return el('div', { class: 'bo-stack' }, head, top, grid(2, funnel, aband), byDay, grid(2, products, methods), subs, profile, traffic, timing, ai);
+  return el('div', { class: 'bo-stack' }, head, saudeCard(saude), top, grid(2, funnel, aband), byDay, grid(2, products, methods), subs, profile, traffic, timing, ai);
+}
+
+const SAUDE = { banco: 'Banco de dados', worker: 'Worker (entregas em segundo plano)', fila: 'Fila de entregas', webhooks: 'Eventos de pagamento', ebook: 'Envio do e-book', backup: 'Backup', disco: 'Disco do servidor' };
+
+/** Semáforo do sistema: o mesmo que o monitor externo confere a cada 10 minutos (e avisa por e-mail se algo falhar). */
+function saudeCard(s) {
+  if (!s) return null;
+  return card(
+    s.ok ? 'Sistema saudável' : 'Atenção: algo precisa de cuidado',
+    el('ul', { class: 'bo-saude' }, ...Object.entries(s.checks).map(([k, c]) => el('li', {}, badge(c.ok ? 'ok' : 'atenção', c.ok ? 'ok' : 'bad'), ' ', el('strong', {}, SAUDE[k] ?? k), el('span', { class: 'muted' }, ' — ' + c.detail)))),
+    cardOpts({ sub: 'Monitor externo roda a cada 10 minutos.' }),
+  );
 }

@@ -231,6 +231,12 @@ export function registerGestao(app: FastifyInstance, deps: AdminRouteDeps): void
     return { ok: true, to: a.email };
   });
 
+  app.get(`${P}/saude`, async (req) => {
+    await admin(req, 'dashboard');
+    const { deepHealth } = await import('../health.ts');
+    return deepHealth(ctx);
+  });
+
   // ---------- indicadores econômicos (Banco Central) ----------
   app.get(`${P}/mercado`, async (req) => {
     await admin(req, 'config_site');

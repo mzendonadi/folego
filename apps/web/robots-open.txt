@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /gestao
+Disallow: /gest%C3%A3o
+Disallow: /api/
+
+Sitemap: https://folego.online/sitemap.xml

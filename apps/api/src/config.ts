@@ -55,6 +55,9 @@ export interface Config {
   canceledPurgeDays: number;
   /** Programa de indicações (convites por e-mail e desconto para assinantes). */
   referralEnabled: boolean;
+  /** Cloudflare Turnstile (anti-robô). Sem as duas chaves fica desligado. */
+  turnstileSiteKey: string | null;
+  turnstileSecret: string | null;
   /** Desconto (%) na próxima fatura por indicação que assina. */
   referralDiscountPct: number;
 }
@@ -120,6 +123,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     campaignDailyCap: 200,
     canceledPurgeDays: 15,
     referralEnabled: true,
+    turnstileSiteKey: env.TURNSTILE_SITE_KEY ? env.TURNSTILE_SITE_KEY : null,
+    turnstileSecret: env.TURNSTILE_SECRET ? env.TURNSTILE_SECRET : null,
     referralDiscountPct: 10,
   };
 }

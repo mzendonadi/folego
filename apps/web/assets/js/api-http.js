@@ -1,5 +1,6 @@
 // Cliente HTTP do back-end real (apps/api). O resultado completo só chega depois do pagamento confirmado.
 import { API_BASE } from '../config.js';
+import { turnstileHeaders } from './turnstile.js';
 
 class ApiError extends Error {
   constructor(message, status, code, issues) {
@@ -10,6 +11,17 @@ class ApiError extends Error {
     this.issues = issues;
   }
 }
+
+let siteKeyP = null;
+/** Chave pública do Turnstile (null = desligado). Uma consulta só por carregamento da página. */
+function turnstileKey() {
+  siteKeyP ??= fetch(`${API_BASE}/features`, { credentials: 'same-origin', headers: { 'x-folego': '1' } })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((j) => j?.turnstileSiteKey ?? null)
+    .catch(() => null);
+  return siteKeyP;
+}
+const guard = async () => turnstileHeaders(await turnstileKey());
 
 async function request(method, path, { body, headers } = {}) {
   const res = await fetch(`${API_BASE}${path}`, {
@@ -27,7 +39,7 @@ async function request(method, path, { body, headers } = {}) {
 export async function createCase(input) {
   // O servidor define "hoje" e os ids; o cliente manda só o que o usuário informou + o aceite dos termos.
   const debts = input.debts.map(({ id, ...debt }) => debt);
-  return request('POST', '/cases', { body: { profile: input.profile, debts, acceptTerms: true } });
+  return request('POST', '/cases', { body: { profile: input.profile, debts, acceptTerms: true }, headers: await guard() });
 }
 
 export async function createOrder({ caseId, products }) {
@@ -49,11 +61,11 @@ export async function getFeatures() {
 }
 
 export async function emailAccessLink(orderId, email) {
-  return request('POST', `/orders/${orderId}/email-link`, { body: { email } });
+  return request('POST', `/orders/${orderId}/email-link`, { body: { email }, headers: await guard() });
 }
 
 export async function requestLoginCode(email) {
-  return request('POST', '/account/login-code', { body: { email } });
+  return request('POST', '/account/login-code', { body: { email }, headers: await guard() });
 }
 export async function loginWithCode(email, code) {
   return request('POST', '/account/login', { body: { email, code } });

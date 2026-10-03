@@ -184,3 +184,6 @@
 .bo-mini { width: 100%; border-collapse: collapse; font-size: .9rem; }
 .bo-mini th, .bo-mini td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
 .bo-mini td.num, .bo-mini th.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+.bo-saude { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.bo-saude li { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
