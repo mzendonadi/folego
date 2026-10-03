@@ -211,6 +211,8 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
         if (id === 'lancamentos') ctx.wallets = await ctx.api.getWallets().catch(() => null);
         if (id === 'coach') ctx.overview = await api.getCoachOverview();
         if (id === 'mercado') ctx.market = await api.getMarket();
+        if (id === 'cobrancas') ctx.recurring = await api.getRecurring();
+        if (id === 'cenarios' && ctx.has('scenarios')) ctx.scenarioBase = await api.getScenarioBase();
         if (id === 'indicar') ctx.referrals = await api.getReferrals();
         if (id === 'familia') ctx.household = await api.getHousehold();
         if (id === 'dividas') ctx.debts = await ctx.api.getDebts(ctx.debtExtra ?? 0);

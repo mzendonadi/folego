@@ -913,3 +913,22 @@ ul, ol { margin: 0; padding: 0; }
 .plan-card { display: flex; flex-direction: column; gap: var(--s3); }
 .plan-card .tick-list { flex: 1 1 auto; }
 .plan-card > .btn { margin-top: auto; width: 100%; min-height: 52px; justify-content: center; }
+
+/* Cobranças recorrentes e E se...? */
+.rec-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(120px, 150px); gap: var(--s3); align-items: center; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.rec-row.is-cancel .rec-main strong { text-decoration: line-through; opacity: .7; }
+.rec-main p { margin: 2px 0 0; }
+.rec-flags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.rec-money { display: grid; text-align: right; }
+@media (max-width: 640px) { .rec-row { grid-template-columns: 1fr auto; } .rec-row select { grid-column: 1 / -1; } }
+.scn-form { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+.scn-pair { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: var(--s2); }
+.scn-base { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--s3); margin: 0 0 var(--s3); }
+.scn-base dt { font-size: .8125rem; color: var(--muted); }
+.scn-base dd { margin: 0 0 var(--s2); font-weight: 700; font-size: 1.1rem; }
+.scn-out { display: grid; gap: var(--s4); }
+.scn-verdict { margin: 0; font-size: 1.1rem; }
+.scn-chart { width: 100%; height: auto; max-height: 240px; color: var(--ink); }
+.scn-legend { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.scn-key { display: inline-block; width: 22px; height: 0; border-top: 3px solid var(--primary); vertical-align: middle; }
+.scn-key-now { border-top: 2px dashed #8a948f; }

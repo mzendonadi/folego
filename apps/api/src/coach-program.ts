@@ -66,6 +66,7 @@ export async function loadCoachFacts(ctx: Ctx, subscriberId: string): Promise<{ 
     debtPayments7: num(pay7.rows[0]?.n ?? 0),
     goalContribs7: num(gc7.rows[0]?.n ?? 0),
     streakDays: streak,
+    recurringFlags: num((await q.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.recurring_flags WHERE subscriber_id = $1`, [subscriberId])).rows[0]?.n ?? 0),
   };
   return { facts, openRatesBps: open.map((x) => x.monthlyRateBps) };
 }

@@ -478,3 +478,48 @@ test('conta compartilhada: titular convida, o convidado aceita e usa os mesmos d
   assert.equal((await partner('GET', `/api/account/month/${today.slice(0, 7)}`)).status, 402);
   assert.equal((await owner('DELETE', '/api/account/household/member')).status, 404, 'ao sair, o vínculo some');
 });
+
+test('cobranças recorrentes (todos os planos) e cenários "e se...?" (só Ousado e Desbravador)', async () => {
+  const c = client();
+  await login(c, 'recorrente@exemplo.com');
+  const o = await c('POST', '/api/account/subscription-order', { body: { plan: 'controle' }, headers: { 'idempotency-key': 'sub-recor-00001' } });
+  await pay(o.json.orderId, 'sub-recor1');
+  const mes = (n: number) => { const d = new Date(); d.setUTCDate(5); d.setUTCMonth(d.getUTCMonth() - n); return d.toISOString().slice(0, 10); };
+  const entries = [
+    ...[3, 2, 1].map((n) => ({ date: mes(n), amountCents: -3990, note: 'NETFLIX 05/' + n })),
+    { date: mes(0), amountCents: -4990, note: 'NETFLIX' },
+    ...[3, 2, 1, 0].map((n) => ({ date: mes(n), amountCents: -11900, note: 'ACADEMIA SMART' })),
+    { date: mes(0), amountCents: 500000, note: 'Salario' },
+    { date: mes(0), amountCents: -120000, note: 'Aluguel' },
+  ];
+  await c('POST', '/api/account/entries', { body: { entries } });
+
+  const r = (await c('GET', '/api/account/recurring')).json;
+  const netflix = r.items.find((i: any) => i.key === 'NETFLIX');
+  assert.ok(netflix, 'achou a assinatura');
+  assert.equal(netflix.priceChange.pct, 25);
+  assert.equal(r.alerts.priceIncreases, 1);
+  assert.ok(r.items.some((i: any) => i.key.startsWith('ACADEMIA')));
+  assert.equal(r.savings.count, 0);
+  assert.equal((await c('PUT', '/api/account/recurring/NETFLIX', { body: { status: 'cancel' } })).status, 200);
+  const r2 = (await c('GET', '/api/account/recurring')).json;
+  assert.equal(r2.items.find((i: any) => i.key === 'NETFLIX').decision, 'cancel');
+  assert.equal(r2.savings.yearlyCents, 4990 * 12);
+  assert.equal((await c('PUT', '/api/account/recurring/NETFLIX', { body: { status: 'nao-existe' } })).status, 400);
+  assert.equal((await c('PUT', '/api/account/recurring/NETFLIX', { body: { status: null } })).status, 200);
+
+  assert.equal((await c('GET', '/api/account/scenario-base')).status, 403, 'Controle não tem o simulador');
+
+  const d = client();
+  await login(d, 'cenarios@exemplo.com');
+  const o2 = await d('POST', '/api/account/subscription-order', { body: { plan: 'ousado' }, headers: { 'idempotency-key': 'sub-cenar-00001' } });
+  await pay(o2.json.orderId, 'sub-cenar1');
+  await d('POST', '/api/account/entries', { body: { entries: [{ date: mes(0), amountCents: 400000, note: 'Salario' }, { date: mes(0), amountCents: -150000, note: 'Aluguel' }, { date: mes(0), amountCents: -50000, note: 'Mercado' }, { date: mes(0), amountCents: -30000, note: 'Cinema e restaurante' }] } });
+  await d('POST', '/api/account/debts', { body: { name: 'Cartão', balanceCents: 200000, monthlyRateBps: 1000, minPaymentCents: 20000 } });
+  const base = (await d('GET', '/api/account/scenario-base')).json;
+  assert.equal(base.base.incomeCents, 400000);
+  assert.ok(base.base.essentialCents >= 200000);
+  assert.ok(base.base.flexibleCents >= 0);
+  assert.equal(base.base.debtPaymentsCents, 20000);
+  assert.equal((await d('GET', '/api/account/recurring')).status, 200, 'Ousado também tem as cobranças');
+});

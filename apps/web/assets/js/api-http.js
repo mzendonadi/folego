@@ -275,3 +275,12 @@ export async function getReferrals() {
 export async function inviteSubscriberFriend({ friendEmail }) {
   return request('POST', '/account/referrals', { body: { email: friendEmail } });
 }
+export async function getRecurring() {
+  return request('GET', '/account/recurring');
+}
+export async function setRecurringDecision(key, status) {
+  return request('PUT', `/account/recurring/${encodeURIComponent(key)}`, { body: { status } });
+}
+export async function getScenarioBase() {
+  return request('GET', '/account/scenario-base');
+}

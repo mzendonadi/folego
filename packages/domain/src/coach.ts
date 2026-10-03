@@ -31,6 +31,7 @@ export interface CoachFacts {
   debtPayments7: number; // pagamentos de dívida nos últimos 7 dias
   goalContribs7: number; // aportes em metas nos últimos 7 dias
   streakDays: number; // dias seguidos com lançamento (termina hoje ou ontem)
+  recurringFlags?: number; // cobranças recorrentes que a pessoa já revisou (manter/cancelar)
 }
 
 // ---------------------------------------------------------------------------
@@ -104,6 +105,7 @@ export const PROGRAMS: Program[] = [
       { id: 'o2', text: 'Defina limite para pelo menos 3 categorias', why: 'O limite transforma "acho que gastei muito" em um alerta de verdade.', done: (f) => f.limitsCount >= 3, tab: 'orcamento' },
       { id: 'o3', text: 'Crie lembretes das suas 3 contas fixas', why: 'Conta atrasada vira multa e juros. O lembrete custa 30 segundos.', done: (f) => f.remindersCount >= 3, tab: 'lembretes' },
       { id: 'o4', text: 'Feche o mês gastando menos do que ganhou', why: 'Sobrar dinheiro, mesmo pouco, é o que financia todo o resto.', done: (f) => f.incomeCents > 0 && f.spentCents < f.incomeCents, tab: 'geral' },
+      { id: 'o5', text: 'Revise suas cobranças recorrentes e marque o que vai cancelar', why: 'Assinaturas esquecidas custam por ano o que dava para virar reserva.', done: (f) => (f.recurringFlags ?? 0) >= 1, tab: 'cobrancas' },
     ],
   },
   {

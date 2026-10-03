@@ -25,10 +25,11 @@ import * as household from './household.ts';
 import * as billing from './billing.ts';
 import * as accountData from './account-data.ts';
 import * as referrals from './referrals.ts';
+import * as insights from './insights.ts';
 import { eventSchema, recordEvent } from './admin/events.ts';
 import { publicCatalog } from './admin/manage.ts';
 import { refreshRuntime } from './runtime.ts';
-import { accessSchema, addEntriesSchema, cancelSchema, contributionSchema, createCaseSchema, entryWalletSchema, accountDebtSchema, accountDebtPatchSchema, debtPaymentSchema, monthLimitSchema, plannerSchema, objectiveSchema, inviteSchema, checkoutSchema, profileSchema, referralLeadSchema, referralInviteSchema, reminderPatchSchema, reminderSchema, walletSchema, createOrderSchema, emailLinkSchema, emailOnlySchema, goalSchema, incomeInterviewSchema, leadSchema, loginCodeSchema, newPartnerSchema, partnerLoginSchema, partnerStatusSchema, setCategorySchema, setLimitSchema, simulateSchema, subscriptionOrderSchema, toggleIncomeTaskSchema, translationSchema, uuidParam } from './schemas.ts';
+import { accessSchema, addEntriesSchema, cancelSchema, contributionSchema, createCaseSchema, entryWalletSchema, accountDebtSchema, accountDebtPatchSchema, debtPaymentSchema, monthLimitSchema, plannerSchema, objectiveSchema, inviteSchema, checkoutSchema, profileSchema, referralLeadSchema, referralInviteSchema, recurringDecisionSchema, reminderPatchSchema, reminderSchema, walletSchema, createOrderSchema, emailLinkSchema, emailOnlySchema, goalSchema, incomeInterviewSchema, leadSchema, loginCodeSchema, newPartnerSchema, partnerLoginSchema, partnerStatusSchema, setCategorySchema, setLimitSchema, simulateSchema, subscriptionOrderSchema, toggleIncomeTaskSchema, translationSchema, uuidParam } from './schemas.ts';
 import { CSP } from './security.ts';
 import * as svc from './services.ts';
 import type { Ctx } from './services.ts';
@@ -348,6 +349,13 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     await referrals.inviteBySubscriber(ctx, await requireSelf(req), referralInviteSchema.parse(req.body).email);
     return reply.status(204).send();
   });
+  // Cobranças recorrentes (todos os planos) e base do simulador "e se...?" (Ousado e Desbravador).
+  app.get('/api/account/recurring', async (req) => insights.recurringReport(ctx, await requireSubscriber(req)));
+  app.put('/api/account/recurring/:key', async (req) => {
+    await insights.setRecurringDecision(ctx, await requireSubscriber(req), decodeURIComponent((req.params as { key: string }).key), recurringDecisionSchema.parse(req.body).status);
+    return { ok: true };
+  });
+  app.get('/api/account/scenario-base', async (req) => insights.scenarioBase(ctx, await requireSubscriber(req)));
   // Perfil e preferências de notificação.
   app.put('/api/account/profile', async (req) => {
     const selfId = await requireSelf(req);

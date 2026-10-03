@@ -26,3 +26,7 @@ export { weeklyChallenges, weekIndexOf, compareMonths } from './coach.ts';
 export type { Challenge, MonthComparison, CategoryChange } from './coach.ts';
 export { OBJECTIVES, goalTemplates } from './coach.ts';
 export type { GoalTemplate } from './coach.ts';
+export { detectRecurring, merchantKey } from './recurring.ts';
+export type { RecurringEntry, RecurringItem, RecurringReport, Cadence } from './recurring.ts';
+export { simulateScenario, SCENARIO_PRESETS, DEFAULT_CHANGE } from './scenario.ts';
+export type { ScenarioBase, ScenarioChange, ScenarioResult, ScenarioMonth } from './scenario.ts';

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { weeklyChallenges, compareMonths, healthScore, evaluatePrograms, applyMethods, marketInsights, annualFromMonthlyPct } from '../src/coach.ts';
 import type { CoachFacts, Indicators } from '../src/coach.ts';
 
-const base: CoachFacts = { incomeCents: 500_000, spentCents: 400_000, avgMonthlySpendCents: 400_000, daysLogged7: 5, daysLogged14: 10, limitsCount: 3, overLimitCount: 0, remindersCount: 3, walletsCount: 1, goalsCount: 1, goalContributions: 2, savedCents: 800_000, debtsCount: 0, openDebtsCount: 0, paidOffCount: 0, debtPaymentsCount: 0, debtOwedCents: 0, debtInitialCents: 0, debtMinPaymentsCents: 0, expensiveDebtsOpen: 0, debtPayments7: 0, goalContribs7: 1, streakDays: 3 };
+const base: CoachFacts = { incomeCents: 500_000, spentCents: 400_000, avgMonthlySpendCents: 400_000, daysLogged7: 5, daysLogged14: 10, limitsCount: 3, overLimitCount: 0, remindersCount: 3, walletsCount: 1, goalsCount: 1, goalContributions: 2, savedCents: 800_000, debtsCount: 0, openDebtsCount: 0, paidOffCount: 0, debtPaymentsCount: 0, debtOwedCents: 0, debtInitialCents: 0, debtMinPaymentsCents: 0, expensiveDebtsOpen: 0, debtPayments7: 0, goalContribs7: 1, streakDays: 3, recurringFlags: 1 };
 
 test('saúde: pessoa organizada, com reserva de 2 meses e sem dívida, passa de 60; quem gasta mais do que ganha e deve caro fica crítico', () => {
   const good = healthScore(base);

@@ -133,6 +133,7 @@ export const debtPaymentSchema = z.object({
 });
 export const objectiveSchema = z.object({ objective: z.enum(['organizar', 'sair_do_vermelho', 'reserva', 'investir']) });
 export const inviteSchema = z.object({ email: z.string().trim().toLowerCase().email().max(200) });
+export const recurringDecisionSchema = z.object({ status: z.enum(['keep', 'cancel']).nullable() });
 export const plannerSchema = z.object({ question: z.string().trim().min(5).max(500) });
 export const monthLimitSchema = z.object({ limitCents: z.number().int().positive().max(100_000_000_00).nullable() });
 export const setLimitSchema = z.object({ limitCents: z.number().int().positive().max(100_000_000_00).nullable() });
