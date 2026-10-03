@@ -7,6 +7,7 @@ import { sendDueReminders } from '../account-extras.ts';
 import { sendWeeklyDigests } from '../account-debts.ts';
 import { refreshMarket } from '../market.ts';
 import { sendWelcomes } from '../coach-program.ts';
+import { purgeCanceledExpired } from '../account-data.ts';
 import type { DebtInput, Diagnosis, IncomeInterview, Profile } from '../engine.ts';
 import { buildIncomeFacts } from '../engine.ts';
 import { buildFacts } from './facts.ts';
@@ -236,6 +237,7 @@ export async function runWorker(ctx: Ctx, opts: WorkerOptions, control: { stoppe
       if (await dispatchCampaigns(ctx, opts.log ? { log: opts.log } : {})) did = true;
       if ((await sendDueReminders(ctx, opts.log ? { log: opts.log } : {})) > 0) did = true;
       if ((await sendWeeklyDigests(ctx, opts.log ? { log: opts.log } : {})) > 0) did = true;
+      if ((await purgeCanceledExpired(ctx, opts.log ? { log: opts.log } : {})) > 0) did = true;
       if ((await sendWelcomes(ctx, opts.log ? { log: opts.log } : {})) > 0) did = true;
       if ((await refreshMarket(ctx, opts.log ? { log: opts.log } : {})) > 0) did = true;
       await maintenance(ctx, opts.log ? { log: opts.log } : {});

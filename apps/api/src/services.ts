@@ -1,3 +1,4 @@
+import { handleBillingEvent, registerRenewal } from './billing.ts';
 import type { Config } from './config.ts';
 import type { Db, Queryable } from './db.ts';
 import type { PaymentGateway } from './gateway.ts';
@@ -257,6 +258,7 @@ export async function handleWebhook(ctx: Ctx, headers: Record<string, string | s
   const parsed = ctx.gateway.parseWebhook(headers, body);
   if (parsed.kind === 'invalid') return 'invalid_signature';
   if (parsed.kind === 'ignore') return 'ignored';
+  if (parsed.kind === 'billing') return handleBillingEvent(ctx, parsed.event);
   const event = parsed.event;
 
   const inserted = await ctx.db.query<{ id: string }>(
@@ -278,7 +280,12 @@ export async function handleWebhook(ctx: Ctx, headers: Record<string, string | s
 
   // Não confiamos no corpo do webhook: perguntamos ao provedor e conferimos o VALOR pago.
   const known = await ctx.db.query<{ amount_cents: string }>(`SELECT amount_cents FROM app.payments WHERE provider = $1 AND provider_payment_id = $2`, [ctx.gateway.name, event.providerPaymentId]);
-  const expected = known.rows[0];
+  let expected: { amount_cents: string } | undefined = known.rows[0];
+  if (!expected && event.providerSubscriptionId) {
+    // Mensalidade nova de uma assinatura no cartão: o provedor avisa e nós registramos a cobrança.
+    const value = await registerRenewal(ctx, event);
+    if (value) expected = { amount_cents: String(value) };
+  }
   let outcome: WebhookOutcome = 'ignored';
   if (expected) {
     const status = await ctx.gateway.getPaymentStatus(event.providerPaymentId, num(expected.amount_cents));

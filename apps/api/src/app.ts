@@ -22,10 +22,12 @@ import * as debts from './account-debts.ts';
 import { askPlanner } from './planner.ts';
 import * as program from './coach-program.ts';
 import * as household from './household.ts';
+import * as billing from './billing.ts';
+import * as accountData from './account-data.ts';
 import { eventSchema, recordEvent } from './admin/events.ts';
 import { publicCatalog } from './admin/manage.ts';
 import { refreshRuntime } from './runtime.ts';
-import { accessSchema, addEntriesSchema, cancelSchema, contributionSchema, createCaseSchema, entryWalletSchema, accountDebtSchema, accountDebtPatchSchema, debtPaymentSchema, monthLimitSchema, plannerSchema, objectiveSchema, inviteSchema, reminderPatchSchema, reminderSchema, walletSchema, createOrderSchema, emailLinkSchema, emailOnlySchema, goalSchema, incomeInterviewSchema, leadSchema, loginCodeSchema, newPartnerSchema, partnerLoginSchema, partnerStatusSchema, setCategorySchema, setLimitSchema, simulateSchema, subscriptionOrderSchema, toggleIncomeTaskSchema, translationSchema, uuidParam } from './schemas.ts';
+import { accessSchema, addEntriesSchema, cancelSchema, contributionSchema, createCaseSchema, entryWalletSchema, accountDebtSchema, accountDebtPatchSchema, debtPaymentSchema, monthLimitSchema, plannerSchema, objectiveSchema, inviteSchema, checkoutSchema, profileSchema, reminderPatchSchema, reminderSchema, walletSchema, createOrderSchema, emailLinkSchema, emailOnlySchema, goalSchema, incomeInterviewSchema, leadSchema, loginCodeSchema, newPartnerSchema, partnerLoginSchema, partnerStatusSchema, setCategorySchema, setLimitSchema, simulateSchema, subscriptionOrderSchema, toggleIncomeTaskSchema, translationSchema, uuidParam } from './schemas.ts';
 import { CSP } from './security.ts';
 import * as svc from './services.ts';
 import type { Ctx } from './services.ts';
@@ -284,7 +286,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.get('/api/account', async (req) => household.accountViewFor(ctx, await requireSelf(req)));
   app.delete('/api/account', async (req, reply) => {
     const sessionId = await requireSession(req);
-    await sub.deleteAccount(ctx, sessionId, await requireSelf(req));
+    await accountData.purgeSubscriber(ctx, await requireSelf(req), `session:${sessionId}`);
     return reply.status(204).send();
   });
 
@@ -297,10 +299,46 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     const { plan } = subscriptionOrderSchema.parse(req.body);
     return reply.status(201).send(await sub.createSubscriptionOrder(ctx, { sessionId, subscriberId, plan, idempotencyKey: key }));
   });
+  // Assinatura mensal no cartão de crédito (Asaas): a pessoa aceita os termos e digita o cartão na página segura do provedor.
+  app.post('/api/account/subscription-checkout', { config: { rateLimit: { max: 6 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => {
+    const selfId = await requireSelf(req);
+    await household.assertNotMember(ctx, selfId);
+    const { plan, acceptTerms } = checkoutSchema.parse(req.body);
+    return reply.status(201).send(await billing.startCardCheckout(ctx, { subscriberId: selfId, plan, acceptTerms }));
+  });
   app.post('/api/account/subscription-cancel', async (req) => {
     const { cancel } = cancelSchema.parse(req.body);
-    await sub.setCancel(ctx, await requireSelf(req), cancel);
+    const selfId = await requireSelf(req);
+    await household.assertNotMember(ctx, selfId);
+    if (await billing.hasCardProfile(ctx, selfId)) {
+      if (!cancel) throw new AppError(409, 'resubscribe', 'Para voltar, assine de novo depois do fim do mês já pago.');
+      const out = await billing.cancelCardSubscription(ctx, selfId);
+      const who = await accountViewForCancel(selfId);
+      await billing.cancelEmail(ctx, who, new Date(out.accessUntil).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }));
+      return { ok: true, accessUntil: out.accessUntil, purgeDays: ctx.config.canceledPurgeDays };
+    }
+    await sub.setCancel(ctx, selfId, cancel);
     return { ok: true };
+  });
+  const accountViewForCancel = async (id: string) => (await sub.accountView(ctx, id)).email;
+  // Exportação dos dados da própria pessoa (enquanto tem acesso, inclusive depois de cancelar, até o fim do mês pago).
+  app.get('/api/account/export', async (req) => accountData.accountReport(ctx, await requireSubscriber(req)));
+  app.get('/api/account/export.xlsx', async (req, reply) => {
+    const buf = await accountData.accountXlsx(ctx, await requireSubscriber(req));
+    reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    reply.header('Content-Disposition', `attachment; filename="prumo-meus-dados-${new Date().toISOString().slice(0, 10)}.xlsx"`);
+    reply.header('Cache-Control', 'no-store');
+    return reply.send(buf);
+  });
+  // Perfil e preferências de notificação.
+  app.put('/api/account/profile', async (req) => {
+    const selfId = await requireSelf(req);
+    const p = profileSchema.parse(req.body);
+    if (p.displayName !== undefined) await ctx.db.query(`UPDATE app.subscribers SET display_name = $2 WHERE id = $1`, [selfId, p.displayName && p.displayName.length ? p.displayName : null]);
+    if (p.notifyDigest !== undefined) await ctx.db.query(`UPDATE app.subscribers SET notify_digest = $2 WHERE id = $1`, [selfId, p.notifyDigest]);
+    if (p.notifyReminders !== undefined) await ctx.db.query(`UPDATE app.subscribers SET notify_reminders = $2 WHERE id = $1`, [selfId, p.notifyReminders]);
+    if (p.marketing !== undefined) await ctx.db.query(`UPDATE app.subscribers SET marketing_opt_out_at = CASE WHEN $2 THEN NULL ELSE coalesce(marketing_opt_out_at, now()) END WHERE id = $1`, [selfId, p.marketing]);
+    return (await household.accountViewFor(ctx, selfId)).profile;
   });
 
   app.get('/api/account/month/:month', async (req) => sub.monthView(ctx, await requireSubscriber(req), (req.params as { month: string }).month));
@@ -451,12 +489,28 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     app.post('/api/dev/pay/:orderId', async (req) => {
       const sessionId = await requireSession(req);
       const orderId = idParam((req.params as { orderId: string }).orderId);
-      await svc.getOrder(ctx, sessionId, orderId); // garante que o pedido é desta sessão
+      const selfSub = await sub.subscriberOf(ctx, sessionId);
+      const own = selfSub ? await deps.db.query(`SELECT 1 FROM app.orders WHERE id = $1 AND subscriber_id = $2`, [orderId, selfSub]) : { rows: [] };
+      if (own.rows.length === 0) await svc.getOrder(ctx, sessionId, orderId); // garante que o pedido é desta sessão (ou da conta logada)
       const pay = await deps.db.query<{ provider_payment_id: string }>(`SELECT provider_payment_id FROM app.payments WHERE order_id = $1 ORDER BY created_at DESC LIMIT 1`, [orderId]);
       const paymentId = pay.rows[0]?.provider_payment_id;
       if (!paymentId) throw notFound();
       fake.markPaid(paymentId);
       const outcome = await svc.handleWebhook(ctx, { 'x-webhook-secret': config.webhookSecret }, { eventId: `evt_${randomUUID()}`, paymentId });
+      return { ok: true, outcome };
+    });
+  }
+
+  if (deps.gateway instanceof FakeGateway) {
+    const fake = deps.gateway;
+    // Só desenvolvimento: faz o papel do cartão renovando a mensalidade (webhook de uma cobrança nova da assinatura).
+    app.post('/api/dev/renew', async (req) => {
+      const selfId = await requireSelf(req);
+      const bp = await deps.db.query<{ provider_subscription_id: string }>(`SELECT provider_subscription_id FROM app.billing_profiles WHERE subscriber_id = $1 AND status <> 'pending'`, [selfId]);
+      if (!bp.rows[0]) throw notFound();
+      const paymentId = fake.newRenewalPayment();
+      fake.markPaid(paymentId);
+      const outcome = await svc.handleWebhook(ctx, { 'x-webhook-secret': config.webhookSecret }, { eventId: `evt_${randomUUID()}`, paymentId, subscriptionId: bp.rows[0].provider_subscription_id });
       return { ok: true, outcome };
     });
   }

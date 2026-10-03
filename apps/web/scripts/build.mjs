@@ -27,6 +27,7 @@ await build({
     engine: path.resolve(root, '../../packages/domain/src/index.ts'),
     qr: rel('scripts/qr-entry.mjs'),
     pdf: rel('scripts/pdf-entry.mjs'),
+    report: rel('scripts/report-entry.mjs'),
     pdfread: rel('scripts/pdf-read-entry.mjs'),
     pdfworker: rel('node_modules/pdfjs-dist/build/pdf.worker.mjs'),
     ocr: rel('scripts/ocr-entry.mjs'),

@@ -6,6 +6,7 @@ import { moneyInput } from './money.js';
 import { confirmDialog } from './confirm.js';
 import { viewCarteiras, viewLembretes, viewDividas, viewFamilia } from './account-extras-views.js';
 import { viewCoach, viewMercado } from './account-coach-views.js';
+import { viewPlano as viewPlanoBilling, viewPerfil } from './account-billing.js';
 import { PLANS, CATEGORIES, CATEGORY_LABEL, categorize, parseExtract } from '../vendor/engine.js';
 
 export const FEATURE_LABEL = { ledger: 'Controle de gastos', import: 'Importar extrato', alerts: 'Alertas de limite', coach_limited: 'Treinador (3 dicas)', goals: 'Metas com aportes', coach: 'Treinador completo', simulator: 'Simulador de investimento', planner: 'Planejador com IA', household: 'Conta compartilhada com uma pessoa', journeys: 'Todas as jornadas do coach', market: 'Cenário econômico (Selic, inflação, CDI)', market_pro: 'Dólar e histórico de 12 meses' };
@@ -25,7 +26,8 @@ export const TABS = [
   { id: 'treinador', label: 'Treinador', group: 'Inteligência' },
   { id: 'simulador', label: 'Simulador', needs: 'simulator', group: 'Inteligência' },
   { id: 'familia', label: 'Compartilhar', needs: 'household', group: 'Conta' },
-  { id: 'plano', label: 'Plano', group: 'Conta' },
+  { id: 'perfil', label: 'Perfil', group: 'Conta' },
+  { id: 'plano', label: 'Plano e dados', group: 'Conta' },
 ];
 
 const card = (...c) => el('section', { class: 'card d-section' }, ...c.filter(Boolean));
@@ -495,66 +497,7 @@ export function viewSimulador(ctx) {
 }
 
 // ---------------------------------------------------------------- Plano (renovar, trocar, cancelar, sair, apagar)
-export function viewPlano(ctx) {
-  const { acc, plan } = ctx;
-  const end = acc.subscription.periodEnd;
-  const days = Math.max(0, Math.ceil((end - Date.now()) / 86_400_000));
-  const cancelAt = acc.subscription.cancelAtPeriodEnd;
-
-  const renew = el('button', { class: 'btn btn-primary', type: 'button' }, `Renovar por mais 30 dias · ${brl(plan.priceCents)}`, icon('arrow-right'));
-  renew.addEventListener('click', () => ctx.startPix(plan));
-
-  const others = PLANS.filter((p) => p.code !== plan.code).map((p) => {
-    const up = p.priceCents > plan.priceCents;
-    const b = el('button', { class: up ? 'btn btn-secondary' : 'btn btn-quiet', type: 'button' }, `${up ? 'Passar para' : 'Trocar para'} ${p.name} · ${brl(p.priceCents)}`);
-    b.addEventListener('click', () => ctx.startPix(p));
-    return el(
-      'article', { class: 'plan-opt' },
-      el('h3', {}, p.name), el('p', { class: 'muted' }, p.tagline),
-      el('ul', { class: 'bullets' }, ...p.features.map((f) => el('li', {}, FEATURE_LABEL[f]))),
-      p.soon.length > 0 ? el('p', { class: 'fine' }, `Em breve: ${p.soon.join(' ')}`) : null,
-      b,
-    );
-  });
-
-  const cancelBtn = el('button', { class: 'btn btn-quiet btn-sm', type: 'button' }, cancelAt ? 'Manter a assinatura' : 'Não renovar');
-  cancelBtn.addEventListener('click', async () => {
-    try {
-      await ctx.api.setSubscriptionCancel(!cancelAt);
-      toast(cancelAt ? 'Combinado: vamos continuar te avisando antes de vencer.' : 'Combinado: não vamos te lembrar de renovar.');
-      ctx.reloadAccount();
-    } catch {
-      toast('Não consegui atualizar agora.');
-    }
-  });
-  const logoutBtn = el('button', { class: 'btn btn-quiet btn-sm', type: 'button' }, 'Sair deste aparelho');
-  logoutBtn.addEventListener('click', async () => {
-    await ctx.api.logout().catch(() => {});
-    ctx.reloadAccount();
-  });
-  const deleteBtn = el('button', { class: 'btn btn-danger btn-sm', type: 'button' }, icon('trash'), 'Apagar minha conta');
-  deleteBtn.addEventListener('click', async () => {
-    if (!(await confirmDialog({ title: 'Apagar a conta agora?', text: 'Vamos apagar seus lançamentos, limites, metas e a assinatura. Isso não pode ser desfeito e não há reembolso do período pago.', confirmLabel: 'Apagar tudo', danger: true }))) return;
-    try {
-      await ctx.api.deleteAccount();
-      ctx.reloadAccount();
-    } catch {
-      toast('Não consegui apagar agora. Tente de novo.');
-    }
-  });
-
-  return el(
-    'div', { class: 'acc-stack' },
-    card(
-      el('h2', {}, `Plano ${plan.name}`),
-      el('p', { class: 'plan-line' }, el('span', { class: `pill ${days <= 3 ? 'tone-attention' : 'tone-ok'}` }, days === 0 ? 'Vence hoje' : `${days} ${days === 1 ? 'dia' : 'dias'} restantes`), el('span', { class: 'muted' }, ` até ${new Date(end).toLocaleDateString('pt-BR')}${cancelAt ? ' · não será renovado' : ''}`)),
-      el('p', { class: 'muted' }, 'Pagamento único por Pix, a cada 30 dias. Nada é cobrado sozinho: se não renovar, o acesso termina no fim do período e você pode voltar quando quiser.'),
-      el('div', { class: 'button-row no-print' }, renew),
-    ),
-    card(el('h2', {}, 'Outros planos'), el('p', { class: 'section-sub' }, 'Ao mudar de plano, os dias que você já tem continuam valendo; o novo período soma 30 dias.'), el('div', { class: 'plans' }, ...others)),
-    card(el('h2', {}, 'Conta'), el('p', { class: 'muted' }, acc.email), el('div', { class: 'button-row no-print' }, cancelBtn, logoutBtn, deleteBtn)),
-  );
-}
+export const viewPlano = (ctx) => viewPlanoBilling(ctx, FEATURE_LABEL);
 
 export function viewPlanejador(ctx) {
   if (!ctx.has('planner')) {
@@ -593,6 +536,6 @@ export function viewCompartilhar(ctx) {
   return viewFamilia(ctx, () => locked(ctx, { title: 'Conta compartilhada', feature: 'household', blurb: 'Divida o controle do dinheiro de casa com quem divide as contas com você.', bullets: ['Convide uma pessoa pelo e-mail', 'Vocês veem e editam a mesma conta', 'Só o titular paga e cancela'] }));
 }
 
-export const VIEWS = { familia: viewCompartilhar, coach: viewCoach, mercado: viewMercado, geral: viewGeral, lancamentos: viewLancamentos, orcamento: viewOrcamento, dividas: viewDividas, carteiras: viewCarteiras, lembretes: viewLembretes, metas: viewMetas, treinador: viewTreinador, simulador: viewSimulador, planejador: viewPlanejador, plano: viewPlano };
+export const VIEWS = { perfil: viewPerfil, familia: viewCompartilhar, coach: viewCoach, mercado: viewMercado, geral: viewGeral, lancamentos: viewLancamentos, orcamento: viewOrcamento, dividas: viewDividas, carteiras: viewCarteiras, lembretes: viewLembretes, metas: viewMetas, treinador: viewTreinador, simulador: viewSimulador, planejador: viewPlanejador, plano: viewPlano };
 export const NEEDS_MONTH = new Set(['geral', 'lancamentos', 'orcamento', 'metas']);
 export { monthNow };

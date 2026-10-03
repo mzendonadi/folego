@@ -88,6 +88,9 @@ export const newPartnerSchema = z.object({
 export const emailOnlySchema = z.object({ email: z.string().trim().toLowerCase().email().max(200) });
 export const loginCodeSchema = z.object({ email: z.string().trim().toLowerCase().email().max(200), code: z.string().regex(/^\d{6}$/) });
 export const subscriptionOrderSchema = z.object({ plan: z.enum(['controle', 'ousado', 'desbravador']) });
+export const checkoutSchema = z.object({ plan: z.enum(['controle', 'ousado', 'desbravador']), acceptTerms: z.literal(true) });
+export const profileSchema = z.object({ displayName: z.string().trim().max(60).nullable().optional(), notifyDigest: z.boolean().optional(), notifyReminders: z.boolean().optional(), marketing: z.boolean().optional() });
+export const purgeSchema = z.object({ confirmEmail: z.string().trim().max(200) });
 export const cancelSchema = z.object({ cancel: z.boolean() });
 
 const entrySchema = z.object({

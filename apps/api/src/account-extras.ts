@@ -136,7 +136,7 @@ export async function sendDueReminders(ctx: Ctx, opts: { log?: (e: Record<string
   const due = await ctx.db.query<{ id: string; title: string; due_on: Date | string; amount_cents: string | null; email: string }>(
     `SELECT r.id, r.title, r.due_on, r.amount_cents, b.email::text AS email
        FROM app.reminders r
-       JOIN app.subscribers b ON b.id = r.subscriber_id AND b.deleted_at IS NULL
+       JOIN app.subscribers b ON b.id = r.subscriber_id AND b.deleted_at IS NULL AND b.notify_reminders
        JOIN app.subscriptions s ON s.subscriber_id = r.subscriber_id AND s.status = 'active' AND s.current_period_end > now()
       WHERE r.done_at IS NULL AND r.due_on <= ($1::date + r.email_days_before) AND r.due_on >= ($1::date - 3)
         AND (r.notified_for IS NULL OR r.notified_for <> r.due_on)

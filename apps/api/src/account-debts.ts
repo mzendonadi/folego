@@ -147,7 +147,7 @@ export async function sendWeeklyDigests(ctx: Ctx, opts: { log?: (e: Record<strin
   const who = await ctx.db.query<{ id: string; email: string }>(
     `SELECT b.id, b.email::text AS email FROM app.subscribers b
        JOIN app.subscriptions s ON s.subscriber_id = b.id AND s.status = 'active' AND s.current_period_end > now()
-      WHERE b.deleted_at IS NULL AND b.marketing_opt_out_at IS NULL AND (b.weekly_digest_at IS NULL OR b.weekly_digest_at < now() - interval '7 days')
+      WHERE b.deleted_at IS NULL AND b.marketing_opt_out_at IS NULL AND b.notify_digest AND (b.weekly_digest_at IS NULL OR b.weekly_digest_at < now() - interval '7 days')
         AND EXISTS (SELECT 1 FROM app.ledger_entries l WHERE l.subscriber_id = b.id AND l.occurred_on >= ($1::date - 7))
       LIMIT 50`,
     [today],

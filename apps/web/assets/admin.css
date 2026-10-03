@@ -167,3 +167,5 @@
 .bo-product-grid { align-items: start; }
 .bo-product-grid .field + .field, .bo-product .field + .field, .bo-actions .field + .field { margin-top: 0; }
 .bo-product-grid .field { align-content: start; }
+
+.bo-static { margin: 0; padding: 12px 0; }

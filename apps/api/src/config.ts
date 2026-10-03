@@ -51,6 +51,8 @@ export interface Config {
   reminderDaysBefore: number;
   /** Teto de e-mails de campanha por dia (proteção da reputação do domínio de envio). */
   campaignDailyCap: number;
+  /** Dias depois do fim do acesso de quem cancelou em que os dados ainda ficam guardados para o download de segurança no backoffice. Passado esse prazo, são apagados sozinhos. */
+  canceledPurgeDays: number;
 }
 
 const ASAAS_PRODUCTION_URL = 'https://api.asaas.com/v3';
@@ -112,5 +114,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     bundlePriceCents: 5990,
     reminderDaysBefore: 3,
     campaignDailyCap: 200,
+    canceledPurgeDays: 15,
   };
 }

@@ -68,3 +68,7 @@ export const inviteHousehold = impl.inviteHousehold;
 export const removeHouseholdMember = impl.removeHouseholdMember;
 export const acceptHousehold = impl.acceptHousehold;
 export const leaveHousehold = impl.leaveHousehold;
+export const createCheckout = impl.createCheckout;
+export const getExport = impl.getExport;
+export const downloadExportXlsx = impl.downloadExportXlsx;
+export const updateProfile = impl.updateProfile;

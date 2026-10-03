@@ -1,12 +1,11 @@
 // Assinatura (#/conta): conta por e-mail sem senha (código de 6 dígitos) e, depois de assinar, uma área com abas
 // (visão geral, lançamentos, orçamento, metas, treinador, simulador, plano). Linha separada dos avulsos:
 // "sem assinatura" continua valendo para o Mapa e os complementos. O conteúdo das abas está em account-views.js.
-import { el, icon, toast, copyText } from './dom.js';
-import { brl, mmss } from './format.js';
-import { qrSvg } from '../vendor/qr.js';
-import { DEV } from '../config.js';
+import { el, icon, toast } from './dom.js';
+import { brl } from './format.js';
 import { PLANS } from '../vendor/engine.js';
 import { FEATURE_LABEL, TABS, VIEWS, NEEDS_MONTH, monthNow } from './account-views.js';
+import { drawCardCheckout, billingHeader, cancelNotice } from './account-billing.js';
 
 const card = (...c) => el('section', { class: 'card d-section' }, ...c.filter(Boolean));
 const TAB_IDS = TABS.map((t) => t.id);
@@ -81,79 +80,11 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
     }
   }
 
-  // ---------- Pix (assinar, renovar ou trocar de plano) ----------
-  /** Desenha o pagamento dentro de `mount`. `before` = fim do período antes do pagamento (0 se ainda não há assinatura ativa). */
-  function drawPix(plan, mount, { before = 0, onBack = null, onDone }) {
-    let timerId = 0;
-    let pollId = 0;
-    const stop = () => {
-      window.clearInterval(timerId);
-      window.clearInterval(pollId);
-    };
-    const gen = el('button', { class: 'btn btn-primary btn-lg btn-block', type: 'button' }, `Gerar Pix de ${brl(plan.priceCents)}`, icon('arrow-right'));
-    const back = onBack ? el('button', { class: 'btn btn-quiet btn-sm', type: 'button' }, icon('arrow-left'), 'Voltar') : null;
-    back?.addEventListener('click', () => {
-      stop();
-      onBack();
-    });
-    const payCard = card(back, el('h2', {}, `${before ? 'Renovar' : 'Assinar'} ${plan.name}`), el('p', { class: 'muted' }, 'Pagamento único por Pix, válido por 30 dias. Sem cartão salvo e sem renovação automática.'), gen);
-    mount.replaceChildren(payCard);
-    gen.addEventListener('click', async () => {
-      gen.disabled = true;
-      gen.textContent = 'Gerando o Pix…';
-      let order;
-      try {
-        order = await api.createSubscriptionOrder(plan.code);
-      } catch {
-        gen.disabled = false;
-        gen.textContent = `Gerar Pix de ${brl(plan.priceCents)}`;
-        return toast('Não deu para gerar o Pix agora. Tente de novo.');
-      }
-      const qrHolder = el('div', { class: 'qr', role: 'img', 'aria-label': 'QR Code do Pix' });
-      qrHolder.innerHTML = qrSvg(order.pixCode);
-      const status = el('p', { class: 'pix-status', role: 'status' }, icon('clock'), el('span', {}, 'Aguardando o pagamento…'));
-      const timer = el('span', { class: 'pix-timer' });
-      const codeInput = el('input', { class: 'input pix-code', type: 'text', readonly: true, value: order.pixCode, 'aria-label': 'Código Pix copia e cola' });
-      const copyBtn = el('button', { class: 'btn btn-secondary', type: 'button' }, icon('copy'), 'Copiar código');
-      copyBtn.addEventListener('click', async () => toast((await copyText(order.pixCode)) ? 'Código copiado.' : 'Não consegui copiar.'));
-      const demo = DEV || String(order.pixCode).startsWith('DEMO-');
-      const demoBtn = el('button', { class: 'btn btn-quiet', type: 'button' }, 'Simular pagamento aprovado');
-      demoBtn.addEventListener('click', () => api.demoConfirmPayment(order.orderId).catch(() => {}));
-      payCard.replaceChildren(...[
-        back,
-        el('h2', {}, `Pague ${brl(order.totalCents)} no Pix`),
-        demo ? el('div', { class: 'demo-notice', role: 'note' }, icon('alert'), el('p', {}, el('strong', {}, 'Ambiente de demonstração. '), 'Nenhum valor será cobrado.')) : null,
-        qrHolder,
-        el('p', { class: 'muted center' }, 'Ou use o Pix copia e cola:'),
-        el('div', { class: 'pix-code-row' }, codeInput, copyBtn),
-        el('div', { class: 'pix-meta' }, status, el('p', { class: 'muted' }, 'Expira em ', timer)),
-        demo ? demoBtn : null,
-      ].filter(Boolean));
-      const tick = () => {
-        const left = (order.expiresAt - Date.now()) / 1000;
-        timer.textContent = mmss(left);
-        if (left <= 0) stop();
-      };
-      tick();
-      timerId = window.setInterval(tick, 1000);
-      pollId = window.setInterval(async () => {
-        const now = await api.getAccount().catch(() => null);
-        // Pago = o fim do período andou para a frente (serve para assinar, renovar e trocar de plano).
-        if (now?.subscription?.active && now.subscription.periodEnd > before) {
-          stop();
-          toast(before ? 'Pagamento confirmado. Plano renovado!' : 'Assinatura ativada!');
-          onDone();
-        }
-      }, 1500);
-    });
-    return stop;
-  }
-
   // ---------- sem plano ativo: escolher ----------
   function drawPlans(acc) {
     const cards = PLANS.map((p) => {
       const btn = el('button', { class: 'btn btn-primary', type: 'button' }, `Assinar por ${brl(p.priceCents)}/mês`, icon('arrow-right'));
-      btn.addEventListener('click', () => drawPix(p, root, { before: 0, onBack: () => drawPlans(acc), onDone: boot }));
+      btn.addEventListener('click', () => drawCardCheckout(p, root, { api, before: 0, onBack: () => drawPlans(acc), onDone: boot }));
       return el(
         'article', { class: 'script' },
         el('h3', {}, p.name), el('p', { class: 'muted' }, p.tagline),
@@ -171,8 +102,9 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
     const expired = acc.subscription && !acc.subscription.active;
     root.replaceChildren(
       card(
-        el('h2', {}, expired ? 'Seu plano venceu' : 'Escolha seu plano'),
-        el('p', { class: 'section-sub' }, `Você está como ${acc.email}. ${expired ? 'Seus lançamentos e metas continuam guardados: é só renovar para voltar a usar. ' : ''}Pagamento por Pix, a cada 30 dias, sem cartão salvo.`),
+        el('h2', {}, expired ? 'Seu acesso terminou' : 'Escolha seu plano'),
+        el('p', { class: 'section-sub' }, `Você está como ${acc.email}. Assinatura mensal no cartão de crédito, que renova sozinha todo mês e pode ser cancelada quando quiser, na própria conta.`),
+        expired ? el('div', { class: 'note note-amber' }, icon('alert'), el('span', {}, acc.billing?.status === 'canceled' ? 'Seu plano foi cancelado e o acesso terminou. Seus dados são apagados automaticamente em breve. Se assinar de novo antes disso, você continua de onde parou.' : 'Seu plano não foi renovado e o acesso terminou. Se assinar de novo, você continua de onde parou.')) : null,
         el('div', { class: 'plans' }, ...cards),
       ),
       card(logout),
@@ -200,7 +132,7 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
   // ---------- área da assinatura (com abas) ----------
   function drawApp(acc) {
     const plan = PLANS.find((p) => p.code === acc.subscription.plan);
-    const days = Math.max(0, Math.ceil((acc.subscription.periodEnd - Date.now()) / 86_400_000));
+    const head = billingHeader(acc, plan);
     let current = wantedTab;
     let token = 0;
     let stopPix = () => {};
@@ -228,15 +160,17 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
     });
     panel.id = 'acc-panel';
 
-    const renewBtn = el('button', { class: 'btn btn-primary btn-sm', type: 'button' }, 'Renovar');
-    renewBtn.addEventListener('click', () => showTab('plano'));
     const bar = el(
       'header', { class: 'acc-bar' },
-      el('div', {}, el('span', { class: 'pill tone-ok' }, `Plano ${plan.name}`), el('p', { class: 'muted acc-mail' }, acc.email)),
+      el('div', {}, el('span', { class: `pill tone-${head.tone === 'ok' ? 'ok' : 'attention'}` }, head.pill), el('p', { class: 'muted acc-mail' }, acc.profile?.displayName ? `${acc.profile.displayName} · ${acc.email}` : acc.email)),
       acc.role === 'member' ? el('p', { class: 'fine muted' }, 'Conta compartilhada de ' + acc.ownerEmail) : null,
-      el('p', { class: 'muted acc-until' }, days === 0 ? 'Vence hoje' : `${days} ${days === 1 ? 'dia' : 'dias'} restantes`, acc.subscription.cancelAtPeriodEnd ? ' · não renova' : ''),
+      el('p', { class: 'muted acc-until' }, head.line),
     );
-    const warn = days <= 3 ? el('div', { class: 'note note-amber no-print' }, icon('alert'), el('div', { class: 'warn-row' }, el('span', {}, days === 0 ? 'Seu plano vence hoje.' : `Seu plano vence em ${days} ${days === 1 ? 'dia' : 'dias'}.`), renewBtn)) : null;
+    const cancelBanner = acc.billing?.status === 'canceled'
+      ? el('div', { class: 'note note-amber no-print' }, icon('alert'), el('div', { class: 'warn-row' }, el('span', {}, cancelNotice(new Date(acc.subscription.periodEnd).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })))))
+      : acc.billing?.status === 'past_due'
+        ? el('div', { class: 'note note-amber no-print' }, icon('alert'), el('span', {}, 'O cartão foi recusado na última cobrança. Veja a aba Plano.'))
+        : null;
 
     const ctx = {
       api, acc, plan,
@@ -252,9 +186,9 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
         showTab(current);
       },
       reloadAccount: boot,
-      startPix: (p) => {
+      startCheckout: (p) => {
         stopPix();
-        stopPix = drawPix(p, panel, { before: acc.subscription.periodEnd, onBack: () => showTab('plano'), onDone: boot });
+        stopPix = drawCardCheckout(p, panel, { api, before: acc.subscription.periodEnd, onBack: () => showTab('plano'), onDone: boot });
       },
     };
 
@@ -294,7 +228,7 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
     }
 
     // replaceChildren() é API nativa: diferente do nosso el(), não ignora null — por isso o filter.
-    root.replaceChildren(...[bar, warn, el('div', { class: 'acc-shell' }, tabbar, panel)].filter(Boolean));
+    root.replaceChildren(...[bar, cancelBanner, el('div', { class: 'acc-shell' }, tabbar, panel)].filter(Boolean));
     showTab(current);
   }
 

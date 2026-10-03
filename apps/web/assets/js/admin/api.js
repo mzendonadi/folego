@@ -43,6 +43,17 @@ export const api = {
   avulso: (id) => call('GET', `/clientes/avulsos/${id}`),
   contato: (caseId) => call('POST', `/contato/${caseId}`, {}),
   assinaturas: (o) => call('GET', `/assinaturas${qs(o)}`),
+  cancelados: () => call('GET', '/assinaturas/cancelados'),
+  excluirDados: (id, confirmEmail) => call('DELETE', `/assinaturas/cancelados/${id}`, { confirmEmail }),
+  async baixarDados(id) {
+    const res = await fetch(`/api/gestao/assinaturas/cancelados/${id}/dados.zip`, { credentials: 'same-origin', headers: { 'x-folego': '1' } });
+    if (!res.ok) {
+      const j = await res.json().catch(() => null);
+      throw new ApiError(j?.message ?? 'Não foi possível baixar', res.status, j?.error);
+    }
+    const cd = res.headers.get('content-disposition') ?? '';
+    return { blob: await res.blob(), filename: /filename="([^"]+)"/.exec(cd)?.[1] ?? `dados-${id}.zip` };
+  },
   assinaturasResumo: (dias) => call('GET', `/assinaturas/resumo${qs({ dias })}`),
   assinante: (id) => call('GET', `/assinaturas/${id}`),
   assinanteAcao: (id, body) => call('POST', `/assinaturas/${id}/acao`, body),

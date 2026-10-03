@@ -24,7 +24,7 @@ export async function accountViewFor(ctx: Ctx, selfId: string): Promise<AccountV
   const own = await accountView(ctx, selfId);
   if (owner === selfId) return { ...own, role: 'owner', ownerEmail: null };
   const shared = await accountView(ctx, owner);
-  return { email: own.email, subscription: shared.subscription, role: 'member', ownerEmail: shared.email };
+  return { email: own.email, subscription: shared.subscription, billing: shared.billing, profile: own.profile, role: 'member', ownerEmail: shared.email };
 }
 
 export async function assertNotMember(ctx: Ctx, selfId: string): Promise<void> {

@@ -1,4 +1,6 @@
 // Rotas do backoffice (/api/gestao/*). Todas exigem sessão de administrador (código por e-mail) e a permissão da seção.
+import * as accountData from '../account-data.ts';
+import { purgeSchema } from '../schemas.ts';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { AppError } from '../errors.ts';
@@ -158,6 +160,23 @@ export function registerGestao(app: FastifyInstance, deps: AdminRouteDeps): void
   app.get(`${P}/assinaturas/resumo`, async (req) => {
     await admin(req, 'assinaturas', 'dashboard');
     return metrics.subscriptions(ctx, daysQuery(req.query));
+  });
+  // Ex-assinantes (cancelados): baixar TODOS os dados (.zip) e, depois, excluir. Só quem tem a permissão de dados.
+  app.get(`${P}/assinaturas/cancelados`, async (req) => {
+    await admin(req, 'assinaturas', 'dados_exportar');
+    return accountData.listCanceled(ctx);
+  });
+  app.get(`${P}/assinaturas/cancelados/:id/dados.zip`, async (req, reply) => {
+    const a = await admin(req, 'dados_exportar');
+    const { zip, filename } = await accountData.buildSubscriberPackage(ctx, idParam((req.params as { id: string }).id), a.id, a.email);
+    reply.header('Content-Type', 'application/zip');
+    reply.header('Content-Disposition', `attachment; filename="${filename}"`);
+    reply.header('Cache-Control', 'no-store');
+    return reply.send(zip);
+  });
+  app.delete(`${P}/assinaturas/cancelados/:id`, async (req) => {
+    const a = await admin(req, 'dados_exportar');
+    return accountData.adminPurge(ctx, idParam((req.params as { id: string }).id), a.id, purgeSchema.parse(req.body).confirmEmail);
   });
   app.get(`${P}/assinaturas/:id`, async (req) => {
     await admin(req, 'assinaturas', 'clientes');

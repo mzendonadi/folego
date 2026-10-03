@@ -246,3 +246,17 @@ export async function acceptHousehold() {
 export async function leaveHousehold() {
   return request('POST', '/account/household/leave');
 }
+export async function createCheckout(plan) {
+  return request('POST', '/account/subscription-checkout', { body: { plan, acceptTerms: true } });
+}
+export async function getExport() {
+  return request('GET', '/account/export');
+}
+export async function downloadExportXlsx() {
+  const res = await fetch(`${API_BASE}/account/export.xlsx`, { credentials: 'same-origin', headers: { 'x-folego': '1' } });
+  if (!res.ok) throw new ApiError('Não foi possível gerar a planilha', res.status);
+  return res.blob();
+}
+export async function updateProfile(body) {
+  return request('PUT', '/account/profile', { body });
+}

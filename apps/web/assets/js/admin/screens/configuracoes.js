@@ -18,12 +18,13 @@ function toggle(id, label, hint, checked, disabled = false) {
 
 async function siteTab(ctx) {
   const { settings: s, environment: env } = await api.config();
-  const subs = toggle('cf-subs', 'Assinaturas (conta por e-mail, Pix mensal)', env.emailConfigured ? 'Desligar esconde a área de conta para novos acessos; os dados e as assinaturas continuam guardados.' : 'Precisa do envio de e-mail configurado no servidor.', s.subscriptionsEnabled, !env.emailConfigured && !s.subscriptionsEnabled);
+  const subs = toggle('cf-subs', 'Prumo: assinaturas (conta por e-mail, cobrança mensal no cartão)', env.emailConfigured ? 'Desligar esconde a área de conta para novos acessos; os dados e as assinaturas continuam guardados.' : 'Precisa do envio de e-mail configurado no servidor.', s.subscriptionsEnabled, !env.emailConfigured && !s.subscriptionsEnabled);
   const leads = toggle('cf-leads', 'Propostas de parceiros (leads)', 'Deixe desligado até a revisão jurídica (LGPD e superendividamento).', s.leadsEnabled);
   const ai = toggle('cf-ai', 'IA nas entregas (roteiros e plano de renda extra)', env.aiKeyConfigured ? 'Desligada, as entregas saem pelos modelos fixos, sem custo de IA.' : 'Não há chave da Anthropic configurada no servidor: mesmo ligada, sai o modelo fixo.', s.aiEnabled);
-  const paused = toggle('cf-paused', 'Pausar as vendas', 'Ninguém consegue gerar Pix novo (assinantes e compradores veem um aviso). O resultado grátis continua funcionando.', s.salesPaused);
+  const paused = toggle('cf-paused', 'Pausar as vendas', 'Ninguém consegue assinar nem gerar Pix novo (visitantes veem um aviso). Quem já assina continua usando e sendo cobrado normalmente. O resultado grátis continua funcionando.', s.salesPaused);
   const cap = el('input', { class: 'input input-sm', type: 'number', min: '0', max: '100000', value: String(s.aiMaxCallsPerDay), 'aria-label': 'Teto diário de chamadas à IA' });
   const campCap = el('input', { class: 'input input-sm', type: 'number', min: '0', max: '5000', value: String(s.campaignDailyCap), 'aria-label': 'Teto diário de e-mails de campanha' });
+  const purge = el('input', { class: 'input input-sm', type: 'number', min: '1', max: '180', value: String(s.canceledPurgeDays ?? 15), 'aria-label': 'Dias de retenção dos dados de quem cancelou' });
   const remind = el('input', { class: 'input input-sm', type: 'number', min: '1', max: '15', value: String(s.reminderDaysBefore), 'aria-label': 'Dias de antecedência do lembrete' });
   const bannerOn = toggle('cf-banner', 'Mostrar um aviso no topo do site', 'Use para avisar de manutenção, promoção ou novidade.', Boolean(s.announcement));
   const bannerText = el('input', { class: 'input', type: 'text', maxlength: '240', value: s.announcement?.text ?? '', placeholder: 'Ex.: Estamos em manutenção rápida; volte em alguns minutos.', 'aria-label': 'Texto do aviso' });
@@ -35,7 +36,7 @@ async function siteTab(ctx) {
     try {
       await api.salvarConfig({
         subscriptionsEnabled: subs.input.checked, leadsEnabled: leads.input.checked, aiEnabled: ai.input.checked, salesPaused: paused.input.checked,
-        aiMaxCallsPerDay: Number(cap.value) || 0, campaignDailyCap: Number(campCap.value) || 0, reminderDaysBefore: Number(remind.value) || 3,
+        aiMaxCallsPerDay: Number(cap.value) || 0, campaignDailyCap: Number(campCap.value) || 0, canceledPurgeDays: Math.min(180, Math.max(1, Number(purge.value) || 15)), reminderDaysBefore: Number(remind.value) || 3,
         announcement: bannerOn.input.checked ? { text: bannerText.value.trim(), tone: bannerTone.value } : null,
       });
       toast('Configurações salvas. Valem agora.');
@@ -48,11 +49,11 @@ async function siteTab(ctx) {
     'div', { class: 'bo-stack' },
     card('Recursos do site', subs.node, leads.node, ai.node, paused.node),
     card('Aviso no site', bannerOn.node, el('div', { class: 'bo-actions' }, field('Texto', bannerText), field('Tipo', bannerTone))),
-    card('Assinaturas e IA', el('div', { class: 'bo-actions' }, field('Lembrete de vencimento (dias antes)', remind, 'O e-mail é enviado uma vez, nesta antecedência.'), field('Teto diário de chamadas à IA', cap, 'Acima disso, as entregas usam o modelo fixo (controle de custo).'), field('Teto diário de e-mails de campanha', campCap, 'Protege a reputação do e-mail do Fôlego. 0 = nenhuma campanha sai.')), el('p', { class: 'fine' }, 'Preços, dias por pagamento e o Kit Completo ficam em Produtos e preços.')),
+    card('Assinaturas e IA', el('div', { class: 'bo-actions' }, field('Lembrete de vencimento (dias antes)', remind, 'O e-mail é enviado uma vez, nesta antecedência.'), field('Teto diário de chamadas à IA', cap, 'Acima disso, as entregas usam o modelo fixo (controle de custo).'), field('Teto diário de e-mails de campanha', campCap, 'Protege a reputação do e-mail do Fôlego. 0 = nenhuma campanha sai.'), field('Guarda dos dados de quem cancelou (dias)', purge, 'Depois do fim do acesso, você tem este prazo para baixar o pacote em Assinaturas > Cancelados. Passado o prazo, os dados são apagados sozinhos.')), el('p', { class: 'fine' }, 'Preços dos planos e o Kit Completo ficam em Produtos e preços.')),
     el('div', { class: 'bo-actions' }, save),
     card('Ambiente (somente leitura)', dl([
       ['Envio de e-mail', env.emailConfigured ? badge('Configurado', 'ok') : badge('Não configurado', 'bad')],
-      ['Pagamento', env.gateway === 'fake' ? badge('Simulado (pré-lançamento): nenhum Pix é real', 'warn') : badge(env.gateway, 'ok')],
+      ['Pagamento', env.gateway === 'fake' ? badge('Simulado (pré-lançamento): nenhuma cobrança é real', 'warn') : badge(env.gateway, 'ok')],
       ['IA (Anthropic)', env.aiKeyConfigured ? `Chave configurada · modelo ${env.aiModel}${env.aiWorkspaceConfigured ? ' · workspace definido' : ''}` : badge('Sem chave', 'warn')],
       ['Endereço público', env.publicUrl], ['Ambiente', env.env],
     ]), el('p', { class: 'fine' }, 'Chaves e segredos não aparecem nem são editados por aqui: ficam só no servidor.')),

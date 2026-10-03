@@ -4,7 +4,7 @@ import { api } from '../api.js';
 import { el, toast, brl, dt, card, grid, table, badge, field, PRODUCT } from '../ui.js';
 import { moneyInput } from '../../money.js';
 
-const kindBadge = (p) => (p.kind === 'subscription' ? badge('Assinatura (recorrente)', 'muted') : p.priceCents === 0 ? badge('Grátis', 'ok') : p.usesAi ? badge('Pago · usa IA', 'warn') : badge('Pago', 'muted'));
+const kindBadge = (p) => (p.kind === 'subscription' ? badge('Assinatura mensal (cartão)', 'muted') : p.priceCents === 0 ? badge('Grátis', 'ok') : p.usesAi ? badge('Pago · usa IA', 'warn') : badge('Pago', 'muted'));
 
 function productCard(p, reload) {
   const price = moneyInput({ id: `pr-${p.code}`, ariaLabel: `Preço de ${p.name}`, value: p.priceCents });
@@ -35,8 +35,8 @@ function productCard(p, reload) {
     el('header', { class: 'bo-head-line' }, el('h3', {}, PRODUCT[p.code] ?? p.name), kindBadge(p), p.active ? null : badge('Fora de venda', 'bad')),
     el('div', { class: 'bo-product-grid' },
       field('Nome exibido', name),
-      field('Preço (R$)', price.input, p.kind === 'subscription' ? 'Por período de acesso.' : 'Pix único.'),
-      field(p.kind === 'subscription' ? 'Dias por pagamento' : 'Dias de acesso ao conteúdo', days),
+      field('Preço (R$)', price.input, p.kind === 'subscription' ? 'Por mês, no cartão de crédito.' : 'Pix único.'),
+      p.kind === 'subscription' ? field('Cobrança', el('p', { class: 'muted bo-static' }, 'Mensal, no cartão')) : field('Dias de acesso ao conteúdo', days),
     ),
     field('Descrição (uso interno)', desc),
     el('div', { class: 'bo-checks' },
@@ -77,7 +77,7 @@ export async function produtosScreen(ctx) {
         const soma = ['recovery_map', 'defense_letters', 'calendar_30d'].reduce((s, c) => s + (d.products.find((p) => p.code === c)?.priceCents ?? 0), 0);
         return el('p', { class: 'fine' }, `Soma dos três separados: ${brl(soma)}. ${d.bundlePriceCents < soma ? `Desconto de ${brl(soma - d.bundlePriceCents)}.` : 'Atenção: o Kit está mais caro que a soma; sem desconto o servidor cobra os itens separados.'}`);
       })()),
-      card('Assinaturas (recorrência por Pix)', el('p', { class: 'muted' }, 'A pessoa paga um Pix por período e recebe o lembrete antes de vencer. Os "dias por pagamento" definem quanto tempo cada Pix libera.'), el('div', { class: 'bo-stack' }, ...subs.map((p) => productCard(p, draw)))),
+      card('Assinaturas do Prumo (recorrência mensal no cartão)', el('p', { class: 'muted' }, 'A pessoa assina uma vez e o cartão é cobrado todo mês até ela cancelar. Cancelar interrompe a cobrança na hora e mantém o acesso até o fim do mês pago. Mudar o preço vale para novas assinaturas e para as cobranças seguintes criadas daqui para frente; confira no Asaas as assinaturas já existentes.'), el('div', { class: 'bo-stack' }, ...subs.map((p) => productCard(p, draw)))),
       card('Recursos gratuitos', table([{ label: 'Recurso', render: (f) => f.name }, { label: 'O que é', render: (f) => f.description }, { label: 'IA', render: (f) => (f.usesAi ? 'Sim' : 'Não') }], d.free), el('p', { class: 'fine' }, 'Os gratuitos são a porta de entrada do funil. Não passam por pedido, então não têm preço editável; para cobrar por um deles, ele precisa virar um produto.')),
     );
   }

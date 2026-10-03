@@ -2,12 +2,24 @@
 import { api } from '../api.js';
 import { el, brl, int, pct, dt, card, kpi, kpis, table, pager, badge, loading, errorBox, PLAN, SUB_STATUS } from '../ui.js';
 import { subscriberDrawer } from './shared.js';
+import { canceladosView } from './cancelados.js';
 
 const CHIPS = [['todos', 'Todos'], ['em_dia', 'Em dia'], ['vencendo', 'Vencendo em 7 dias'], ['cancelando', 'Não vão renovar'], ['em_debito', 'Em débito']];
 
 export async function assinaturasScreen(ctx) {
-  const st = ctx.state.assinaturas ?? (ctx.state.assinaturas = { status: 'todos', q: '', page: 0 });
+  const st = ctx.state.assinaturas ?? (ctx.state.assinaturas = { status: 'todos', q: '', page: 0, tab: 'ativas' });
+  const root = el('div', { class: 'bo-stack' });
   const host = el('div', { class: 'bo-stack' });
+  const tabs = el('div', { class: 'bo-chips', role: 'tablist', 'aria-label': 'Assinaturas' }, ...[['ativas', 'Assinaturas'], ['cancelados', 'Cancelados']].map(([id, label]) => {
+    const b = el('button', { class: 'bo-chip', type: 'button', role: 'tab', 'aria-selected': String(st.tab === id) }, label);
+    b.addEventListener('click', () => { st.tab = id; show(); });
+    return b;
+  }));
+  async function show() {
+    tabs.querySelectorAll('button').forEach((b, i) => b.setAttribute('aria-selected', String((i === 0) === (st.tab === 'ativas'))));
+    root.replaceChildren(tabs, st.tab === 'cancelados' ? await canceladosView(ctx) : host);
+    if (st.tab !== 'cancelados') await draw();
+  }
   const search = el('input', { class: 'input input-sm', type: 'search', placeholder: 'Buscar por e-mail', value: st.q, 'aria-label': 'Buscar por e-mail' });
   search.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
@@ -30,7 +42,7 @@ export async function assinaturasScreen(ctx) {
       }));
       host.replaceChildren(
         kpis(
-          kpi('Pagando em dia', int(summary.upToDate), brl(summary.mrrCents) + ' por mês', 'good'),
+          kpi('Pagando em dia', int(summary.upToDate), brl(summary.mrrCents) + ' por mês (recorrência)', 'good'),
           kpi('Vencendo em 7 dias', int(summary.expiringSoon), brl(summary.mrrAtRiskCents), summary.expiringSoon ? 'warn' : ''),
           kpi('Em débito', int(summary.delinquent), summary.delinquent ? `${brl(summary.lostMrrCents)}/mês parados` : 'nenhum', summary.delinquent ? 'bad' : ''),
           kpi('Renovação', pct(summary.renewalRatePct), 'já pagaram 2+ vezes'),
@@ -48,12 +60,12 @@ export async function assinaturasScreen(ctx) {
           list.items,
           { emptyText: 'Nenhuma assinatura neste filtro.', onRow: (s) => subscriberDrawer(s.id, ctx, draw) },
         ), pager(list.page, list.total, list.pageSize, (p) => { st.page = p; draw(); })),
-        el('p', { class: 'fine' }, '"Em débito" = a assinatura venceu e não foi renovada (o Pix é manual, a cada 30 dias; os dados da pessoa continuam guardados). Clique numa linha para estender dias como cortesia, trocar o plano ou ver a jornada.'),
+        el('p', { class: 'fine' }, 'A cobrança é mensal e recorrente no cartão de crédito (Asaas). "Em débito" = o acesso venceu e a mensalidade não entrou (cartão recusado ou assinatura encerrada). Quem cancela por conta própria vai para a aba Cancelados e mantém o acesso até o fim do mês pago. Clique numa linha para estender dias como cortesia, trocar o plano ou ver a jornada.'),
       );
     } catch (e) {
       host.replaceChildren(errorBox(e, draw));
     }
   }
-  await draw();
-  return host;
+  await show();
+  return root;
 }

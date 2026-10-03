@@ -1,3 +1,5 @@
+import { PLANS } from '../vendor/engine.js';
+
 // Catálogo mostrado ao cliente. Os PREÇOS que valem são os do servidor (app.products): ele cobra e calcula o desconto.
 // Os valores abaixo são só o padrão de reserva; ao abrir o site, applyCatalog() troca pelos que o dono definiu no backoffice.
 export const CATALOG = {
@@ -15,6 +17,9 @@ export const CATALOG = {
     active: true,
     blurb: 'As ações dos 30 dias, as estratégias do seu caso e os marcos dos próximos meses (dia de pagar, dívida quitada), com lembretes. Funciona no Google Agenda, no iPhone e no Outlook.',
   },
+  sub_controle: { name: 'Controle', cents: 1999, active: true },
+  sub_ousado: { name: 'Ousado', cents: 3999, active: true },
+  sub_desbravador: { name: 'Desbravador', cents: 5999, active: true },
   extra_income_plan: {
     name: 'Criador de Renda Extra',
     cents: 1599,
@@ -33,6 +38,9 @@ export function applyCatalog(server) {
   for (const p of server?.products ?? []) {
     const item = CATALOG[p.code];
     if (!item) continue;
+    // Os planos do Prumo também seguem o que o dono define no backoffice (landing, escolha de plano e cabeçalho da conta).
+    const plan = PLANS.find((x) => x.productCode === p.code);
+    if (plan) plan.priceCents = p.priceCents;
     item.cents = p.priceCents;
     item.active = p.active;
     if (p.name) item.name = p.name;

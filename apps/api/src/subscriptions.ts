@@ -13,6 +13,8 @@ import type { Queryable } from './db.ts';
 import { ownedWalletId } from './account-extras.ts';
 import { monthLimits } from './account-debts.ts';
 import { markMissionDone } from './coach-program.ts';
+import { billingView, CARD_GRACE_DAYS } from './billing.ts';
+import type { BillingView } from './billing.ts';
 
 const CODE_TTL_MIN = 10;
 const PIX_TTL_MS = 30 * 60 * 1000;
@@ -83,10 +85,13 @@ export async function subscriberOf(ctx: Ctx, sessionId: string): Promise<string 
 export interface AccountView {
   email: string;
   subscription: { plan: PlanCode; active: boolean; periodEnd: number; cancelAtPeriodEnd: boolean } | null;
+  /** Assinatura mensal no cartão (mensal, renova em…, cancelada, acesso até…). Nulo para quem ainda não assinou desse jeito. */
+  billing: BillingView | null;
+  profile: { displayName: string | null; notifyDigest: boolean; notifyReminders: boolean; marketing: boolean };
 }
 
 export async function accountView(ctx: Ctx, subscriberId: string): Promise<AccountView> {
-  const s = await ctx.db.query<{ email: string }>(`SELECT email FROM app.subscribers WHERE id = $1 AND deleted_at IS NULL`, [subscriberId]);
+  const s = await ctx.db.query<{ email: string; display_name: string | null; notify_digest: boolean; notify_reminders: boolean; opted_out: boolean }>(`SELECT email, display_name, notify_digest, notify_reminders, (marketing_opt_out_at IS NOT NULL) AS opted_out FROM app.subscribers WHERE id = $1 AND deleted_at IS NULL`, [subscriberId]);
   if (!s.rows[0]) throw notFound();
   const sub = await ctx.db.query<{ plan: PlanCode; status: string; current_period_end: Date | string; cancel_at_period_end: boolean }>(
     `SELECT plan, status, current_period_end, cancel_at_period_end FROM app.subscriptions WHERE subscriber_id = $1`,
@@ -94,9 +99,15 @@ export async function accountView(ctx: Ctx, subscriberId: string): Promise<Accou
   );
   const row = sub.rows[0];
   const end = row ? new Date(row.current_period_end).getTime() : 0;
+  const billing = await billingView(ctx, subscriberId);
+  // Cartão em dia tem uns dias de tolerância depois do vencimento: a renovação chega por webhook.
+  const grace = billing && billing.status !== 'canceled' ? CARD_GRACE_DAYS * 86_400_000 : 0;
+  const p = s.rows[0];
   return {
-    email: s.rows[0].email,
-    subscription: row ? { plan: row.plan, active: row.status === 'active' && end > Date.now(), periodEnd: end, cancelAtPeriodEnd: row.cancel_at_period_end } : null,
+    email: p.email,
+    subscription: row ? { plan: row.plan, active: row.status === 'active' && end + grace > Date.now(), periodEnd: end, cancelAtPeriodEnd: row.cancel_at_period_end } : null,
+    billing,
+    profile: { displayName: p.display_name, notifyDigest: p.notify_digest, notifyReminders: p.notify_reminders, marketing: !p.opted_out },
   };
 }
 
@@ -142,6 +153,21 @@ export async function activateSubscription(q: Queryable, subscriberId: string, o
   // Dias por pagamento vêm do catálogo (o dono pode mudar em Produtos e preços); 30 se o produto não tiver valor.
   const d = await q.query<{ access_days: number }>(`SELECT access_days FROM app.products WHERE code = $1`, [plan.productCode]);
   const period = Math.max(1, Math.min(365, d.rows[0]?.access_days ?? PERIOD_DAYS));
+  const card = await q.query<{ status: string }>(`SELECT status FROM app.billing_profiles WHERE subscriber_id = $1`, [subscriberId]);
+  if (card.rows[0]) {
+    // Assinatura mensal no cartão: cada mensalidade paga vale um mês de calendário.
+    await q.query(
+      `INSERT INTO app.subscriptions(subscriber_id, plan, status, current_period_end)
+       VALUES ($1, $2, 'active', now() + interval '1 month')
+       ON CONFLICT (subscriber_id) DO UPDATE
+         SET plan = EXCLUDED.plan, status = 'active', reminded_at = NULL, canceled_at = NULL, cancel_at_period_end = false,
+             current_period_end = GREATEST(app.subscriptions.current_period_end, now()) + interval '1 month'`,
+      [subscriberId, plan.code],
+    );
+    await q.query(`UPDATE app.billing_profiles SET status = CASE WHEN status = 'canceled' THEN status ELSE 'active' END, last_charge_at = now(), past_due_since = NULL WHERE subscriber_id = $1`, [subscriberId]);
+    await audit(q, 'system', 'subscription_paid', 'subscriber', subscriberId, { plan: plan.code, billing: 'card' });
+    return;
+  }
   await q.query(
     `INSERT INTO app.subscriptions(subscriber_id, plan, status, current_period_end)
      VALUES ($1, $2, 'active', now() + make_interval(days => $3))
@@ -397,13 +423,17 @@ export async function maintenance(ctx: Ctx, opts: { force?: boolean; log?: (e: R
   if (!ctx.config.subscriptionsEnabled) return { expired: 0, reminded: 0 };
   if (!opts.force && Date.now() - lastMaintenance < 30 * 60 * 1000) return { expired: 0, reminded: 0 };
   lastMaintenance = Date.now();
-  const expired = await ctx.db.query(`UPDATE app.subscriptions SET status = 'expired' WHERE status = 'active' AND current_period_end < now()`);
+  const expired = await ctx.db.query(
+    `UPDATE app.subscriptions s SET status = 'expired'
+      WHERE s.status = 'active'
+        AND s.current_period_end < now() - CASE WHEN EXISTS (SELECT 1 FROM app.billing_profiles b WHERE b.subscriber_id = s.subscriber_id AND b.status IN ('active','past_due')) THEN make_interval(days => ${CARD_GRACE_DAYS}) ELSE interval '0' END`,
+  );
   let reminded = 0;
   if (ctx.email) {
     const due = await ctx.db.query<{ id: string; email: string; plan: string; end: Date | string }>(
       `SELECT s.id, b.email, s.plan, s.current_period_end AS end
          FROM app.subscriptions s JOIN app.subscribers b ON b.id = s.subscriber_id AND b.deleted_at IS NULL
-        WHERE s.status = 'active' AND NOT s.cancel_at_period_end AND s.reminded_at IS NULL AND s.current_period_end < now() + make_interval(days => $1)`,
+        WHERE s.status = 'active' AND NOT s.cancel_at_period_end AND s.reminded_at IS NULL AND NOT EXISTS (SELECT 1 FROM app.billing_profiles bp WHERE bp.subscriber_id = s.subscriber_id) AND s.current_period_end < now() + make_interval(days => $1)`,
       [ctx.config.reminderDaysBefore],
     );
     for (const s of due.rows) {
