@@ -185,19 +185,18 @@ export async function attribute(ctx: Ctx, subscriberId: string, code: string | u
 /** Dentro da transação do pagamento confirmado: consome um crédito (se a fatura veio com desconto) e premia quem indicou. */
 export async function onSubscriptionPaid(ctx: Ctx, q: Queryable, subscriberId: string, payment: { id: string; amountCents: number }): Promise<void> {
   // 1) fatura com desconto: gasta o crédito mais antigo
-  const prof = await q.query<{ plan: string; referred_by: string | null; referral_id: string | null; referral_credited_at: Date | null; last_charge_at: Date | null }>(`SELECT plan, referred_by, referral_id, referral_credited_at, last_charge_at FROM app.billing_profiles WHERE subscriber_id = $1`, [subscriberId]);
+  const prof = await q.query<{ plan: string; referred_by: string | null; referral_id: string | null; referral_credited_at: Date | null; last_charge_at: Date | null; contract_cents: string | null }>(`SELECT plan, referred_by, referral_id, referral_credited_at, last_charge_at, contract_cents FROM app.billing_profiles WHERE subscriber_id = $1`, [subscriberId]);
   const p = prof.rows[0];
   if (!p) return;
   const plan = planByCode(p.plan);
   const price = plan ? await q.query<{ price_cents: string }>(`SELECT price_cents FROM app.products WHERE code = $1`, [plan.productCode]) : { rows: [] as { price_cents: string }[] };
-  const list = num(price.rows[0]?.price_cents ?? 0);
+  const list = num(p.contract_cents ?? price.rows[0]?.price_cents ?? 0); // valor contratado: mudar o preço do plano não mexe em quem já assina
   const pct = ctx.config.referralDiscountPct;
-  if (list > 0 && pct > 0 && payment.amountCents <= discounted(list, pct) + 1) {
-    await q.query(
-      `UPDATE app.referral_credits SET status = 'applied', applied_at = now(), applied_payment_id = $2
-        WHERE id = (SELECT id FROM app.referral_credits WHERE subscriber_id = $1 AND status = 'available' ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED)`,
-      [subscriberId, payment.id],
-    );
+  // A fatura veio com desconto se o valor cobrado é o do crédito mais antigo: gasta esse crédito (e só um por fatura).
+  const next = await q.query<{ id: string; percent: number }>(`SELECT id, percent FROM app.referral_credits WHERE subscriber_id = $1 AND status = 'available' ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED`, [subscriberId]);
+  if (next.rows[0] && list > 0 && payment.amountCents <= discounted(list, next.rows[0].percent) + 1) {
+    await q.query(`UPDATE app.referral_credits SET status = 'applied', applied_at = now(), applied_payment_id = $2 WHERE id = $1`, [next.rows[0].id, payment.id]);
+    await audit(q, 'system', 'referral_credit_applied', 'subscriber', subscriberId, { credit: next.rows[0].id, percent: next.rows[0].percent, chargedCents: payment.amountCents, listCents: list });
   }
   // 2) primeira mensalidade de quem veio por indicação: o indicador ganha um crédito
   if (ctx.config.referralEnabled && pct > 0 && p.referred_by && !p.referral_credited_at) {
@@ -223,12 +222,13 @@ export async function overview(ctx: Ctx, subscriberId: string) {
   const counts = await ctx.db.query<{ sent: string; converted: string }>(`SELECT count(*)::text AS sent, count(*) FILTER (WHERE status = 'converted')::text AS converted FROM app.referrals WHERE referrer_subscriber_id = $1`, [subscriberId]);
   const cr = await ctx.db.query<{ available: string; applied: string }>(`SELECT count(*) FILTER (WHERE status = 'available')::text AS available, count(*) FILTER (WHERE status = 'applied')::text AS applied FROM app.referral_credits WHERE subscriber_id = $1`, [subscriberId]);
   const recent = await ctx.db.query<{ friend_email: string; status: string; created_at: Date; converted_at: Date | null }>(`SELECT friend_email::text AS friend_email, status, created_at, converted_at FROM app.referrals WHERE referrer_subscriber_id = $1 ORDER BY created_at DESC LIMIT 20`, [subscriberId]);
-  const prof = await ctx.db.query<{ plan: string; status: string }>(`SELECT plan, status FROM app.billing_profiles WHERE subscriber_id = $1`, [subscriberId]);
+  const prof = await ctx.db.query<{ plan: string; status: string; contract_cents: string | null }>(`SELECT plan, status, contract_cents FROM app.billing_profiles WHERE subscriber_id = $1`, [subscriberId]);
   const plan = prof.rows[0] ? planByCode(prof.rows[0].plan) : null;
   const price = plan ? await ctx.db.query<{ price_cents: string }>(`SELECT price_cents FROM app.products WHERE code = $1`, [plan.productCode]) : { rows: [] as { price_cents: string }[] };
-  const list = num(price.rows[0]?.price_cents ?? 0);
+  const list = num(prof.rows[0]?.contract_cents ?? price.rows[0]?.price_cents ?? 0);
   const available = num(cr.rows[0]?.available ?? 0);
-  const pct = ctx.config.referralDiscountPct;
+  const firstPct = await ctx.db.query<{ percent: number }>(`SELECT percent FROM app.referral_credits WHERE subscriber_id = $1 AND status = 'available' ORDER BY created_at LIMIT 1`, [subscriberId]);
+  const pct = firstPct.rows[0]?.percent ?? ctx.config.referralDiscountPct;
   return {
     enabled: ctx.config.referralEnabled,
     percent: pct,
@@ -278,10 +278,9 @@ export async function notifyCredits(ctx: Ctx, opts: { log?: (e: Record<string, u
 /** Mantém o valor da assinatura no provedor igual ao que deve ser cobrado na próxima fatura (com ou sem desconto). */
 export async function syncPrices(ctx: Ctx, opts: { log?: (e: Record<string, unknown>) => void } = {}): Promise<number> {
   if (!ctx.config.subscriptionsEnabled) return 0;
-  const pct = ctx.config.referralEnabled ? ctx.config.referralDiscountPct : 0;
-  const rows = await ctx.db.query<{ subscriber_id: string; provider_subscription_id: string; plan: string; price_cents: string; credits: string; synced: string | null }>(
-    `SELECT b.subscriber_id, b.provider_subscription_id, b.plan, pr.price_cents,
-            (SELECT count(*) FROM app.referral_credits c WHERE c.subscriber_id = b.subscriber_id AND c.status = 'available')::text AS credits,
+  const rows = await ctx.db.query<{ subscriber_id: string; provider_subscription_id: string; plan: string; price_cents: string; next_pct: number | null; synced: string | null }>(
+    `SELECT b.subscriber_id, b.provider_subscription_id, b.plan, coalesce(b.contract_cents, pr.price_cents) AS price_cents,
+            (SELECT c.percent FROM app.referral_credits c WHERE c.subscriber_id = b.subscriber_id AND c.status = 'available' ORDER BY c.created_at LIMIT 1) AS next_pct,
             b.synced_value_cents::text AS synced
        FROM app.billing_profiles b
        JOIN app.products pr ON pr.code = 'sub_' || b.plan
@@ -290,7 +289,7 @@ export async function syncPrices(ctx: Ctx, opts: { log?: (e: Record<string, unkn
   let changed = 0;
   for (const r of rows.rows) {
     const list = num(r.price_cents);
-    const want = num(r.credits) > 0 && pct > 0 ? discounted(list, pct) : list;
+    const want = r.next_pct ? discounted(list, r.next_pct) : list; // valor contratado, com o desconto do próximo crédito se houver
     const have = r.synced === null ? list : num(r.synced);
     if (want === have) continue;
     try {
@@ -336,6 +335,7 @@ export async function adminOverview(ctx: Ctx) {
     percent: ctx.config.referralDiscountPct,
     kpis: { leadInvites: num(kv?.leads ?? 0), subscriberInvites: subs, converted, conversionPct: subs > 0 ? Math.round((converted / subs) * 100) : 0, creditsAvailable: num(kv?.avail ?? 0), creditsApplied: num(kv?.applied ?? 0), manualCredits: num(kv?.manual ?? 0) },
     top: top.rows.map((t) => ({ subscriberId: t.subscriber_id, email: t.email, sent: num(t.sent), converted: num(t.converted), available: num(t.avail), applied: num(t.applied) })),
+    reconcile: await reconcile(ctx),
     recent: recent.rows.map((r) => ({ kind: r.kind, referrer: r.referrer ?? r.referrer_name ?? '—', friend: mask(r.friend_email), status: r.status, at: new Date(r.created_at).toISOString(), convertedAt: r.converted_at ? new Date(r.converted_at).toISOString() : null })),
   };
 }
@@ -356,4 +356,68 @@ export async function adjustCredits(ctx: Ctx, adminId: string, subscriberId: str
   });
   const left = await ctx.db.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.referral_credits WHERE subscriber_id = $1 AND status = 'available'`, [subscriberId]);
   return { available: num(left.rows[0]?.n ?? 0) };
+}
+
+// ---------------------------------------------------------------------------
+// Controle por cliente e conferência geral (backoffice)
+// ---------------------------------------------------------------------------
+/** Tudo sobre indicações e descontos de UM assinante, para o dono ter certeza do que foi dado, aplicado e cobrado. */
+export async function subscriberReferralView(ctx: Ctx, subscriberId: string) {
+  const code = await ctx.db.query<{ referral_code: string | null }>(`SELECT referral_code FROM app.subscribers WHERE id = $1`, [subscriberId]);
+  const by = await ctx.db.query<{ email: string | null; credited_at: Date | null }>(
+    `SELECT r.email::text AS email, p.referral_credited_at AS credited_at FROM app.billing_profiles p LEFT JOIN app.subscribers r ON r.id = p.referred_by WHERE p.subscriber_id = $1 AND p.referred_by IS NOT NULL`,
+    [subscriberId],
+  );
+  const counts = await ctx.db.query<{ sent: string; converted: string }>(`SELECT count(*)::text AS sent, count(*) FILTER (WHERE status = 'converted')::text AS converted FROM app.referrals WHERE referrer_subscriber_id = $1`, [subscriberId]);
+  const credits = await ctx.db.query<{ id: string; status: string; percent: number; source: string; note: string | null; created_at: Date; applied_at: Date | null; amount: string | null; friend: string | null }>(
+    `SELECT c.id, c.status, c.percent, c.source, c.note, c.created_at, c.applied_at, p.amount_cents AS amount, f.email::text AS friend
+       FROM app.referral_credits c
+       LEFT JOIN app.payments p ON p.id = c.applied_payment_id
+       LEFT JOIN app.referrals r ON r.id = c.referral_id
+       LEFT JOIN app.subscribers f ON f.id = r.converted_subscriber_id
+      WHERE c.subscriber_id = $1 ORDER BY c.created_at DESC LIMIT 60`,
+    [subscriberId],
+  );
+  const bp = await ctx.db.query<{ plan: string; status: string; provider_subscription_id: string | null; synced: string | null; last_charge_at: Date | null; terms_accepted_at: Date; terms_version: string; price: string | null; avail: string; next_pct: number | null }>(
+    `SELECT b.plan, b.status, b.provider_subscription_id, b.synced_value_cents::text AS synced, b.last_charge_at, b.terms_accepted_at, b.terms_version, coalesce(b.contract_cents, pr.price_cents)::text AS price,
+            (SELECT c.percent FROM app.referral_credits c WHERE c.subscriber_id = b.subscriber_id AND c.status = 'available' ORDER BY c.created_at LIMIT 1) AS next_pct,
+            (SELECT count(*) FROM app.referral_credits c WHERE c.subscriber_id = b.subscriber_id AND c.status = 'available')::text AS avail
+       FROM app.billing_profiles b LEFT JOIN app.products pr ON pr.code = 'sub_' || b.plan WHERE b.subscriber_id = $1`,
+    [subscriberId],
+  );
+  const b = bp.rows[0];
+  const list = num(b?.price ?? 0);
+  const wanted = b && list > 0 ? (b.next_pct ? discounted(list, b.next_pct) : list) : null;
+  const synced = b ? (b.synced === null ? list : num(b.synced)) : null;
+  return {
+    code: code.rows[0]?.referral_code ?? null,
+    referredBy: by.rows[0]?.email ?? null,
+    creditedForReferrer: Boolean(by.rows[0]?.credited_at),
+    invited: num(counts.rows[0]?.sent ?? 0),
+    converted: num(counts.rows[0]?.converted ?? 0),
+    credits: credits.rows.map((c) => ({ id: c.id, status: c.status, percent: c.percent, source: c.source, note: c.note === 'avisado' ? null : c.note, createdAt: new Date(c.created_at).toISOString(), appliedAt: c.applied_at ? new Date(c.applied_at).toISOString() : null, appliedAmountCents: c.amount === null ? null : num(c.amount), friend: c.friend ? mask(c.friend) : null })),
+    billing: b ? { plan: b.plan, status: b.status, lastChargeAt: b.last_charge_at ? new Date(b.last_charge_at).toISOString() : null, termsAcceptedAt: new Date(b.terms_accepted_at).toISOString(), termsVersion: b.terms_version, providerSubscriptionId: b.provider_subscription_id, listCents: list, wantedCents: wanted, syncedCents: synced, inSync: wanted === synced, creditsAvailable: num(b.avail) } : null,
+  };
+}
+
+/** Conferência: quem tem desconto a receber, qual valor deve ser cobrado e qual valor está de fato no provedor. */
+export async function reconcile(ctx: Ctx) {
+  const r = await ctx.db.query<{ subscriber_id: string; email: string; plan: string; status: string; price: string | null; avail: string; next_pct: number | null; synced: string | null; period_end: Date | null }>(
+    `SELECT b.subscriber_id, s.email::text AS email, b.plan, b.status, coalesce(b.contract_cents, pr.price_cents)::text AS price, b.synced_value_cents::text AS synced, sub.current_period_end AS period_end,
+            (SELECT c.percent FROM app.referral_credits c WHERE c.subscriber_id = b.subscriber_id AND c.status = 'available' ORDER BY c.created_at LIMIT 1) AS next_pct,
+            (SELECT count(*) FROM app.referral_credits c WHERE c.subscriber_id = b.subscriber_id AND c.status = 'available')::text AS avail
+       FROM app.billing_profiles b
+       JOIN app.subscribers s ON s.id = b.subscriber_id AND s.deleted_at IS NULL
+       LEFT JOIN app.subscriptions sub ON sub.subscriber_id = b.subscriber_id
+       LEFT JOIN app.products pr ON pr.code = 'sub_' || b.plan
+      WHERE b.status IN ('active','past_due') AND (EXISTS (SELECT 1 FROM app.referral_credits c WHERE c.subscriber_id = b.subscriber_id AND c.status = 'available') OR (b.synced_value_cents IS NOT NULL AND b.synced_value_cents <> coalesce(b.contract_cents, pr.price_cents)))
+      ORDER BY 6 DESC LIMIT 100`,
+  );
+  return r.rows.map((x) => {
+    const list = num(x.price ?? 0);
+    const credits = num(x.avail);
+    const wanted = x.next_pct ? discounted(list, x.next_pct) : list;
+    const synced = x.synced === null ? list : num(x.synced);
+    return { subscriberId: x.subscriber_id, email: x.email, plan: x.plan, status: x.status, listCents: list, credits, wantedCents: wanted, syncedCents: synced, inSync: wanted === synced, nextChargeOn: x.period_end ? new Date(x.period_end).toISOString() : null };
+  });
 }

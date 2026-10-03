@@ -169,3 +169,18 @@
 .bo-product-grid .field { align-content: start; }
 
 .bo-static { margin: 0; padding: 12px 0; }
+
+/* Painel: indicadores sempre em UMA fila (rola de lado se a tela for estreita) */
+.bo-kpis { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(150px, 1fr); overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
+.bo-kpi { min-width: 0; }
+.bo-kpi .bo-kpi-label, .bo-kpi > span:first-child { overflow-wrap: anywhere; }
+
+/* eBook: versões guardadas */
+.bo-versions { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s3); }
+.bo-version { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s3); padding: var(--s4); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--paper); }
+.bo-version > div:first-child { flex: 1 1 280px; min-width: 0; }
+.bo-version p { margin: 4px 0 0; overflow-wrap: anywhere; }
+.bo-version .bo-actions { flex: 0 1 auto; justify-content: flex-end; }
+.bo-mini { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.bo-mini th, .bo-mini td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.bo-mini td.num, .bo-mini th.num { text-align: right; font-variant-numeric: tabular-nums; }

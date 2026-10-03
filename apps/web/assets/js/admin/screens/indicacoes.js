@@ -70,6 +70,23 @@ export async function indicacoesScreen() {
           ),
         ),
         card(
+          'Conferência de valores (quem tem desconto a receber)',
+          el('p', { class: 'muted' }, 'Para cada assinante com desconto pendente: o valor que a próxima fatura deve ter e o que está de fato no provedor de pagamento. "Confere" = o ajuste automático já foi feito.'),
+          table(
+            [
+              { label: 'Assinante', render: (r) => r.email },
+              { label: 'Plano', render: (r) => r.plan },
+              { label: 'Contratado', align: 'right', render: (r) => (r.listCents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) },
+              { label: 'Meses de desconto', align: 'right', render: (r) => int(r.credits) },
+              { label: 'Deve ser cobrado', align: 'right', render: (r) => (r.wantedCents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) },
+              { label: 'No provedor', align: 'right', render: (r) => (r.syncedCents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) },
+              { label: 'Situação', render: (r) => (r.inSync ? badge('Confere', 'ok') : badge('Divergente', 'warn')) },
+            ],
+            d.reconcile,
+            { emptyText: 'Nenhum assinante com desconto pendente.' },
+          ),
+        ),
+        card(
           'Convites recentes',
           table(
             [

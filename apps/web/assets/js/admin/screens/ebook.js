@@ -145,7 +145,7 @@ export async function ebookTab() {
             toast(err.message);
           }
         });
-        return el('li', { class: 'bo-row' }, el('div', {}, el('strong', {}, e.title), el('p', { class: 'fine' }, `${e.filename} · ${mb(e.sizeBytes)} · v${e.version} · criado ${dt(e.createdAt)} · enviado ${int(e.sentCount)}x`)), el('div', { class: 'bo-actions' }, act, download(e), replaceBtn(e), remove(e)));
+        return el('li', { class: 'bo-version' }, el('div', {}, el('strong', {}, e.title), el('p', { class: 'fine' }, `${e.filename} · ${mb(e.sizeBytes)} · v${e.version} · criado ${dt(e.createdAt)} · enviado ${int(e.sentCount)}x`)), el('div', { class: 'bo-actions' }, act, download(e), replaceBtn(e), remove(e)));
       });
 
       host.replaceChildren(...[
@@ -156,7 +156,7 @@ export async function ebookTab() {
         ),
         activeCard,
         card('Subir um novo eBook', el('p', { class: 'muted' }, 'Aceita PDF de até 15 MB. Ao ativar, o novo arquivo passa a ser o presente de quem assinar daqui para frente; quem já recebeu não recebe de novo.'), el('div', { class: 'bo-actions' }, field('Título', titleIn), field('Arquivo', fileIn)), el('div', { class: 'check' }, activate, el('label', { for: 'eb-ativar' }, 'Tornar este o eBook de presente agora')), el('div', { class: 'bo-actions' }, upload)),
-        others.length ? card('Outras versões guardadas', el('ul', { class: 'bo-list' }, ...olderRows)) : null,
+        others.length ? card('Outras versões guardadas', el('ul', { class: 'bo-versions' }, ...olderRows)) : null,
         el('p', { class: 'fine' }, 'O e-mail de agradecimento usa o visual do Fôlego/Prumo e é enviado uma única vez por pessoa. Quem sobe de Controle para Ousado ou Desbravador também recebe. Use "Enviar teste" para ver o e-mail chegando.'),
       ].filter(Boolean));
     } catch (e) {

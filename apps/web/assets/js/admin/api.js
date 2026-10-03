@@ -64,6 +64,8 @@ export const api = {
   subirEbook: ({ file, title, activate }) => uploadPdf('POST', `/ebooks?titulo=${encodeURIComponent(title)}&arquivo=${encodeURIComponent(file.name)}&ativar=${activate ? 1 : 0}`, file),
   atualizarEbook: (id, file) => uploadPdf('PUT', `/ebooks/${id}/arquivo?arquivo=${encodeURIComponent(file.name)}`, file),
   indicacoes: () => call('GET', '/indicacoes'),
+  mercado: () => call('GET', '/mercado'),
+  atualizarMercado: () => call('POST', '/mercado/atualizar', {}),
   ajustarCreditos: (body) => call('POST', '/indicacoes/creditos', body),
   excluirDados: (id, confirmEmail) => call('DELETE', `/assinaturas/cancelados/${id}`, { confirmEmail }),
   async baixarDados(id) {

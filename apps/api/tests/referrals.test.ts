@@ -11,6 +11,7 @@ import { MemorySender } from '../src/email.ts';
 import { handleWebhook } from '../src/services.ts';
 import { ensureDefaultEbook, sendEbookGifts } from '../src/ebook.ts';
 import { notifyCredits, syncPrices, optOutToken } from '../src/referrals.ts';
+import { refreshMarket } from '../src/market.ts';
 
 let db: Db;
 let app: FastifyInstance;
@@ -253,4 +254,69 @@ test('backoffice: Indicações mostra os números, permite ajustar créditos com
   await owner('PUT', '/api/gestao/config', { body: { referralDiscountPct: 20 } });
   assert.equal((await owner('GET', '/api/gestao/indicacoes')).json.percent, 20);
   await owner('PUT', '/api/gestao/config', { body: { referralDiscountPct: 10 } });
+});
+
+test('controle dos descontos: aparece em Pedidos e na Jornada do cliente, usa o valor contratado e a conferência bate com o provedor', async () => {
+  const owner = await ownerClient();
+  const id = await idOf('indicador@exemplo.com');
+  const d = (await owner('GET', `/api/gestao/assinaturas/${id}`)).json;
+  // pedidos: o desconto aparece (preço de tabela x valor cobrado) e o método é cartão
+  const discounted = d.orders.filter((o: any) => o.discountCents > 0);
+  assert.equal(discounted.length, 2, 'duas faturas saíram com desconto');
+  assert.equal(discounted[0].listCents, 3999);
+  assert.equal(discounted[0].totalCents, 3599);
+  assert.equal(discounted[0].discountCents, 400);
+  assert.equal(discounted[0].creditPercent, 10);
+  assert.equal(discounted[0].method, 'card');
+  // controle por cliente: créditos (aplicados, com a fatura), billing e indicações
+  assert.equal(d.referral.credits.filter((c: any) => c.status === 'applied').length, 2);
+  assert.ok(d.referral.credits.every((c: any) => c.appliedAmountCents === 3599 || c.status !== 'applied'));
+  assert.equal(d.referral.billing.status, 'active');
+  assert.equal(d.referral.billing.inSync, true);
+  assert.equal(d.referral.billing.wantedCents, 3999);
+  assert.equal(d.referral.converted, 2);
+  const friend = (await owner('GET', `/api/gestao/assinaturas/${await idOf('amiga1@exemplo.com')}`)).json;
+  assert.equal(friend.referral.referredBy, 'indicador@exemplo.com');
+
+  // Jornada: ganhou, aplicou e indicou aparecem na linha do tempo
+  const tl = (await owner('GET', `/api/gestao/jornada/assinante/${id}`)).json.timeline.map((t: any) => `${t.label}|${t.detail ?? ''}`).join('\n');
+  assert.match(tl, /Ganhou desconto por indicação/);
+  assert.match(tl, /Desconto de 10% aplicado na fatura/);
+  assert.match(tl, /cobrado R\$ 35,99 em vez de R\$ 39,99/);
+  assert.match(tl, /Indicou um amigo por e-mail/);
+  assert.match(tl, /Aceitou os termos e começou a assinatura mensal no cartão/);
+  const tlFriend = (await owner('GET', `/api/gestao/jornada/assinante/${await idOf('amiga1@exemplo.com')}`)).json.timeline.map((t: any) => t.label).join('\n');
+  assert.match(tlFriend, /Chegou por indicação de um assinante/);
+
+  // valor contratado: mudar o preço do plano NÃO muda a cobrança de quem já assina nem gera descontos errados
+  await db.query(`UPDATE app.products SET price_cents = 4999 WHERE code = 'sub_ousado'`);
+  await db.query(`INSERT INTO app.referral_credits(subscriber_id, percent, source, note) VALUES ($1, 10, 'manual', 'teste de preço')`, [id]);
+  await syncPrices(ctx());
+  const sub = (await db.query<{ provider_subscription_id: string }>(`SELECT provider_subscription_id FROM app.billing_profiles WHERE subscriber_id = $1`, [id])).rows[0]!.provider_subscription_id;
+  assert.equal(gateway.valueOf(sub), 3599, '10% sobre o valor CONTRATADO (3.999), não sobre o preço novo (4.999)');
+  const rec = (await owner('GET', '/api/gestao/indicacoes')).json.reconcile.find((r: any) => r.email === 'indicador@exemplo.com');
+  assert.equal(rec.wantedCents, 3599);
+  assert.equal(rec.syncedCents, 3599);
+  assert.equal(rec.inSync, true);
+  await db.query(`UPDATE app.products SET price_cents = 3999 WHERE code = 'sub_ousado'`);
+});
+
+test('indicadores do Banco Central: se a consulta "últimos N" for recusada usa o intervalo de datas; o motivo da falha fica registrado', async () => {
+  await db.query(`DELETE FROM app.market_indicators`);
+  const seen: string[] = [];
+  const fetchFn = (async (url: string) => {
+    seen.push(url);
+    if (url.includes('/ultimos/')) return new Response('nope', { status: 406 });
+    const serie = /sgs\.(\d+)\//.exec(url)![1];
+    if (serie === '1') return new Response('erro', { status: 500 });
+    return new Response(JSON.stringify([{ data: '01/10/2026', valor: '14,75' }]), { status: 200 });
+  }) as unknown as typeof fetch;
+  const saved = await refreshMarket(ctx(), { fetchFn, force: true });
+  assert.equal(saved, 3, 'três séries entraram pelo plano B');
+  assert.ok(seen.some((u) => u.includes('dataInicial=')));
+  const owner = await ownerClient();
+  const st = (await owner('GET', '/api/gestao/mercado')).json;
+  assert.equal(st.lastRun.errors.usd, 'bcb_http_500');
+  assert.equal(st.lastRun.errors.selic, undefined);
+  assert.equal(st.indicators.selicPct, 14.75);
 });

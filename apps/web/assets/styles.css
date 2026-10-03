@@ -900,3 +900,16 @@ ul, ol { margin: 0; padding: 0; }
 .perk { padding: var(--s5); border-radius: var(--radius); background: color-mix(in srgb, var(--primary) 8%, var(--surface)); border: 1px solid color-mix(in srgb, var(--primary) 22%, var(--line)); }
 .perk h3 { margin: 0 0 var(--s2); }
 .perk p { margin: 0; }
+
+/* Cards de plano: mesma altura, botão sempre no pé do cartão e do mesmo tamanho */
+.plans { align-items: stretch; }
+.script, .plan-opt { display: flex; flex-direction: column; gap: var(--s3); }
+.script .bullets, .plan-opt .bullets { flex: 0 0 auto; }
+.script > .btn, .plan-opt > .btn { width: 100%; min-height: 52px; justify-content: center; margin-top: auto; flex: 0 0 auto; transform: none; padding-inline: 14px; gap: 8px; white-space: nowrap; font-size: 0.95rem; }
+.script > .btn:hover, .plan-opt > .btn:hover { transform: none; }
+.tick-list li > span { display: block; min-width: 0; }
+
+/* Landing: cards de plano com o botão sempre no pé, todos do mesmo tamanho */
+.plan-card { display: flex; flex-direction: column; gap: var(--s3); }
+.plan-card .tick-list { flex: 1 1 auto; }
+.plan-card > .btn { margin-top: auto; width: 100%; min-height: 52px; justify-content: center; }

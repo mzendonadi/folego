@@ -18,6 +18,7 @@ function toggle(id, label, hint, checked, disabled = false) {
 
 async function siteTab(ctx) {
   const { settings: s, environment: env } = await api.config();
+  const mk = await api.mercado().catch(() => null);
   const subs = toggle('cf-subs', 'Prumo: assinaturas (conta por e-mail, cobrança mensal no cartão)', env.emailConfigured ? 'Desligar esconde a área de conta para novos acessos; os dados e as assinaturas continuam guardados.' : 'Precisa do envio de e-mail configurado no servidor.', s.subscriptionsEnabled, !env.emailConfigured && !s.subscriptionsEnabled);
   const leads = toggle('cf-leads', 'Propostas de parceiros (leads)', 'Deixe desligado até a revisão jurídica (LGPD e superendividamento).', s.leadsEnabled);
   const ai = toggle('cf-ai', 'IA nas entregas (roteiros e plano de renda extra)', env.aiKeyConfigured ? 'Desligada, as entregas saem pelos modelos fixos, sem custo de IA.' : 'Não há chave da Anthropic configurada no servidor: mesmo ligada, sai o modelo fixo.', s.aiEnabled);
@@ -53,6 +54,30 @@ async function siteTab(ctx) {
     card('Aviso no site', bannerOn.node, el('div', { class: 'bo-actions' }, field('Texto', bannerText), field('Tipo', bannerTone))),
     card('Assinaturas e IA', el('div', { class: 'bo-actions' }, field('Lembrete de vencimento (dias antes)', remind, 'O e-mail é enviado uma vez, nesta antecedência.'), field('Teto diário de chamadas à IA', cap, 'Acima disso, as entregas usam o modelo fixo (controle de custo).'), field('Teto diário de e-mails de campanha', campCap, 'Protege a reputação do e-mail do Fôlego. 0 = nenhuma campanha sai.'), field('Desconto por indicação que assina (%)', referralPct, 'Vale um mês, na próxima fatura de quem indicou. Os meses se acumulam. Ao mudar, só as próximas indicações usam o valor novo.'), field('Guarda dos dados de quem cancelou (dias)', purge, 'Depois do fim do acesso, você tem este prazo para baixar o pacote em Assinaturas > Cancelados. Passado o prazo, os dados são apagados sozinhos.')), el('p', { class: 'fine' }, 'Preços dos planos e o Kit Completo ficam em Produtos e preços.')),
     el('div', { class: 'bo-actions' }, save),
+    card(
+      'Indicadores econômicos (Banco Central)',
+      el('p', { class: 'muted' }, 'Selic, inflação (IPCA), CDI e dólar alimentam o Cenário econômico do Prumo. O sistema busca sozinho; use o botão para atualizar agora e ver o motivo se alguma série falhar.'),
+      dl([
+        ['Última atualização', mk?.updatedAt ? new Date(mk.updatedAt).toLocaleString('pt-BR') : 'ainda sem dados'],
+        ['Selic / IPCA 12m / CDI / dólar', mk ? [mk.indicators.selicPct, mk.indicators.ipca12Pct, mk.indicators.cdiPct, mk.indicators.usdBrl].map((v) => (v === null ? '—' : String(v).replace('.', ','))).join(' · ') : '—'],
+        ['Última tentativa', mk?.lastRun ? `${new Date(mk.lastRun.at).toLocaleString('pt-BR')} · ${mk.lastRun.saved} valores${Object.keys(mk.lastRun.errors).length ? ` · falhou: ${Object.entries(mk.lastRun.errors).map(([k, v]) => `${k} (${v})`).join(', ')}` : ' · tudo certo'}` : 'nenhuma ainda'],
+      ]),
+      (() => {
+        const b = el('button', { class: 'btn btn-secondary btn-sm', type: 'button' }, 'Atualizar agora');
+        b.addEventListener('click', async () => {
+          b.disabled = true;
+          try {
+            const r = await api.atualizarMercado();
+            toast(Object.keys(r.lastRun?.errors ?? {}).length ? `Atualizado com falhas: ${Object.keys(r.lastRun.errors).join(', ')}` : `Atualizado (${r.saved} valores).`);
+            location.reload();
+          } catch (e) {
+            toast(e.message);
+            b.disabled = false;
+          }
+        });
+        return el('div', { class: 'bo-actions' }, b);
+      })(),
+    ),
     card('Ambiente (somente leitura)', dl([
       ['Envio de e-mail', env.emailConfigured ? badge('Configurado', 'ok') : badge('Não configurado', 'bad')],
       ['Pagamento', env.gateway === 'fake' ? badge('Simulado (pré-lançamento): nenhuma cobrança é real', 'warn') : badge(env.gateway, 'ok')],

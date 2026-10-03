@@ -229,25 +229,34 @@ async function generateIncome(ctx: Ctx, opts: WorkerOptions, job: Claimed): Prom
 export async function runWorker(ctx: Ctx, opts: WorkerOptions, control: { stopped: boolean }, idleMs = 3000): Promise<void> {
   while (!control.stopped) {
     let did = false;
+    await refreshRuntime(ctx.db, ctx.config); // lê de novo o que o dono mudou em Configurações (indicações, teto de e-mails etc.)
     try {
       did = await processNext(ctx, opts);
     } catch (error) {
       opts.log?.({ evento: 'worker_erro', erro: error instanceof Error ? error.message.slice(0, 200) : 'erro' });
     }
-    try {
-      if (await deliverPendingLeads(ctx, opts.log ? { log: opts.log } : {})) did = true;
-      if (await dispatchCampaigns(ctx, opts.log ? { log: opts.log } : {})) did = true;
-      if ((await sendDueReminders(ctx, opts.log ? { log: opts.log } : {})) > 0) did = true;
-      if ((await sendWeeklyDigests(ctx, opts.log ? { log: opts.log } : {})) > 0) did = true;
-      if ((await purgeCanceledExpired(ctx, opts.log ? { log: opts.log } : {})) > 0) did = true;
-      if ((await sendEbookGifts(ctx, opts.log ? { log: opts.log } : {})) > 0) did = true;
-      if ((await notifyCredits(ctx, opts.log ? { log: opts.log } : {})) > 0) did = true;
-      if ((await syncPrices(ctx, opts.log ? { log: opts.log } : {})) > 0) did = true;
-      if ((await sendWelcomes(ctx, opts.log ? { log: opts.log } : {})) > 0) did = true;
-      if ((await refreshMarket(ctx, opts.log ? { log: opts.log } : {})) > 0) did = true;
-      await maintenance(ctx, opts.log ? { log: opts.log } : {});
-    } catch (error) {
-      opts.log?.({ evento: 'leads_erro', erro: error instanceof Error ? error.message.slice(0, 200) : 'erro' });
+    // Cada trabalho roda isolado: se um falha, os outros continuam (antes um erro derrubava a fila inteira).
+    const log = opts.log ? { log: opts.log } : {};
+    const jobs: Array<[string, () => Promise<unknown>]> = [
+      ['leads', () => deliverPendingLeads(ctx, log)],
+      ['campanhas', () => dispatchCampaigns(ctx, log)],
+      ['lembretes', () => sendDueReminders(ctx, log)],
+      ['resumo_semanal', () => sendWeeklyDigests(ctx, log)],
+      ['expurgo_cancelados', () => purgeCanceledExpired(ctx, log)],
+      ['ebook_presente', () => sendEbookGifts(ctx, log)],
+      ['avisos_indicacao', () => notifyCredits(ctx, log)],
+      ['valores_assinatura', () => syncPrices(ctx, log)],
+      ['boas_vindas', () => sendWelcomes(ctx, log)],
+      ['indicadores_mercado', () => refreshMarket(ctx, log)],
+      ['manutencao', () => maintenance(ctx, log)],
+    ];
+    for (const [name, job] of jobs) {
+      try {
+        const r = await job();
+        if (r === true || (typeof r === 'number' && r > 0)) did = true;
+      } catch (error) {
+        opts.log?.({ evento: 'trabalho_erro', trabalho: name, erro: error instanceof Error ? error.message.slice(0, 200) : 'erro' });
+      }
     }
     if (!did) await new Promise((r) => setTimeout(r, idleMs));
   }

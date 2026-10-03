@@ -231,6 +231,20 @@ export function registerGestao(app: FastifyInstance, deps: AdminRouteDeps): void
     return { ok: true, to: a.email };
   });
 
+  // ---------- indicadores econômicos (Banco Central) ----------
+  app.get(`${P}/mercado`, async (req) => {
+    await admin(req, 'config_site');
+    const { loadIndicators, marketStatus } = await import('../market.ts');
+    const cur = await loadIndicators(ctx);
+    return { updatedAt: cur.updatedAt, indicators: cur.indicators, lastRun: await marketStatus(ctx) };
+  });
+  app.post(`${P}/mercado/atualizar`, async (req) => {
+    await admin(req, 'config_site');
+    const { refreshMarket, marketStatus } = await import('../market.ts');
+    const saved = await refreshMarket(ctx, { force: true });
+    return { saved, lastRun: await marketStatus(ctx) };
+  });
+
   // ---------- indicações ----------
   app.get(`${P}/indicacoes`, async (req) => {
     await admin(req, 'marketing', 'assinaturas');

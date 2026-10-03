@@ -146,7 +146,11 @@ export function viewCoach(ctx) {
 
 export function viewMercado(ctx) {
   const m = ctx.market;
-  if (!m.hasData) return card(el('h2', {}, 'Cenário econômico'), el('p', { class: 'muted' }, 'Os indicadores do Banco Central ainda estão sendo carregados. Volte em alguns minutos.'));
+  if (!m.hasData) {
+    const retry = el('button', { class: 'btn btn-secondary btn-sm', type: 'button' }, 'Tentar de novo');
+    retry.addEventListener('click', () => ctx.refresh());
+    return card(el('h2', {}, 'Cenário econômico'), el('p', { class: 'muted' }, 'Ainda não conseguimos buscar os indicadores no Banco Central. Já avisamos a nossa equipe e tentamos de novo sozinhos a cada poucos minutos.'), el('div', { class: 'button-row no-print' }, retry));
+  }
   const i = m.indicators;
   const trendText = (v, unit) => (v === null || Math.abs(v) < 0.005 ? 'estável em 3 meses' : `${v > 0 ? 'subiu' : 'caiu'} ${Math.abs(v).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}${unit} em 3 meses`);
   const tile = (title, value, sub, history) => el('div', { class: 'indicator' }, el('span', { class: 'fine muted' }, title), el('strong', { class: 'indicator-value' }, value), el('span', { class: 'fine' }, sub), history ? svgLine(history, { label: `Evolução: ${title}` }) : null);

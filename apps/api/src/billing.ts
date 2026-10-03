@@ -75,8 +75,8 @@ export async function startCardCheckout(ctx: Ctx, args: { subscriberId: string; 
          plan = EXCLUDED.plan, status = 'pending', terms_accepted_at = now(), terms_version = EXCLUDED.terms_version, canceled_at = NULL, past_due_since = NULL, data_exported_at = NULL`,
       [args.subscriberId, ctx.gateway.name, card.providerCustomerId, card.providerSubscriptionId, plan.code, TERMS_VERSION],
     );
-    await q.query(`UPDATE app.billing_profiles SET synced_value_cents = $2 WHERE subscriber_id = $1`, [args.subscriberId, valueCents]);
-    await audit(q, `subscriber:${args.subscriberId}`, 'subscription_checkout_started', 'order', orderId, { plan: plan.code, termsVersion: TERMS_VERSION });
+    await q.query(`UPDATE app.billing_profiles SET synced_value_cents = $2, contract_cents = $2 WHERE subscriber_id = $1`, [args.subscriberId, valueCents]);
+    await audit(q, `subscriber:${args.subscriberId}`, 'subscription_checkout_started', 'subscriber', args.subscriberId, { plan: plan.code, termsVersion: TERMS_VERSION, orderId });
   });
   await attribute(ctx, args.subscriberId, args.referralCode);
   return { orderId, checkoutUrl: card.checkoutUrl, totalCents: valueCents, plan: plan.code, status: 'pending' };
@@ -97,7 +97,10 @@ export async function registerRenewal(ctx: Ctx, event: GatewayEvent): Promise<nu
     const exists = await q.query(`SELECT 1 FROM app.payments WHERE provider = $1 AND provider_payment_id = $2`, [ctx.gateway.name, event.providerPaymentId]);
     if (exists.rows.length > 0) return;
     const o = await q.query<{ id: string }>(`INSERT INTO app.orders(case_id, subscriber_id, session_id, status, total_cents, idempotency_key) VALUES (NULL,$1,NULL,'pending',$2,$3) RETURNING id`, [profile.subscriber_id, valueCents, `renewal-${event.providerPaymentId}`]);
-    await q.query(`INSERT INTO app.order_items(order_id, product_code, unit_price_cents) VALUES ($1,$2,$3)`, [o.rows[0]!.id, plan.productCode, valueCents]);
+    // O item guarda o preço de tabela e o pedido o valor cobrado: a diferença é o desconto (indicação) e fica visível em Pedidos.
+    const contract = await q.query<{ contract_cents: string | null }>(`SELECT contract_cents FROM app.billing_profiles WHERE subscriber_id = $1`, [profile.subscriber_id]);
+    const listCents = num(contract.rows[0]?.contract_cents ?? price.rows[0]?.price_cents ?? valueCents);
+    await q.query(`INSERT INTO app.order_items(order_id, product_code, unit_price_cents) VALUES ($1,$2,$3)`, [o.rows[0]!.id, plan.productCode, Math.max(listCents, valueCents)]);
     await q.query(`INSERT INTO app.payments(order_id, provider, provider_payment_id, method, amount_cents, status) VALUES ($1,$2,$3,'card',$4,'pending')`, [o.rows[0]!.id, ctx.gateway.name, event.providerPaymentId, valueCents]);
   });
   return valueCents;

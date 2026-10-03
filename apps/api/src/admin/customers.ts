@@ -7,6 +7,7 @@ import { audit, num } from '../services.ts';
 import { SUB_STATUS_SQL } from './metrics.ts';
 import type { AdminUser } from './auth.ts';
 import { can } from './auth.ts';
+import { subscriberReferralView } from '../referrals.ts';
 
 const PAGE = 40;
 const iso = (d: unknown): string | null => (d ? new Date(d as string).toISOString() : null);
@@ -85,8 +86,11 @@ export async function subscriberDetail(ctx: Ctx, id: string) {
   );
   const row = s.rows[0];
   if (!row) throw notFound();
-  const orders = await ctx.db.query<{ id: string; status: string; total_cents: string; created_at: Date; paid_at: Date | null; product: string }>(
-    `SELECT o.id, o.status, o.total_cents, o.created_at, o.paid_at, (SELECT string_agg(product_code, ', ') FROM app.order_items WHERE order_id = o.id) AS product
+  const orders = await ctx.db.query<{ id: string; status: string; total_cents: string; created_at: Date; paid_at: Date | null; product: string; list_cents: string | null; method: string | null; credit_pct: number | null }>(
+    `SELECT o.id, o.status, o.total_cents, o.created_at, o.paid_at, (SELECT string_agg(product_code, ', ') FROM app.order_items WHERE order_id = o.id) AS product,
+            (SELECT sum(unit_price_cents) FROM app.order_items WHERE order_id = o.id)::text AS list_cents,
+            (SELECT method FROM app.payments WHERE order_id = o.id ORDER BY created_at LIMIT 1) AS method,
+            (SELECT c.percent FROM app.referral_credits c JOIN app.payments p ON p.id = c.applied_payment_id WHERE p.order_id = o.id LIMIT 1) AS credit_pct
        FROM app.orders o WHERE o.subscriber_id = $1 ORDER BY o.created_at DESC LIMIT 50`,
     [id],
   );
@@ -111,7 +115,8 @@ export async function subscriberDetail(ctx: Ctx, id: string) {
     status: row.status,
     periodEnd: iso(row.period_end),
     cancelAtPeriodEnd: Boolean(row.cancel),
-    orders: orders.rows.map((o) => ({ id: o.id, status: o.status, totalCents: num(o.total_cents), createdAt: iso(o.created_at), paidAt: iso(o.paid_at), product: o.product })),
+    orders: orders.rows.map((o) => ({ id: o.id, status: o.status, totalCents: num(o.total_cents), createdAt: iso(o.created_at), paidAt: iso(o.paid_at), product: o.product, method: o.method, listCents: o.list_cents === null ? null : num(o.list_cents), discountCents: o.list_cents === null ? 0 : Math.max(0, num(o.list_cents) - num(o.total_cents)), creditPercent: o.credit_pct })),
+    referral: await subscriberReferralView(ctx, id),
     usage: { entries: num(u?.entries ?? 0), goals: num(u?.goals ?? 0), contributions: num(u?.contributions ?? 0), lastEntryAt: iso(u?.last_entry) },
     history: audits.rows.map((a) => ({ at: iso(a.occurred_at), actor: a.actor, action: a.action, data: a.data })),
   };
@@ -402,8 +407,37 @@ export async function subscriberTimeline(ctx: Ctx, subscriberId: string) {
   const seen = new Set(base.map((b) => `${b.at}|${b.kind}`));
   for (const o of orders.rows) {
     const created = iso(o.created_at)!;
-    if (!seen.has(`${created}|order`)) base.push({ at: created, kind: 'order', label: `Gerou o Pix da assinatura (${(num(o.total_cents) / 100).toFixed(2).replace('.', ',')})`, detail: o.product });
-    if (o.paid_at && !seen.has(`${iso(o.paid_at)}|payment`)) base.push({ at: iso(o.paid_at)!, kind: 'payment', label: 'Pagou a assinatura', detail: o.product });
+    if (!seen.has(`${created}|order`)) base.push({ at: created, kind: 'order', label: `Gerou a cobrança da assinatura (${(num(o.total_cents) / 100).toFixed(2).replace('.', ',')})`, detail: o.product });
+    const paidIso = o.paid_at ? iso(o.paid_at)! : null;
+    const dup = paidIso ? base.some((x) => x.label === 'Pagou a assinatura' && Math.abs(Date.parse(x.at) - Date.parse(paidIso)) < 15_000) : false;
+    if (o.paid_at && !dup && !seen.has(`${iso(o.paid_at)}|payment`)) base.push({ at: iso(o.paid_at)!, kind: 'payment', label: 'Pagou a assinatura', detail: o.product });
   }
+  // Cobrança, indicações e descontos: tudo o que mexe no valor da fatura aparece na jornada.
+  const brl = (c: number) => (c / 100).toFixed(2).replace('.', ',');
+  const audits = await ctx.db.query<{ occurred_at: Date; action: string; data: Record<string, unknown> }>(
+    `SELECT occurred_at, action, data FROM app.audit_log WHERE entity = 'subscriber' AND entity_id = $1 AND action IN ('subscription_checkout_started','subscription_charge_refused','subscription_canceled','referral_credit_granted','referral_credits_adjusted','ebook_gift_sent','subscriber_data_exported')`,
+    [subscriberId],
+  );
+  const AUD: Record<string, string> = {
+    subscription_checkout_started: 'Aceitou os termos e começou a assinatura mensal no cartão',
+    subscription_charge_refused: 'Cartão recusado na cobrança mensal',
+    subscription_canceled: 'Cancelou a assinatura (cobrança interrompida)',
+    referral_credit_granted: 'Ganhou desconto por indicação: um amigo assinou',
+    referral_credits_adjusted: 'Créditos de desconto ajustados pelo backoffice',
+    ebook_gift_sent: 'Recebeu o eBook de presente por e-mail',
+    subscriber_data_exported: 'Dados baixados pelo backoffice',
+  };
+  for (const x of audits.rows) base.push({ at: iso(x.occurred_at)!, kind: 'account', label: AUD[x.action] ?? x.action, ...(x.action === 'referral_credit_granted' ? { detail: `${String(x.data.percent ?? '')}% na próxima fatura` } : x.action === 'referral_credits_adjusted' ? { detail: `${Number(x.data.delta) > 0 ? '+' : ''}${String(x.data.delta)}: ${String(x.data.reason ?? '')}` } : {}) });
+  const invited = await ctx.db.query<{ created_at: Date; status: string; converted_at: Date | null }>(`SELECT created_at, status, converted_at FROM app.referrals WHERE referrer_subscriber_id = $1`, [subscriberId]);
+  for (const r of invited.rows) base.push({ at: iso(r.created_at)!, kind: 'account', label: 'Indicou um amigo por e-mail', detail: r.status === 'converted' ? 'o amigo assinou' : 'convite enviado' });
+  const used = await ctx.db.query<{ applied_at: Date; percent: number; amount: string | null; list: string | null }>(
+    `SELECT c.applied_at, c.percent, p.amount_cents::text AS amount,
+            (SELECT sum(unit_price_cents) FROM app.order_items oi WHERE oi.order_id = p.order_id)::text AS list
+       FROM app.referral_credits c LEFT JOIN app.payments p ON p.id = c.applied_payment_id WHERE c.subscriber_id = $1 AND c.status = 'applied' AND c.applied_at IS NOT NULL`,
+    [subscriberId],
+  );
+  for (const u of used.rows) base.push({ at: iso(u.applied_at)!, kind: 'payment', label: `Desconto de ${u.percent}% aplicado na fatura`, detail: u.amount ? `cobrado R$ ${brl(num(u.amount))}${u.list ? ` em vez de R$ ${brl(num(u.list))}` : ''}` : undefined });
+  const from = await ctx.db.query<{ email: string; created_at: Date }>(`SELECT r.email::text AS email, p.created_at FROM app.billing_profiles p JOIN app.subscribers r ON r.id = p.referred_by WHERE p.subscriber_id = $1`, [subscriberId]);
+  for (const x of from.rows) base.push({ at: iso(x.created_at)!, kind: 'account', label: 'Chegou por indicação de um assinante', detail: x.email });
   return base.sort((a, b) => a.at.localeCompare(b.at));
 }

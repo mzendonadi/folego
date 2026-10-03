@@ -1,8 +1,12 @@
-// Processo do worker (container próprio em produção): gera roteiros e cartas em segundo plano.
+// Processo do worker (container próprio em produção): gera roteiros e cartas e roda os trabalhos em segundo plano
+// (e-mails de conta, eBook de presente, avisos de indicação, ajuste de valores no provedor, expurgo, indicadores).
+// IMPORTANTE: o worker usa o MESMO e-mail e o MESMO gateway de pagamento da API (antes ele não tinha e-mail e usava gateway de mentira).
 import { loadConfig } from './config.ts';
 import { createPgliteDb, createPostgresDb, ensureSchema } from './db.ts';
 import type { Db } from './db.ts';
-import { FakeGateway } from './gateway.ts';
+import { AsaasGateway, FakeGateway } from './gateway.ts';
+import type { PaymentGateway } from './gateway.ts';
+import { ConsoleSender, ResendSender } from './email.ts';
 import { runWorker } from './generation/worker.ts';
 import { workerOptions } from './generation/setup.ts';
 
@@ -23,11 +27,13 @@ const stop = () => {
 process.on('SIGINT', stop);
 process.on('SIGTERM', stop);
 
-const opts = workerOptions(config, log);
-log({ evento: 'worker_iniciado', ia: opts.generator ? config.aiModel : 'desligada (modelos determinísticos)', tetoDiarioIA: config.aiMaxCallsPerDay });
+const gateway: PaymentGateway = config.asaas ? new AsaasGateway(config.asaas) : new FakeGateway(config.webhookSecret);
+const email = config.email ? new ResendSender(config.email) : config.env !== 'production' ? new ConsoleSender() : undefined;
 
-// O worker não usa o gateway de pagamento; o objeto só existe para satisfazer o contrato do contexto.
-await runWorker({ db, config, gateway: new FakeGateway(config.webhookSecret) }, opts, control);
+const opts = workerOptions(config, log);
+log({ evento: 'worker_iniciado', ia: opts.generator ? config.aiModel : 'desligada (modelos determinísticos)', tetoDiarioIA: config.aiMaxCallsPerDay, email: email ? email.name : 'NÃO configurado', pagamento: gateway.name });
+
+await runWorker({ db, config, gateway, email }, opts, control);
 await db.close();
 log({ evento: 'worker_encerrado' });
 process.exit(0);

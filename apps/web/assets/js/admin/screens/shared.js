@@ -63,6 +63,42 @@ export async function caseDrawer(id, ctx) {
 }
 
 /** Gaveta do assinante: situação, pedidos, uso, histórico e ações manuais (sempre com motivo). */
+const CREDIT = { available: ['Disponível', 'warn'], applied: ['Aplicado em fatura', 'ok'], revoked: ['Revogado', 'muted'] };
+
+/** Indicações e descontos do cliente: de onde veio, o que indicou, créditos (dados/aplicados) e se o valor no provedor confere. */
+function referralSection(r) {
+  if (!r) return null;
+  const b = r.billing;
+  const money = (c) => (c === null || c === undefined ? '—' : brl(c));
+  return el(
+    'section', {},
+    el('h3', {}, 'Indicações e descontos'),
+    dl([
+      ['Código de indicação', r.code ?? 'ainda não gerado'],
+      ['Chegou indicado por', r.referredBy ? `${r.referredBy}${r.creditedForReferrer ? ' (desconto já creditado a quem indicou)' : ' (aguardando a 1ª cobrança)'}` : '—'],
+      ['Indicou / assinaram', `${int(r.invited)} / ${int(r.converted)}`],
+      ...(b ? [
+        ['Cobrança', `${b.status === 'active' ? 'Em dia' : b.status === 'past_due' ? 'Cartão recusado' : b.status === 'canceled' ? 'Cancelada' : 'Pendente'} · termos aceitos em ${dt(b.termsAcceptedAt)} (v${b.termsVersion})`],
+        ['Valor contratado', money(b.listCents)],
+        ['Próxima fatura deve ser', `${money(b.wantedCents)}${b.creditsAvailable ? ` (${b.creditsAvailable} mês(es) de desconto)` : ''}`],
+        ['Valor no provedor (Asaas)', `${money(b.syncedCents)} ${b.inSync ? '✓ confere' : '⚠ divergente: o ajuste automático corrige em instantes'}`],
+      ] : []),
+    ]),
+    r.credits.length
+      ? table(
+          [
+            { label: 'Crédito', render: (c) => `${c.percent}% · ${c.source === 'manual' ? 'manual' : 'indicação'}` },
+            { label: 'Situação', render: (c) => badge(...(CREDIT[c.status] ?? [c.status, 'muted'])) },
+            { label: 'Origem', render: (c) => c.friend ?? c.note ?? '—' },
+            { label: 'Fatura', align: 'right', render: (c) => (c.appliedAmountCents ? brl(c.appliedAmountCents) : '—') },
+            { label: 'Quando', render: (c) => dt(c.appliedAt ?? c.createdAt) },
+          ],
+          r.credits,
+        )
+      : el('p', { class: 'fine' }, 'Nenhum crédito de desconto até agora.'),
+  );
+}
+
 export async function subscriberDrawer(id, ctx, onChange = () => {}) {
   const dw = drawer('Assinante');
   dw.body.append(loading());
@@ -103,7 +139,16 @@ export async function subscriberDrawer(id, ctx, onChange = () => {}) {
       el('div', { class: 'bo-head-line' }, el('h3', {}, s.email), badge(label, tone)),
       dl([['Plano', s.plan ? PLAN[s.plan] : '—'], ['Vence em', s.periodEnd ? day(s.periodEnd) : '—'], ['Cadastro', dt(s.createdAt)], ['Último acesso', dt(s.lastLoginAt)], ['Lançamentos', int(s.usage.entries)], ['Metas / aportes', `${int(s.usage.goals)} / ${int(s.usage.contributions)}`], ['Último lançamento', dt(s.usage.lastEntryAt)]]),
       actions,
-      el('section', {}, el('h3', {}, 'Pedidos'), table([{ label: 'Item', render: (o) => PRODUCT[o.product] ?? o.product }, { label: 'Valor', align: 'right', render: (o) => brl(o.totalCents) }, { label: 'Situação', render: (o) => badge(...(ORDER_STATUS[o.status] ?? [o.status, 'muted'])) }, { label: 'Data', render: (o) => dt(o.paidAt ?? o.createdAt) }], s.orders, { emptyText: 'Nenhum pedido.' })),
+      el('section', {}, el('h3', {}, 'Pedidos'), table([
+        { label: 'Item', render: (o) => PRODUCT[o.product] ?? o.product },
+        { label: 'Forma', render: (o) => (o.method === 'card' ? 'Cartão (mensal)' : o.method === 'pix' ? 'Pix' : '—') },
+        { label: 'Tabela', align: 'right', render: (o) => (o.listCents ? brl(o.listCents) : '—') },
+        { label: 'Cobrado', align: 'right', render: (o) => brl(o.totalCents) },
+        { label: 'Desconto', render: (o) => (o.discountCents > 0 ? badge(`-${brl(o.discountCents)}${o.creditPercent ? ` · ${o.creditPercent}% indicação` : ''}`, 'ok') : '—') },
+        { label: 'Situação', render: (o) => badge(...(ORDER_STATUS[o.status] ?? [o.status, 'muted'])) },
+        { label: 'Data', render: (o) => dt(o.paidAt ?? o.createdAt) },
+      ], s.orders, { emptyText: 'Nenhum pedido.' })),
+      referralSection(s.referral),
       s.history.length ? el('section', {}, el('h3', {}, 'Histórico de ações'), table([{ label: 'Quando', render: (h) => dt(h.at) }, { label: 'Ação', render: (h) => h.action.replace('admin_subscription_', '') }, { label: 'Quem / motivo', render: (h) => (h.data?.by ? `${h.data.by}${h.data.reason ? `: ${h.data.reason}` : ''}` : h.actor) }], s.history)) : null,
       el('section', {}, el('h3', {}, 'Jornada'), timeline(j.timeline)),
     ].filter(Boolean));

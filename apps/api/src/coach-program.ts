@@ -7,7 +7,7 @@ import { OBJECTIVES, goalTemplates, PROGRAMS, applyMethods, compareMonths, evalu
 import type { CoachFacts, CoachPlan } from './engine.ts';
 import { requireFeature } from './subscriptions.ts';
 import { listDebts, monthLimits } from './account-debts.ts';
-import { loadIndicators } from './market.ts';
+import { loadIndicators, refreshIfNeeded, marketStatus } from './market.ts';
 import { layout } from './email.ts';
 import { planByCode } from './engine.ts';
 
@@ -139,6 +139,7 @@ export async function markMissionDone(ctx: Ctx, subscriberId: string, missionId:
 /** Cenário econômico. Controle: os números e o que significam; Ousado: leitura personalizada; Desbravador: séries de 12 meses. */
 export async function marketView(ctx: Ctx, subscriberId: string) {
   const plan = await planOf(ctx, subscriberId);
+  await refreshIfNeeded(ctx).catch(() => undefined);
   const { indicators, updatedAt, history } = await loadIndicators(ctx);
   const { facts, openRatesBps } = await loadCoachFacts(ctx, subscriberId);
   const insights = marketInsights(indicators, facts, openRatesBps).map((i) => { const locked = !planAtLeast(plan, i.minPlan); return { ...i, locked, text: locked ? '' : i.text }; });
@@ -150,6 +151,7 @@ export async function marketView(ctx: Ctx, subscriberId: string) {
     insights,
     history: planAtLeast(plan, 'desbravador') ? history : null,
     hasData: updatedAt !== null,
+    status: updatedAt === null ? ((await marketStatus(ctx))?.errors ?? null) : null,
   };
 }
 
