@@ -130,6 +130,7 @@
 | D-086 | 2026-10-03 | **Correção crítica do worker + controle dos descontos + ajustes de layout/texto.** (a) **O container worker de produção não tinha e-mail nem o gateway real** (só a API tinha): por isso o eBook de presente ficava em "Aguardando envio" e nenhum e-mail de segundo plano (boas-vindas, lembretes, resumo semanal, campanhas, avisos de indicação) saía. Agora o worker usa o mesmo e-mail e o mesmo gateway da API, relê as configurações do backoffice a cada volta e **cada trabalho roda isolado** (um erro não derruba a fila; o log traz `trabalho_erro`). (b) **Desconto de indicação sob controle total:** o valor contratado (preço da época da assinatura) é guardado e o desconto incide sobre ele, então mudar o preço do plano vale só para novas assinaturas; cada crédito tem seu percentual; o pedido guarda preço de tabela e valor cobrado, e **Clientes → Pedidos mostra forma (cartão), tabela, cobrado e o desconto aplicado (com % de indicação)**; a **Jornada do cliente** registra aceite dos termos, indicações feitas, "chegou por indicação", desconto ganho, desconto aplicado na fatura (cobrado X em vez de Y), cancelamento, cartão recusado e eBook enviado; o cliente tem bloco "Indicações e descontos" (créditos disponíveis/aplicados com a fatura, valor esperado x valor no provedor); **Indicações → Conferência de valores** lista quem tem desconto pendente e se o valor no provedor confere. Aplicar crédito e ganhar crédito ficam na auditoria. (c) **Cenário econômico:** a busca no Banco Central agora tenta "últimos N" e, se recusar, o intervalo de datas; cada série é independente; o motivo da falha fica gravado; a API também busca na hora quando alguém abre a aba sem dados; em Configurações há "Indicadores econômicos" com última atualização, valores, erros e botão "Atualizar agora". (d) Landing: textos dos planos corrigidos (itens com negrito não quebram mais), retirada de "(não devolvemos o mês em andamento)" da landing (fica nos termos), botões dos planos com mesmo tamanho e alinhados; aviso de parceiros reduzido a "Crédito novo é dívida nova: só faz sentido se reduz o que você paga no total."; escolha de plano no Prumo passa a citar o eBook de presente no Ousado e no Desbravador; backoffice: lista "Outras versões guardadas" refeita e indicadores do Painel sempre em uma fila | Feita |
 | D-087 | 2026-10-03 | **Indicadores econômicos com plano B.** O servidor de produção não consegue falar com o Banco Central pela rede ("fetch failed" em todas as séries), então cada série ganhou uma fonte alternativa pública: Selic e CDI pela BrasilAPI (espelho do Banco Central; só o valor do dia, a tendência de 3 meses passa a existir conforme o histórico se forma), IPCA em 12 meses pelo IBGE (SIDRA, tabela 1737) e dólar pelo Frankfurter (taxas do Banco Central Europeu), com AwesomeAPI e open.er-api como reservas (a AwesomeAPI chegou a responder 429, limite de uso). O Banco Central continua sendo a primeira tentativa; se ele não responde pela rede, as demais séries dele são puladas para não atrasar. O motivo de cada tentativa (inclusive o código de rede) aparece em Configurações → Indicadores econômicos | Feita |
 | D-088 | 2026-10-03 | **Detector de cobranças recorrentes e simulador "e se...?" no Prumo.** Avaliação de ideias do mercado: (1) detector de cobranças indevidas/assinaturas esquecidas e (2) simulador de cenários financeiros **entram** (usam os lançamentos que a pessoa já tem, sem Open Finance); (3) cobrador automático de faturas para freelancers **fica de fora** (outro produto, outro público, B2B; decisão do dono). **Cobranças** (todos os planos, aba no grupo Dinheiro): acha no extrato o que se repete todo mês ou todo ano (chave pelo nome do lançamento + intervalo entre cobranças), mostra custo por mês e por ano e a próxima esperada, alerta **aumento de preço** (≥ 3% e ≥ R$ 1) e **possível cobrança em duplicidade**, e deixa marcar "mantenho" ou "vou cancelar" somando a economia anual; cobranças que pararam há mais de ~2 ciclos saem da lista; nova missão "Revise suas cobranças recorrentes" na jornada Organizar o mês. **E se...?** (Ousado e Desbravador; Controle vê o bloqueio): parte da média dos últimos 3 meses (renda, essencial, variável), das parcelas mínimas das dívidas e da reserva (metas + poupança); modelos prontos (mudar de emprego, reduzir jornada, cortar variáveis, atacar dívida, mudar de casa, renda extra); mostra o mês novo x o atual, saldo acumulado em até 60 meses (gráfico), quando o cenário passa o atual e alertas (mês no vermelho, reserva que não cobre a transição). Cálculo no motor (`recurring.ts`, `scenario.ts`) e no navegador, com testes. Landing e escolha de plano atualizadas | Feita |
+| D-089 | 2026-10-03 | **Revisão total ponta a ponta.** Conferido o histórico completo (decisões D-001 a D-088, memória do projeto, código e produção). Roadmap §10 atualizado (E4 e E7 concluídos) e criado o **checklist de lançamento §11A** com 18 itens (bloqueios, autonomia) e a lista do que foi mencionado e continua fora do escopo | Feita |
 
 ---
 
@@ -792,10 +793,10 @@ Certificado: `certbot --nginx -d folego.online -d www.folego.online` (renovaçã
 | E0 | Landing + preview + Pix (testar R$ 19/29/49) | Front-end ✅, back-end ✅ e **no ar em folego.online** (pré-lançamento, pagamento de mentira, §8.8); Asaas real e testes de preço ⏳ |
 | E2 | Intake completo (timeline/passos) + preview automático (≤ 2 s, sem IA) | ✅ |
 | E3 | Checkout Pix + webhook idempotente + entitlements | ✅ com gateway de mentira (17 testes); adaptador real ⏳ |
-| E4 | Geração pós-pagamento (IA + PDF) + link mágico (< 60 s) | ⏳ |
+| E4 | Geração pós-pagamento (IA + PDF) + link mágico (< 60 s) | ✅ Roteiros, cartas (PDF no navegador), Renda Extra com IA e link de acesso em produção |
 | E5 | Upsells (cartas, calendário, renda extra) + bundle | Upsells ✅ (D-044); bundle e teste de preços ⏳ |
 | E6 | Consentimento + leads + portal do parceiro (após revisão jurídica) | Construído (D-050); **desligado** (`LEADS_ENABLED=0`) até a revisão jurídica |
-| E7 | Assinatura + planejador com IA | Assinatura sem IA construída (D-049); **desligada** até haver e-mail real configurado. Planejador com IA: pendente |
+| E7 | Assinatura (Prumo) + coach + planejador com IA | ✅ **Prumo em produção em modo simulado** (D-049 a D-088): coach, dívidas, carteiras, lembretes, orçamento, cobranças, "e se...?", planejador IA, mercado, conta compartilhada, eBook, indicações. **Falta ligar a cobrança real (Asaas, aguarda o MEI)**. Open Finance: não construído |
 | Fase 5 | B2B/MEI, comparadores de compra | ⏳ |
 
 Critérios de pronto: E1 revisado por você contra planilha; E3 pagamento duplicado não gera duas entregas; E4 entrega em < 60 s.
@@ -819,6 +820,37 @@ Critérios de pronto: E1 revisado por você contra planilha; E3 pagamento duplic
 10c. ~~Cinco agregadores (Tradutor de Cobrança, e-mail, Kit Completo, assinatura, leads)~~ **Construídos e testados (D-046 a D-051, §14).** Tradutor e Kit Completo já valem em produção; e-mail, assinatura e leads estão no código mas **desligados** (env vars `RESEND_API_KEY`, `SUBSCRIPTIONS_ENABLED`, `LEADS_ENABLED`, `PARTNER_ADMIN_TOKEN`, todas em `deploy/env.example`). Restam: revisão jurídica dos leads e das cartas, contratar Resend, revisar os textos do Tradutor com advogado.
 11. **Publicação:** textos legais definitivos (hoje é minuta), razão social/CNPJ e contato do encarregado no rodapé, `og:image`, `robots.txt` e `sitemap.xml`, teste com usuários reais.
 9. ~~Onde guardar o projeto~~ **Resolvido em 2026-09-26:** pasta permanente `C:\Users\mzend\Projeto Finanças`.
+
+---
+
+## 11A. Checklist de lançamento público (revisão total de 2026-10-03, D-089)
+
+**Bloqueia o lançamento**
+1. **MEI + conta Asaas** (produção): chave de API, chave Pix, webhook com os 5 eventos (`deploy/GO-LIVE-ASAAS.md`); teste ponta a ponta no sandbox; trocar `PAYMENT_PROVIDER=asaas` e **remover** `ALLOW_FAKE_GATEWAY_IN_PRODUCTION` (some o "Simular pagamento").
+2. **Textos legais definitivos** (revisão por advogado): Termos de Uso, Política de Privacidade, Política de Cancelamento/Reembolso (inclui "sem devolução do mês em andamento", retenção de 15 dias, indicações, eBook), cookies/rastreamento anônimo, dados enviados à IA (transferência internacional). Hoje é uma minuta em diálogo.
+3. **Identificação no rodapé:** razão social, CNPJ, canal de contato e encarregado (DPO) da LGPD; RIPD elaborado.
+4. **Parceiros/leads:** `LEADS_ENABLED` está **ligado** em produção sem revisão jurídica e sem nenhum parceiro contratado. Decidir: desligar até haver parceiro e parecer, ou manter só a coleta de interesse com texto aprovado.
+5. **Limpar os dados de teste de produção** (pedidos/assinaturas/casos de teste aparecem no Painel e nos indicadores) antes de abrir ao público.
+6. **Backup automático fora do servidor + restauração testada** (§8.6): hoje não há rotina no `deploy/`.
+7. **Monitoramento e alertas** (§8.6): site fora do ar, worker parado, e-mail falhando, webhook com erro, pagamento sem entrega, disco; hoje só logs.
+8. **Nota fiscal do MEI** (NFS-e) e rotina de conciliação financeira/contador.
+9. **Endurecer o servidor** (§8.2/§8.7): usuário de deploy próprio, fail2ban, atualizações automáticas, Cloudflare Origin CA + Full (strict), firewall só para IPs do Cloudflare, 444 para hosts desconhecidos, decidir os registros de `codhubs.com`.
+10. **Abrir a indexação:** remover `X-Robots-Tag noindex` do Nginx e o bloqueio total do `robots.txt` (mantendo `/gestao` bloqueado); adicionar `sitemap.xml` e `og:image`.
+11. **Validar as premissas do motor** (§5.10: taxas padrão, prescrição, teto de juros) e revisar com advogado cartas, tradutor, prescrição e consignado.
+12. **Canal de suporte** (e-mail/WhatsApp) e processo de atendimento ao titular de dados (acesso, correção, exclusão); política de contestação de cobrança (chargeback).
+
+**Para funcionar 100% sozinho (autonomia)**
+13. **Cobrança recorrente real** e rotina de inadimplência: cartão recusado já avisa; falta política de tentativas, suspensão e reativação confirmadas no Asaas real.
+14. **Anti-abuso (Turnstile)** no formulário e limites de custo da IA conferidos em produção.
+15. **Alertas de custo** (IA e e-mail) e orçamento mensal máximo.
+16. **Testes automatizados de navegador** (fluxos críticos: diagnóstico → Pix, assinatura, cancelamento) e checklist de regressão antes de cada publicação.
+17. **Rotina de manutenção**: atualização de dependências, rotação de segredos, restauração de backup trimestral, revisão mensal das taxas do motor.
+18. **Runbook de incidentes** (site fora, webhook falhando, vazamento, chargeback) e quem faz o quê.
+
+**Fora do escopo atual (mencionado, não construído)**
+- Open Finance / contas conectadas (aparece como "em breve" no Desbravador).
+- Dinheiro esquecido pago (fase 2), Currículo por vaga, Renegociador de contas de casa, Comparador honesto de financiamento (fase "comprar melhor"), B2B/MEI (cobrança de clientes: **descartado** em D-088 para freelancers).
+- Identidade visual definitiva (logo/INPI/redes sociais), versão em aplicativo.
 
 ---
 
@@ -892,3 +924,4 @@ Critérios de pronto: E1 revisado por você contra planilha; E3 pagamento duplic
 | 2026-10-03 | 1.25 | Worker com e-mail e gateway reais, controle dos descontos, cenário econômico resiliente e ajustes de layout (D-086) |
 | 2026-10-03 | 1.26 | Indicadores econômicos com fontes alternativas (D-087) |
 | 2026-10-03 | 1.27 | Cobranças recorrentes e simulador "e se...?" (D-088) |
+| 2026-10-03 | 1.28 | Revisão total, roadmap atualizado e checklist de lançamento §11A (D-089) |
