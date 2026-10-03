@@ -6,7 +6,7 @@ import { addDaysIso, formatBrl } from './calendar.ts';
 // Planos
 // ---------------------------------------------------------------------------
 export type PlanCode = 'controle' | 'ousado' | 'desbravador';
-export type Feature = 'ledger' | 'import' | 'alerts' | 'coach_limited' | 'goals' | 'coach' | 'simulator';
+export type Feature = 'ledger' | 'import' | 'alerts' | 'coach_limited' | 'goals' | 'coach' | 'simulator' | 'planner';
 
 export interface Plan {
   code: PlanCode;
@@ -34,8 +34,8 @@ export const PLANS: Plan[] = [
   },
   {
     code: 'desbravador', name: 'Desbravador', priceCents: 5999, productCode: 'sub_desbravador',
-    tagline: 'Tudo, mais simulações educativas de investimento',
-    features: ['ledger', 'import', 'alerts', 'goals', 'coach', 'simulator'],
+    tagline: 'Tudo, mais planejador com IA e simulações educativas',
+    features: ['ledger', 'import', 'alerts', 'goals', 'coach', 'simulator', 'planner'],
     soon: ['Contas conectadas (Open Finance): depende de parceiro autorizado pelo Banco Central.'],
   },
 ];

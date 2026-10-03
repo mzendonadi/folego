@@ -801,3 +801,8 @@ ul, ol { margin: 0; padding: 0; }
 .wallet-row .check { display: flex; gap: var(--s3); align-items: flex-start; }
 .wallet-row .neg { color: var(--danger-ink, #b3261e); }
 .entry-note .wallet-tag { color: var(--muted, #5b6470); font-size: .85em; }
+.debt-row { display: grid; gap: 6px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.debt-top { display: flex; gap: var(--s3); align-items: center; }
+.debt-top .icon-btn { margin-left: auto; }
+.debt-row.is-done strong { text-decoration: line-through; opacity: .7; }
+.payoff-order { margin: var(--s3) 0 0; padding-left: 1.2em; color: var(--muted, #5b6470); }

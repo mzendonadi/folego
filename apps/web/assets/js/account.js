@@ -248,6 +248,7 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
       try {
         if (NEEDS_MONTH.has(id)) ctx.data = await api.getMonth(month);
         if (id === 'lancamentos') ctx.wallets = await ctx.api.getWallets().catch(() => null);
+        if (id === 'dividas') ctx.debts = await ctx.api.getDebts(ctx.debtExtra ?? 0);
         if (id === 'carteiras') ctx.wallets = await ctx.api.getWallets();
         if (id === 'lembretes') ctx.reminders = (await ctx.api.getReminders()).reminders;
         if (id === 'treinador') ctx.coach = await api.getCoach().catch(() => null);

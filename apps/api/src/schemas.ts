@@ -110,6 +110,21 @@ export const reminderSchema = z.object({
   emailDaysBefore: z.number().int().min(0).max(10).optional(),
 });
 export const reminderPatchSchema = reminderSchema.partial().extend({ done: z.boolean().optional() });
+export const accountDebtSchema = z.object({
+  name: z.string().trim().min(1).max(60),
+  balanceCents: z.number().int().min(1).max(100_000_000_00),
+  monthlyRateBps: z.number().int().min(0).max(10_000).optional(),
+  minPaymentCents: z.number().int().min(0).max(100_000_000_00).optional(),
+  dueDay: z.number().int().min(1).max(31).nullable().optional(),
+});
+export const accountDebtPatchSchema = accountDebtSchema.partial();
+export const debtPaymentSchema = z.object({
+  amountCents: z.number().int().min(1).max(100_000_000_00),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  addToLedger: z.boolean().optional(),
+});
+export const plannerSchema = z.object({ question: z.string().trim().min(5).max(500) });
+export const monthLimitSchema = z.object({ limitCents: z.number().int().positive().max(100_000_000_00).nullable() });
 export const setLimitSchema = z.object({ limitCents: z.number().int().positive().max(100_000_000_00).nullable() });
 export const goalSchema = z.object({
   id: z.string().uuid().optional(),

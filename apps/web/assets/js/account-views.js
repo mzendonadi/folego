@@ -4,20 +4,22 @@ import { el, icon, toast } from './dom.js';
 import { brl } from './format.js';
 import { moneyInput } from './money.js';
 import { confirmDialog } from './confirm.js';
-import { viewCarteiras, viewLembretes } from './account-extras-views.js';
+import { viewCarteiras, viewLembretes, viewDividas } from './account-extras-views.js';
 import { PLANS, CATEGORIES, CATEGORY_LABEL, categorize, parseExtract } from '../vendor/engine.js';
 
-export const FEATURE_LABEL = { ledger: 'Controle de gastos', import: 'Importar extrato', alerts: 'Alertas de limite', coach_limited: 'Treinador (3 dicas)', goals: 'Metas com aportes', coach: 'Treinador completo', simulator: 'Simulador de investimento' };
+export const FEATURE_LABEL = { ledger: 'Controle de gastos', import: 'Importar extrato', alerts: 'Alertas de limite', coach_limited: 'Treinador (3 dicas)', goals: 'Metas com aportes', coach: 'Treinador completo', simulator: 'Simulador de investimento', planner: 'Planejador com IA' };
 
 /** Abas da conta. `needs` = recurso do plano exigido (a aba aparece sempre; sem o recurso mostra o que o upgrade traz). */
 export const TABS = [
   { id: 'geral', label: 'Visão geral' },
   { id: 'lancamentos', label: 'Lançamentos' },
+  { id: 'dividas', label: 'Dívidas' },
   { id: 'carteiras', label: 'Carteiras' },
   { id: 'lembretes', label: 'Lembretes' },
   { id: 'orcamento', label: 'Orçamento' },
   { id: 'metas', label: 'Metas', needs: 'goals' },
   { id: 'treinador', label: 'Treinador' },
+  { id: 'planejador', label: 'Planejador', needs: 'planner' },
   { id: 'simulador', label: 'Simulador', needs: 'simulator' },
   { id: 'plano', label: 'Plano' },
 ];
@@ -241,6 +243,17 @@ export function viewLancamentos(ctx) {
 // ---------------------------------------------------------------- Orçamento (limites por categoria)
 export function viewOrcamento(ctx) {
   const d = ctx.data;
+  const onlyMonth = el('input', { type: 'checkbox', id: 'lim-so-mes' });
+  const copy = el('button', { class: 'btn btn-secondary btn-sm', type: 'button' }, 'Copiar limites do mês anterior');
+  copy.addEventListener('click', async () => {
+    try {
+      const r = await ctx.api.copyBudgetMonth(ctx.month);
+      toast(r.copied ? `${r.copied} limites copiados.` : 'Nada novo para copiar (o mês anterior não tinha limites só dele).');
+      ctx.refresh();
+    } catch {
+      toast('Não consegui copiar agora.');
+    }
+  });
   const spentBy = Object.fromEntries(d.summary.byCategory.map((c) => [c.category, c.cents]));
   const rows = CATEGORIES.filter((c) => c !== 'renda').map((c) => {
     const limit = d.limits[c] ?? null;
@@ -249,7 +262,8 @@ export function viewOrcamento(ctx) {
     field.input.addEventListener('change', async () => {
       const cents = field.cents();
       try {
-        await ctx.api.setLimit(c, cents && cents > 0 ? cents : null);
+        const value = cents && cents > 0 ? cents : null;
+        await (onlyMonth.checked ? ctx.api.setMonthLimit(ctx.month, c, value) : ctx.api.setLimit(c, value));
         toast(cents ? 'Limite salvo.' : 'Limite removido.');
         ctx.refresh();
       } catch {
@@ -267,6 +281,7 @@ export function viewOrcamento(ctx) {
     el('h2', {}, 'Limites por categoria'),
     el('p', { class: 'section-sub' }, 'Defina quanto você quer gastar por mês em cada área. Avisamos quando chegar perto e quando passar. Deixe vazio para não avisar.'),
     monthNav(ctx),
+    el('div', { class: 'button-row no-print' }, el('label', { class: 'check', for: 'lim-so-mes' }, onlyMonth, ' Valer só para este mês'), copy),
     el('ul', { class: 'budget-list' }, ...rows),
   );
 }
@@ -521,6 +536,39 @@ export function viewPlano(ctx) {
   );
 }
 
-export const VIEWS = { geral: viewGeral, lancamentos: viewLancamentos, orcamento: viewOrcamento, carteiras: viewCarteiras, lembretes: viewLembretes, metas: viewMetas, treinador: viewTreinador, simulador: viewSimulador, plano: viewPlano };
+export function viewPlanejador(ctx) {
+  if (!ctx.has('planner')) {
+    return locked(ctx, {
+      title: 'Planejador com IA',
+      feature: 'planner',
+      blurb: 'Pergunte em linguagem simples ("como fecho o mês?", "qual dívida pago primeiro?") e receba uma resposta baseada nos seus números reais.',
+      bullets: ['Usa seus lançamentos, dívidas e prazos do mês', 'Nunca inventa valores: os números vêm da sua conta', 'Até 10 perguntas por dia'],
+    });
+  }
+  const q = el('textarea', { class: 'input', id: 'pl-pergunta', rows: '3', maxlength: '500', placeholder: 'Ex.: Como fecho este mês sem atrasar nada? Qual dívida eu ataco primeiro?' });
+  const ask = el('button', { class: 'btn btn-primary', type: 'submit' }, 'Perguntar');
+  const out = el('div', { class: 'planner-out', 'aria-live': 'polite' });
+  const form = el('form', { class: 'tool-form' }, el('div', { class: 'field' }, el('label', { class: 'label', for: 'pl-pergunta' }, 'Sua pergunta'), q), ask);
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (q.value.trim().length < 5) return toast('Escreva a pergunta com um pouco mais de detalhe.');
+    ask.disabled = true;
+    out.replaceChildren(el('p', { class: 'muted', role: 'status' }, 'Pensando com os seus números…'));
+    try {
+      const r = await ctx.api.askPlanner(q.value.trim());
+      out.replaceChildren(
+        el('p', {}, r.answer),
+        el('ul', { class: 'tick-list left' }, ...r.nextSteps.map((s) => el('li', {}, icon('check'), s))),
+        el('p', { class: 'fine muted' }, r.source === 'ia' ? 'Resposta escrita por IA com base nos seus dados. É orientação de organização, não consultoria financeira licenciada.' : 'Resposta calculada pelas regras do Fôlego com base nos seus dados.'),
+      );
+    } catch (err) {
+      out.replaceChildren(el('p', { class: 'neg' }, err?.status === 429 ? 'Você usou as perguntas de hoje. Volte amanhã.' : 'Não consegui responder agora. Tente de novo.'));
+    }
+    ask.disabled = false;
+  });
+  return card(el('h2', {}, 'Pergunte ao Fôlego'), el('p', { class: 'section-sub' }, 'A resposta usa os lançamentos do mês, suas dívidas e os próximos vencimentos.'), form, out);
+}
+
+export const VIEWS = { geral: viewGeral, lancamentos: viewLancamentos, orcamento: viewOrcamento, dividas: viewDividas, carteiras: viewCarteiras, lembretes: viewLembretes, metas: viewMetas, treinador: viewTreinador, simulador: viewSimulador, planejador: viewPlanejador, plano: viewPlano };
 export const NEEDS_MONTH = new Set(['geral', 'lancamentos', 'orcamento', 'metas']);
 export { monthNow };

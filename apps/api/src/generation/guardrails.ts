@@ -25,7 +25,7 @@ function moneyMentionsCents(text: string): number[] {
 }
 
 /** Regras comuns a qualquer texto gerado por IA neste projeto (D-009: números vêm de código, nunca da IA). */
-function checkCommonRules(texts: string[], allowedAmountsCents: number[], allowedPercents: number[] | null): string[] {
+export function checkCommonRules(texts: string[], allowedAmountsCents: number[], allowedPercents: number[] | null): string[] {
   const issues: string[] = [];
   const allowedWhole = new Set(allowedAmountsCents.map((c) => Math.round(c / 100) * 100));
   for (const t of texts) {

@@ -18,10 +18,12 @@ import * as sub from './subscriptions.ts';
 import { registerGestao } from './admin/routes.ts';
 import * as campaigns from './admin/campaigns.ts';
 import * as extras from './account-extras.ts';
+import * as debts from './account-debts.ts';
+import { askPlanner } from './planner.ts';
 import { eventSchema, recordEvent } from './admin/events.ts';
 import { publicCatalog } from './admin/manage.ts';
 import { refreshRuntime } from './runtime.ts';
-import { accessSchema, addEntriesSchema, cancelSchema, contributionSchema, createCaseSchema, entryWalletSchema, reminderPatchSchema, reminderSchema, walletSchema, createOrderSchema, emailLinkSchema, emailOnlySchema, goalSchema, incomeInterviewSchema, leadSchema, loginCodeSchema, newPartnerSchema, partnerLoginSchema, partnerStatusSchema, setCategorySchema, setLimitSchema, simulateSchema, subscriptionOrderSchema, toggleIncomeTaskSchema, translationSchema, uuidParam } from './schemas.ts';
+import { accessSchema, addEntriesSchema, cancelSchema, contributionSchema, createCaseSchema, entryWalletSchema, accountDebtSchema, accountDebtPatchSchema, debtPaymentSchema, monthLimitSchema, plannerSchema, reminderPatchSchema, reminderSchema, walletSchema, createOrderSchema, emailLinkSchema, emailOnlySchema, goalSchema, incomeInterviewSchema, leadSchema, loginCodeSchema, newPartnerSchema, partnerLoginSchema, partnerStatusSchema, setCategorySchema, setLimitSchema, simulateSchema, subscriptionOrderSchema, toggleIncomeTaskSchema, translationSchema, uuidParam } from './schemas.ts';
 import { CSP } from './security.ts';
 import * as svc from './services.ts';
 import type { Ctx } from './services.ts';
@@ -326,6 +328,33 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     await sub.deleteContribution(ctx, await requireSubscriber(req), idParam(p.id), idParam(p.cid));
     return reply.status(204).send();
   });
+  // Dívidas da conta, plano de quitação e orçamento por mês
+  app.get('/api/account/debts', async (req) => {
+    const extra = Math.max(0, Math.min(100_000_000_00, Number((req.query as { extra?: string }).extra) || 0));
+    return debts.listDebts(ctx, await requireSubscriber(req), extra);
+  });
+  app.post('/api/account/debts', async (req, reply) => reply.status(201).send({ id: await debts.createDebt(ctx, await requireSubscriber(req), accountDebtSchema.parse(req.body)) }));
+  app.put('/api/account/debts/:id', async (req) => {
+    await debts.updateDebt(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id), accountDebtPatchSchema.parse(req.body));
+    return { ok: true };
+  });
+  app.delete('/api/account/debts/:id', async (req, reply) => {
+    await debts.deleteDebt(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id));
+    return reply.status(204).send();
+  });
+  app.post('/api/account/debts/:id/payments', async (req) => debts.payDebt(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id), debtPaymentSchema.parse(req.body)));
+  app.post('/api/account/budget/:month/limits/:category', async (req) => {
+    const { month, category } = req.params as { month: string; category: string };
+    if (!/^\d{4}-\d{2}$/.test(month)) throw new AppError(400, 'invalid_month', 'Mês inválido.');
+    await debts.setMonthLimit(ctx, await requireSubscriber(req), month, category, monthLimitSchema.parse(req.body).limitCents);
+    return { ok: true };
+  });
+  app.post('/api/account/budget/:month/copy', async (req) => {
+    const { month } = req.params as { month: string };
+    if (!/^\d{4}-\d{2}$/.test(month)) throw new AppError(400, 'invalid_month', 'Mês inválido.');
+    return { copied: await debts.copyPreviousMonthLimits(ctx, await requireSubscriber(req), month) };
+  });
+  app.post('/api/account/planner', { config: { rateLimit: { max: 12, timeWindow: '10 minutes' } } }, async (req) => askPlanner(ctx, await requireSubscriber(req), plannerSchema.parse(req.body).question));
   // Carteiras e lembretes
   app.get('/api/account/wallets', async (req) => extras.listWallets(ctx, await requireSubscriber(req)));
   app.post('/api/account/wallets', async (req, reply) => {

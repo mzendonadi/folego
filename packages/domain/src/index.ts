@@ -18,3 +18,5 @@ export type { TranslatorAnalysis, TranslatorPreview, TranslatorFlag, TranslatorR
 export * from './account.ts';
 export { buildStrategies } from './strategies.ts';
 export type { Strategies, StrategyScenario, WhatIfExtra, LumpSumScenario, SettlementOption, MonthPlanRow, Milestone, PlaybookItem } from './strategies.ts';
+export { buildPayoffPlan, MAX_PAYOFF_MONTHS } from './payoff.ts';
+export type { AccountDebt, PayoffPlan, PayoffResult, PayoffMethod } from './payoff.ts';

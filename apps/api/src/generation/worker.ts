@@ -4,6 +4,7 @@ import { maintenance } from '../subscriptions.ts';
 import { refreshRuntime } from '../runtime.ts';
 import { dispatchCampaigns } from '../admin/campaigns.ts';
 import { sendDueReminders } from '../account-extras.ts';
+import { sendWeeklyDigests } from '../account-debts.ts';
 import type { DebtInput, Diagnosis, IncomeInterview, Profile } from '../engine.ts';
 import { buildIncomeFacts } from '../engine.ts';
 import { buildFacts } from './facts.ts';
@@ -232,6 +233,7 @@ export async function runWorker(ctx: Ctx, opts: WorkerOptions, control: { stoppe
       if (await deliverPendingLeads(ctx, opts.log ? { log: opts.log } : {})) did = true;
       if (await dispatchCampaigns(ctx, opts.log ? { log: opts.log } : {})) did = true;
       if ((await sendDueReminders(ctx, opts.log ? { log: opts.log } : {})) > 0) did = true;
+      if ((await sendWeeklyDigests(ctx, opts.log ? { log: opts.log } : {})) > 0) did = true;
       await maintenance(ctx, opts.log ? { log: opts.log } : {});
     } catch (error) {
       opts.log?.({ evento: 'leads_erro', erro: error instanceof Error ? error.message.slice(0, 200) : 'erro' });

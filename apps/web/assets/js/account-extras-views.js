@@ -127,3 +127,107 @@ export function viewLembretes(ctx) {
     card(el('h2', {}, 'Seus lembretes'), rows.length ? el('ul', { class: 'entries' }, ...rows) : el('p', { class: 'muted' }, 'Nenhum lembrete ainda.')),
   );
 }
+
+const KIND_NOTE = { avalanche: 'Avalanche: ataca primeiro a dívida com juros mais altos. É a que menos custa.', snowball: 'Bola de neve: ataca primeiro a menor dívida. Custa um pouco mais, mas dá vitórias rápidas.' };
+const monthsText = (m) => (m >= 600 ? 'nunca, neste ritmo' : m === 0 ? 'já está tudo pago' : m < 12 ? `${m} meses` : `${Math.floor(m / 12)} ${Math.floor(m / 12) === 1 ? 'ano' : 'anos'}${m % 12 ? ` e ${m % 12} meses` : ''}`);
+
+export function viewDividas(ctx) {
+  const d = ctx.debts;
+  const name = el('input', { class: 'input', id: 'dv-nome', type: 'text', maxlength: '60', placeholder: 'Ex.: cartão do banco, financiamento' });
+  const balance = moneyInput({ id: 'dv-saldo', ariaLabel: 'Quanto falta pagar' });
+  const rate = el('input', { class: 'input', id: 'dv-juros', type: 'number', min: '0', max: '100', step: '0.01', placeholder: 'Ex.: 12' });
+  const minPay = moneyInput({ id: 'dv-min', ariaLabel: 'Parcela mínima por mês' });
+  const add = el('button', { class: 'btn btn-primary', type: 'submit' }, icon('plus'), 'Adicionar dívida');
+  const form = el(
+    'form', { class: 'entry-form' },
+    el('div', { class: 'field field-wide' }, el('label', { class: 'label', for: 'dv-nome' }, 'Qual dívida'), name),
+    el('div', { class: 'field' }, el('label', { class: 'label', for: 'dv-saldo' }, 'Quanto falta (R$)'), balance.input),
+    el('div', { class: 'field' }, el('label', { class: 'label', for: 'dv-juros' }, 'Juros ao mês (%)'), rate),
+    el('div', { class: 'field' }, el('label', { class: 'label', for: 'dv-min' }, 'Parcela mínima (R$)'), minPay.input),
+    add,
+  );
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const cents = balance.cents();
+    if (!name.value.trim()) return toast('Diga qual é a dívida.');
+    if (!cents) return toast('Informe quanto falta pagar.');
+    add.disabled = true;
+    try {
+      await ctx.api.createDebt({ name: name.value.trim(), balanceCents: cents, monthlyRateBps: Math.round((Number(rate.value) || 0) * 100), minPaymentCents: minPay.cents() || 0 });
+      toast('Dívida adicionada.');
+      ctx.refresh();
+    } catch {
+      add.disabled = false;
+      toast('Não consegui adicionar agora.');
+    }
+  });
+
+  const rows = d.debts.map((x) => {
+    const amount = moneyInput({ id: `pg-${x.id}`, ariaLabel: `Valor pago em ${x.name}`, small: true });
+    const payBtn = el('button', { class: 'btn btn-secondary btn-sm', type: 'button' }, 'Registrar pagamento');
+    payBtn.addEventListener('click', async () => {
+      const cents = amount.cents();
+      if (!cents) return toast('Informe quanto você pagou.');
+      payBtn.disabled = true;
+      try {
+        const r = await ctx.api.payDebt(x.id, { amountCents: cents, addToLedger: true });
+        toast(r.paidOff ? `${x.name} quitada! 🎉` : 'Pagamento registrado.');
+        ctx.refresh();
+      } catch {
+        payBtn.disabled = false;
+        toast('Não consegui registrar agora.');
+      }
+    });
+    const del = el('button', { class: 'btn btn-quiet btn-sm icon-btn', type: 'button', 'aria-label': `Remover ${x.name}` }, icon('trash'));
+    del.addEventListener('click', async () => {
+      if (!(await confirmDialog({ title: `Remover "${x.name}"?`, text: 'O histórico de pagamentos dela também sai.', confirmLabel: 'Remover' }))) return;
+      try {
+        await ctx.api.deleteDebt(x.id);
+        ctx.refresh();
+      } catch {
+        toast('Não consegui remover agora.');
+      }
+    });
+    const pct = x.initialCents ? Math.round(((x.initialCents - x.balanceCents) / x.initialCents) * 100) : 0;
+    const focus = d.plan?.focusId === x.id;
+    return el(
+      'li', { class: `debt-row${x.paidOff ? ' is-done' : ''}` },
+      el('div', { class: 'debt-top' }, el('strong', {}, x.name), focus ? el('span', { class: 'pill tone-ok' }, 'Foco agora') : null, x.paidOff ? el('span', { class: 'pill tone-ok' }, 'Quitada') : null, del),
+      el('p', { class: 'muted fine' }, x.paidOff ? 'Parabéns!' : `Falta ${brl(x.balanceCents)}${x.monthlyRateBps ? ` · juros ${(x.monthlyRateBps / 100).toLocaleString('pt-BR')}% ao mês` : ''}${x.minPaymentCents ? ` · mínima ${brl(x.minPaymentCents)}` : ''}`),
+      el('div', { class: 'progress', role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': String(pct), 'aria-label': `Progresso de ${x.name}` }, el('i', { style: `width:${Math.max(0, Math.min(100, pct))}%` })),
+      x.paidOff ? null : el('div', { class: 'button-row no-print' }, amount.input, payBtn),
+    );
+  });
+
+  let planBox = null;
+  if (d.plan) {
+    const p = d.plan;
+    const best = p[p.recommended];
+    const extra = moneyInput({ id: 'dv-extra', ariaLabel: 'Quanto a mais por mês', value: p.extraCents || null, placeholder: '0,00' });
+    const sim = el('button', { class: 'btn btn-secondary btn-sm', type: 'button' }, 'Simular');
+    sim.addEventListener('click', () => {
+      ctx.debtExtra = extra.cents() || 0;
+      ctx.refresh();
+    });
+    const focus = d.debts.find((x) => x.id === p.focusId);
+    planBox = card(
+      el('h2', {}, 'Seu plano de quitação'),
+      best.neverPaysOff
+        ? el('div', { class: 'note note-amber' }, icon('alert'), el('span', {}, 'Com as parcelas atuais os juros comem o pagamento e a dívida não acaba. Veja o quanto a mais por mês muda isso abaixo, ou negocie a taxa.'))
+        : el('p', {}, el('strong', {}, `Quitando tudo em ${monthsText(best.months)}`), `, pagando ${brl(best.totalInterestCents)} de juros no total.`),
+      focus ? el('p', {}, 'Coloque todo dinheiro extra em ', el('strong', {}, focus.name), ' e pague só a mínima nas outras. ', el('span', { class: 'muted' }, KIND_NOTE[p.recommended])) : null,
+      p.savingsCents > 0 ? el('p', { class: 'muted' }, `Em relação à bola de neve, a avalanche economiza ${brl(p.savingsCents)} em juros.`) : null,
+      el('div', { class: 'button-row no-print' }, el('div', { class: 'field' }, el('label', { class: 'label', for: 'dv-extra' }, 'E se eu pagar a mais por mês (R$)?'), extra.input), sim),
+      best.order.length ? el('ol', { class: 'payoff-order' }, ...best.order.map((o) => el('li', {}, `${o.name} quitada no mês ${o.paidOffInMonth}`))) : null,
+    );
+  }
+
+  const t = d.totals;
+  return el(
+    'div', { class: 'acc-stack' },
+    t.initialCents ? card(el('h2', {}, 'Para sair do vermelho'), el('p', {}, el('strong', {}, brl(t.owedCents)), ' ainda a pagar. Você já pagou ', el('strong', {}, brl(t.paidCents)), ` (${t.progressPct}%).`)) : null,
+    planBox,
+    card(el('h2', {}, 'Nova dívida'), el('p', { class: 'muted' }, 'Cadastre o que você deve. O saldo cai a cada pagamento registrado, e o pagamento entra nos seus lançamentos como gasto em "Dívidas".'), form),
+    card(el('h2', {}, 'Suas dívidas'), rows.length ? el('ul', { class: 'entries' }, ...rows) : el('p', { class: 'muted' }, 'Nenhuma dívida cadastrada ainda.')),
+  );
+}

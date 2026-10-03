@@ -11,6 +11,7 @@ import type { Ctx, OrderView } from './services.ts';
 import { audit, num, orderView, todaySaoPaulo } from './services.ts';
 import type { Queryable } from './db.ts';
 import { ownedWalletId } from './account-extras.ts';
+import { monthLimits } from './account-debts.ts';
 
 const CODE_TTL_MIN = 10;
 const PIX_TTL_MS = 30 * 60 * 1000;
@@ -309,7 +310,7 @@ export async function monthView(ctx: Ctx, subscriberId: string, month: string) {
   const today = todaySaoPaulo();
   const from = `${monthOf(new Date(Date.parse(`${month}-01T00:00:00Z`) - 62 * 86_400_000).toISOString().slice(0, 10))}-01`; // 2 meses antes, para comparar
   const entries = await loadLedger(ctx, subscriberId, from);
-  const limits = await loadLimits(ctx, subscriberId);
+  const limits = { ...(await loadLimits(ctx, subscriberId)), ...(await monthLimits(ctx, subscriberId, month)) };
   const goals = planHas(plan, 'goals') ? await loadGoals(ctx, subscriberId) : [];
   const inMonth = entries.filter((e) => monthOf(e.date) === month);
   const wallets = inMonth.length ? await ctx.db.query<{ id: string; wallet_id: string | null }>(`SELECT id, wallet_id FROM app.ledger_entries WHERE subscriber_id = $1 AND id = ANY($2::uuid[])`, [subscriberId, inMonth.map((e) => e.id)]) : { rows: [] as { id: string; wallet_id: string | null }[] };

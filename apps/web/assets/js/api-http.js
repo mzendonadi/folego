@@ -189,3 +189,27 @@ export async function updateReminder(id, body) {
 export async function deleteReminder(id) {
   return request('DELETE', `/account/reminders/${id}`);
 }
+export async function getDebts(extraCents = 0) {
+  return request('GET', `/account/debts?extra=${Math.max(0, Math.round(extraCents))}`);
+}
+export async function createDebt(body) {
+  return request('POST', '/account/debts', { body });
+}
+export async function updateDebt(id, body) {
+  return request('PUT', `/account/debts/${id}`, { body });
+}
+export async function deleteDebt(id) {
+  return request('DELETE', `/account/debts/${id}`);
+}
+export async function payDebt(id, body) {
+  return request('POST', `/account/debts/${id}/payments`, { body });
+}
+export async function setMonthLimit(month, category, limitCents) {
+  return request('POST', `/account/budget/${month}/limits/${category}`, { body: { limitCents } });
+}
+export async function copyBudgetMonth(month) {
+  return request('POST', `/account/budget/${month}/copy`);
+}
+export async function askPlanner(question) {
+  return request('POST', '/account/planner', { body: { question } });
+}

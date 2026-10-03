@@ -9,6 +9,7 @@ import { FakeGateway } from '../src/gateway.ts';
 import { MemorySender } from '../src/email.ts';
 import { maintenance } from '../src/subscriptions.ts';
 import { sendDueReminders } from '../src/account-extras.ts';
+import { sendWeeklyDigests } from '../src/account-debts.ts';
 
 let db: Db;
 let app: FastifyInstance;
@@ -296,4 +297,71 @@ test('carteiras e lembretes: carteira isolada por dono, saldo por carteira, lemb
   const rem = (await c('GET', '/api/account/reminders')).json.reminders;
   assert.equal(rem.filter((x: any) => !x.done).length, 1, 'a do mês seguinte nasceu');
   assert.equal((await other('DELETE', `/api/account/reminders/${r.json.id}`)).status, 404);
+});
+
+test('dívidas da conta: saldo cai com pagamento, plano recomenda o foco, orçamento por mês e resumo semanal', async () => {
+  const c = client();
+  await login(c, 'dividas@exemplo.com');
+  const order = await c('POST', '/api/account/subscription-order', { body: { plan: 'ousado' }, headers: { 'idempotency-key': 'sub-divid-00001' } });
+  await pay(order.json.orderId, 'sub-divid');
+
+  const card = await c('POST', '/api/account/debts', { body: { name: 'Cartão', balanceCents: 500_000, monthlyRateBps: 1200, minPaymentCents: 50_000 } });
+  assert.equal(card.status, 201);
+  await c('POST', '/api/account/debts', { body: { name: 'Loja', balanceCents: 100_000, monthlyRateBps: 300, minPaymentCents: 20_000 } });
+  const list = (await c('GET', '/api/account/debts?extra=50000')).json;
+  assert.equal(list.totals.owedCents, 600_000);
+  assert.equal(list.plan.recommended, 'avalanche');
+  assert.equal(list.plan.focusId, card.json.id);
+
+  const paid = await c('POST', `/api/account/debts/${card.json.id}/payments`, { body: { amountCents: 100_000, addToLedger: true } });
+  assert.equal(paid.json.balanceCents, 400_000);
+  const after = (await c('GET', '/api/account/debts')).json;
+  assert.equal(after.totals.paidCents, 100_000);
+  assert.equal(after.totals.progressPct, 17);
+  const over = await c('POST', `/api/account/debts/${card.json.id}/payments`, { body: { amountCents: 9_999_999 } });
+  assert.equal(over.json.paidOff, true, 'pagamento maior que o saldo quita sem passar');
+  assert.equal((await c('POST', `/api/account/debts/${card.json.id}/payments`, { body: { amountCents: 100 } })).status, 409);
+
+  const month = new Date().toISOString().slice(0, 7);
+  await c('POST', '/api/account/limits/mercado', { body: { limitCents: 80_000 } });
+  assert.equal((await c('POST', `/api/account/budget/${month}/limits/mercado`, { body: { limitCents: 50_000 } })).status, 200);
+  assert.equal((await c('GET', `/api/account/month/${month}`)).json.limits.mercado, 50_000, 'o do mês vence o padrão');
+  const next = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 1)).toISOString().slice(0, 7);
+  assert.equal((await c('POST', `/api/account/budget/${next}/copy`)).json.copied, 1);
+
+  const other = client();
+  await login(other, 'dividas-outro@exemplo.com');
+  const o2 = await other('POST', '/api/account/subscription-order', { body: { plan: 'controle' }, headers: { 'idempotency-key': 'sub-divid-00002' } });
+  await pay(o2.json.orderId, 'sub-divid2');
+  assert.equal((await other('POST', `/api/account/debts/${card.json.id}/payments`, { body: { amountCents: 100 } })).status, 404);
+  assert.equal((await other('DELETE', `/api/account/debts/${card.json.id}`)).status, 404);
+
+  mailbox.sent.length = 0;
+  assert.ok((await sendWeeklyDigests({ db, config, gateway, email: mailbox })) >= 1);
+  assert.ok(mailbox.sent.some((m) => m.to === 'dividas@exemplo.com' && /resumo/i.test(m.subject)));
+  assert.equal(await sendWeeklyDigests({ db, config, gateway, email: mailbox }), 0, 'uma vez por semana');
+});
+
+test('planejador: só Desbravador, responde com os fatos da conta (sem chave de IA usa regras) e tem limite diário', async () => {
+  const ousado = client();
+  await login(ousado, 'plan-ousado@exemplo.com');
+  const o1 = await ousado('POST', '/api/account/subscription-order', { body: { plan: 'ousado' }, headers: { 'idempotency-key': 'sub-planej-00001' } });
+  await pay(o1.json.orderId, 'sub-planej1');
+  assert.equal((await ousado('POST', '/api/account/planner', { body: { question: 'Como fecho o mês?' } })).status, 403);
+
+  const c = client();
+  await login(c, 'plan-desbrav@exemplo.com');
+  const o2 = await c('POST', '/api/account/subscription-order', { body: { plan: 'desbravador' }, headers: { 'idempotency-key': 'sub-planej-00002' } });
+  await pay(o2.json.orderId, 'sub-planej2');
+  const today = new Date().toISOString().slice(0, 10);
+  await c('POST', '/api/account/entries', { body: { entries: [{ date: today, amountCents: 300_000, note: 'Salario' }, { date: today, amountCents: -120_000, note: 'Aluguel' }] } });
+  await c('POST', '/api/account/debts', { body: { name: 'Cartão', balanceCents: 400_000, monthlyRateBps: 1000, minPaymentCents: 40_000 } });
+  assert.equal((await c('POST', '/api/account/planner', { body: { question: 'ok' } })).status, 400);
+  const r = await c('POST', '/api/account/planner', { body: { question: 'Como fecho o mês sem me enrolar?' } });
+  assert.equal(r.status, 200);
+  assert.equal(r.json.source, 'regras');
+  assert.match(r.json.answer, /3\.000,00/);
+  assert.match(r.json.answer, /Cartão/);
+  await db.query(`INSERT INTO app.planner_log(subscriber_id, source) SELECT id, 'regras' FROM app.subscribers, generate_series(1, 9) WHERE email = 'plan-desbrav@exemplo.com'`);
+  assert.equal((await c('POST', '/api/account/planner', { body: { question: 'Mais uma pergunta aqui' } })).status, 429);
 });
