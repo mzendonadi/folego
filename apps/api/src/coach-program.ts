@@ -3,11 +3,13 @@
 import { AppError } from './errors.ts';
 import type { Ctx } from './services.ts';
 import { num, todaySaoPaulo } from './services.ts';
-import { PROGRAMS, applyMethods, evaluatePrograms, healthScore, marketInsights, monthOf, planAtLeast } from './engine.ts';
+import { PROGRAMS, applyMethods, compareMonths, evaluatePrograms, healthScore, marketInsights, monthOf, planAtLeast, weekIndexOf, weeklyChallenges } from './engine.ts';
 import type { CoachFacts, CoachPlan } from './engine.ts';
 import { requireFeature } from './subscriptions.ts';
 import { listDebts, monthLimits } from './account-debts.ts';
 import { loadIndicators } from './market.ts';
+import { layout } from './email.ts';
+import { planByCode } from './engine.ts';
 
 const ymd = (d: unknown) => new Date(d as string).toISOString().slice(0, 10);
 
@@ -15,7 +17,7 @@ export async function loadCoachFacts(ctx: Ctx, subscriberId: string): Promise<{ 
   const today = todaySaoPaulo();
   const month = monthOf(today);
   const q = ctx.db;
-  const [sums, avg, days, base, cat, rem, wal, goals, contribs, poup] = await Promise.all([
+  const [sums, avg, days, base, cat, rem, wal, goals, contribs, poup, recent, pay7, gc7] = await Promise.all([
     q.query<{ income: string; spent: string }>(`SELECT coalesce(sum(amount_cents) FILTER (WHERE amount_cents > 0), 0)::text AS income, coalesce(-sum(amount_cents) FILTER (WHERE amount_cents < 0), 0)::text AS spent FROM app.ledger_entries WHERE subscriber_id = $1 AND to_char(occurred_on, 'YYYY-MM') = $2`, [subscriberId, month]),
     q.query<{ spent: string }>(`SELECT coalesce(-sum(amount_cents), 0)::text AS spent FROM app.ledger_entries WHERE subscriber_id = $1 AND amount_cents < 0 AND occurred_on > ($2::date - 90)`, [subscriberId, today]),
     q.query<{ d7: string; d14: string }>(`SELECT count(DISTINCT occurred_on) FILTER (WHERE occurred_on > ($2::date - 7))::text AS d7, count(DISTINCT occurred_on) FILTER (WHERE occurred_on > ($2::date - 14))::text AS d14 FROM app.ledger_entries WHERE subscriber_id = $1`, [subscriberId, today]),
@@ -26,7 +28,14 @@ export async function loadCoachFacts(ctx: Ctx, subscriberId: string): Promise<{ 
     q.query<{ n: string; saved: string }>(`SELECT count(*)::text AS n, coalesce(sum(g.saved_cents + coalesce((SELECT sum(c.amount_cents) FROM app.goal_contributions c WHERE c.goal_id = g.id), 0)), 0)::text AS saved FROM app.goals g WHERE g.subscriber_id = $1`, [subscriberId]),
     q.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.goal_contributions WHERE subscriber_id = $1`, [subscriberId]),
     q.query<{ b: string }>(`SELECT coalesce(sum(l.amount_cents), 0)::text AS b FROM app.ledger_entries l JOIN app.wallets w ON w.id = l.wallet_id WHERE l.subscriber_id = $1 AND w.kind = 'poupanca'`, [subscriberId]),
+    q.query<{ d: Date | string }>(`SELECT DISTINCT occurred_on AS d FROM app.ledger_entries WHERE subscriber_id = $1 AND occurred_on > ($2::date - 60) AND occurred_on <= $2::date ORDER BY d DESC`, [subscriberId, today]),
+    q.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.account_debt_payments WHERE subscriber_id = $1 AND paid_on > ($2::date - 7)`, [subscriberId, today]),
+    q.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.goal_contributions WHERE subscriber_id = $1 AND occurred_on > ($2::date - 7)`, [subscriberId, today]),
   ]);
+  const daySet = new Set(recent.rows.map((r) => ymd(r.d)));
+  const dayBefore = (iso: string) => new Date(Date.parse(`${iso}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+  let streak = 0;
+  for (let cursor = daySet.has(today) ? today : dayBefore(today); daySet.has(cursor); cursor = dayBefore(cursor)) streak += 1;
   const limits = { ...Object.fromEntries(base.rows.map((r) => [r.category, num(r.limit_cents)])), ...(await monthLimits(ctx, subscriberId, month)) };
   const spentBy = Object.fromEntries(cat.rows.map((r) => [r.category, num(r.total)]));
   const overLimitCount = Object.entries(limits).filter(([c, lim]) => (spentBy[c] ?? 0) > lim).length;
@@ -54,6 +63,9 @@ export async function loadCoachFacts(ctx: Ctx, subscriberId: string): Promise<{ 
     debtInitialCents: d.totals.initialCents,
     debtMinPaymentsCents: d.totals.minPaymentsCents,
     expensiveDebtsOpen: open.filter((x) => x.monthlyRateBps >= 300).length,
+    debtPayments7: num(pay7.rows[0]?.n ?? 0),
+    goalContribs7: num(gc7.rows[0]?.n ?? 0),
+    streakDays: streak,
   };
   return { facts, openRatesBps: open.map((x) => x.monthlyRateBps) };
 }
@@ -79,9 +91,22 @@ export async function coachOverview(ctx: Ctx, subscriberId: string) {
   const focus = running?.nextMission
     ? { kind: 'missao' as const, text: running.nextMission, tab: running.missions.find((m) => !m.done)?.tab ?? null, journey: running.title }
     : { kind: 'nota' as const, text: weakest.tip, tab: null, journey: null };
+  const cmp = await ctx.db.query<{ m: string; category: string; total: string }>(
+    `SELECT CASE WHEN to_char(occurred_on, 'YYYY-MM') = $2 THEN 'cur' ELSE 'prev' END AS m, category, (-sum(amount_cents))::text AS total
+       FROM app.ledger_entries
+      WHERE subscriber_id = $1 AND amount_cents < 0
+        AND ((to_char(occurred_on, 'YYYY-MM') = $2 AND occurred_on <= $3::date)
+          OR (to_char(occurred_on, 'YYYY-MM') = $4 AND extract(day FROM occurred_on) <= extract(day FROM $3::date)))
+      GROUP BY 1, 2`,
+    [subscriberId, monthOf(today), today, monthOf(new Date(Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)) - 2, 1)).toISOString().slice(0, 10))],
+  );
+  const side = (m: string) => Object.fromEntries(cmp.rows.filter((r) => r.m === m).map((r) => [r.category, num(r.total)]));
   return {
     plan,
     health,
+    streak: facts.streakDays,
+    challenges: weeklyChallenges(facts, weekIndexOf(today)),
+    compare: compareMonths(side('cur'), side('prev')),
     journeys,
     methods: applyMethods(facts, plan),
     focus,
@@ -123,4 +148,32 @@ export async function marketView(ctx: Ctx, subscriberId: string) {
     history: planAtLeast(plan, 'desbravador') ? history : null,
     hasData: updatedAt !== null,
   };
+}
+
+/** Worker: boas-vindas uma única vez, logo depois que a assinatura fica ativa. É e-mail de conta (a pessoa acabou de assinar). */
+export async function sendWelcomes(ctx: Ctx, opts: { log?: (e: Record<string, unknown>) => void } = {}): Promise<number> {
+  if (!ctx.config.subscriptionsEnabled || !ctx.email) return 0;
+  const who = await ctx.db.query<{ id: string; email: string; plan: string }>(
+    `SELECT b.id, b.email::text AS email, s.plan FROM app.subscribers b
+       JOIN app.subscriptions s ON s.subscriber_id = b.id AND s.status = 'active' AND s.current_period_end > now()
+      WHERE b.deleted_at IS NULL AND b.welcome_sent_at IS NULL LIMIT 30`,
+  );
+  let sent = 0;
+  for (const b of who.rows) {
+    const plan = planByCode(b.plan);
+    const first = b.plan === 'controle' ? 'Organizar o mês' : 'Sair do vermelho';
+    const body = layout(`Bem-vindo ao Fôlego, plano ${plan?.name ?? ''}`, [
+      'Sua conta está ativa. Para tirar o máximo, faça só isto hoje (5 minutos):',
+      `1. Abra a aba Coach e veja a sua nota de saúde financeira.\n2. Comece a jornada "${first}": as missões se confirmam sozinhas conforme você usa o Fôlego.\n3. Lance os gastos de hoje. Todo dia que você lança entra na sua sequência.`,
+      'Toda semana o Coach traz 3 desafios novos, e você recebe um resumo por e-mail aos domingos.',
+    ], { label: 'Abrir o meu Coach', url: `${ctx.config.publicUrl}/#/conta` });
+    try {
+      await ctx.email.send({ to: b.email, subject: 'Sua conta no Fôlego está pronta: comece por aqui', ...body });
+      await ctx.db.query(`UPDATE app.subscribers SET welcome_sent_at = now() WHERE id = $1`, [b.id]);
+      sent += 1;
+    } catch {
+      opts.log?.({ evento: 'boas_vindas_falhou' });
+    }
+  }
+  return sent;
 }

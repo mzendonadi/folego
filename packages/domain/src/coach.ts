@@ -28,6 +28,9 @@ export interface CoachFacts {
   debtInitialCents: number;
   debtMinPaymentsCents: number;
   expensiveDebtsOpen: number; // dívidas abertas com juros >= 3% ao mês
+  debtPayments7: number; // pagamentos de dívida nos últimos 7 dias
+  goalContribs7: number; // aportes em metas nos últimos 7 dias
+  streakDays: number; // dias seguidos com lançamento (termina hoje ou ontem)
 }
 
 // ---------------------------------------------------------------------------
@@ -235,4 +238,81 @@ export function marketInsights(ind: Indicators, f: CoachFacts, openDebtRatesBps:
   if (ind.usdBrl !== null) out.push({ id: 'dolar', title: `Dólar a R$ ${ind.usdBrl.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, tone: 'info', minPlan: 'desbravador', text: `${ind.usdTrend !== null && ind.usdTrend > 0 ? 'O dólar subiu nos últimos meses: ' : ''}pesa em combustível, eletrônicos e viagens. Se você tem gastos em dólar (assinaturas, compras internacionais), coloque um limite próprio para eles no orçamento.` });
   if (f.expensiveDebtsOpen > 0 && ind.selicTrend !== null && ind.selicTrend < 0) out.push({ id: 'renegociar', title: 'Juros caindo: hora de renegociar', tone: 'good', minPlan: 'ousado', text: 'Com a Selic em queda, peça redução de taxa ou portabilidade das dívidas caras: o banco tem menos desculpa para manter o juro alto.' });
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Desafios da semana e comparação de meses
+// ---------------------------------------------------------------------------
+export interface Challenge {
+  id: string;
+  text: string;
+  tab: string;
+  done: boolean;
+}
+
+interface ChallengeDef {
+  id: string;
+  text: string;
+  tab: string;
+  applies: (f: CoachFacts) => boolean;
+  done: (f: CoachFacts) => boolean;
+}
+
+const CHALLENGES: ChallengeDef[] = [
+  { id: 'w_registrar', text: 'Lance seus gastos em 5 dos próximos 7 dias', tab: 'lancamentos', applies: () => true, done: (f) => f.daysLogged7 >= 5 },
+  { id: 'w_limites', text: 'Passe a semana sem estourar nenhum limite', tab: 'orcamento', applies: (f) => f.limitsCount > 0, done: (f) => f.limitsCount > 0 && f.overLimitCount === 0 && f.daysLogged7 >= 3 },
+  { id: 'w_divida', text: 'Registre um pagamento de dívida nesta semana', tab: 'dividas', applies: (f) => f.openDebtsCount > 0, done: (f) => f.debtPayments7 >= 1 },
+  { id: 'w_meta', text: 'Faça um aporte na sua meta, mesmo pequeno', tab: 'metas', applies: (f) => f.goalsCount > 0, done: (f) => f.goalContribs7 >= 1 },
+  { id: 'w_lembretes', text: 'Cadastre as contas que vencem nas próximas semanas', tab: 'lembretes', applies: (f) => f.remindersCount < 5, done: (f) => f.remindersCount >= 5 },
+  { id: 'w_sobra', text: 'Feche a semana gastando menos do que entrou no mês', tab: 'geral', applies: (f) => f.incomeCents > 0, done: (f) => f.incomeCents > 0 && f.spentCents < f.incomeCents },
+];
+
+/** Três desafios por semana: o conjunto roda com o número da semana e só entram os que fazem sentido para a conta. */
+export function weeklyChallenges(f: CoachFacts, weekIndex: number): Challenge[] {
+  const pool = CHALLENGES.filter((c) => c.applies(f));
+  if (pool.length === 0) return [];
+  const first = pool[0]!; // lançar é sempre o desafio-base: é o hábito que sustenta tudo
+  const rest = pool.slice(1);
+  const picked = [first];
+  for (let i = 0; i < Math.min(2, rest.length); i += 1) picked.push(rest[(weekIndex + i) % rest.length]!);
+  return [...new Map(picked.map((c) => [c.id, c])).values()].map((c) => ({ id: c.id, text: c.text, tab: c.tab, done: c.done(f) }));
+}
+
+/** Número da semana (a partir de 1970) de uma data ISO yyyy-mm-dd. */
+export const weekIndexOf = (iso: string): number => Math.floor(Date.parse(iso + 'T00:00:00Z') / (7 * 86_400_000));
+
+export interface CategoryChange {
+  category: string;
+  currentCents: number;
+  previousCents: number;
+  deltaCents: number;
+  deltaPct: number | null;
+}
+export interface MonthComparison {
+  currentCents: number;
+  previousCents: number;
+  deltaCents: number;
+  deltaPct: number | null;
+  verdict: 'menos' | 'igual' | 'mais' | 'sem_base';
+  changes: CategoryChange[];
+}
+
+/** Compara o gasto do mês até hoje com o mês anterior até o mesmo dia (mapas categoria -> centavos de gasto). */
+export function compareMonths(current: Record<string, number>, previous: Record<string, number>): MonthComparison {
+  const sum = (m: Record<string, number>) => Object.values(m).reduce((a, b) => a + b, 0);
+  const cur = sum(current);
+  const prev = sum(previous);
+  const cats = new Set([...Object.keys(current), ...Object.keys(previous)]);
+  const changes = [...cats]
+    .map((category) => {
+      const c = current[category] ?? 0;
+      const p = previous[category] ?? 0;
+      return { category, currentCents: c, previousCents: p, deltaCents: c - p, deltaPct: p > 0 ? Math.round(((c - p) / p) * 100) : null };
+    })
+    .filter((x) => x.deltaCents !== 0)
+    .sort((a, b) => Math.abs(b.deltaCents) - Math.abs(a.deltaCents))
+    .slice(0, 4);
+  const deltaPct = prev > 0 ? Math.round(((cur - prev) / prev) * 100) : null;
+  const verdict = prev === 0 ? 'sem_base' : Math.abs(cur - prev) <= prev * 0.03 ? 'igual' : cur < prev ? 'menos' : 'mais';
+  return { currentCents: cur, previousCents: prev, deltaCents: cur - prev, deltaPct, verdict, changes };
 }

@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { healthScore, evaluatePrograms, applyMethods, marketInsights, annualFromMonthlyPct } from '../src/coach.ts';
+import { weeklyChallenges, compareMonths, healthScore, evaluatePrograms, applyMethods, marketInsights, annualFromMonthlyPct } from '../src/coach.ts';
 import type { CoachFacts, Indicators } from '../src/coach.ts';
 
-const base: CoachFacts = { incomeCents: 500_000, spentCents: 400_000, avgMonthlySpendCents: 400_000, daysLogged7: 5, daysLogged14: 10, limitsCount: 3, overLimitCount: 0, remindersCount: 3, walletsCount: 1, goalsCount: 1, goalContributions: 2, savedCents: 800_000, debtsCount: 0, openDebtsCount: 0, paidOffCount: 0, debtPaymentsCount: 0, debtOwedCents: 0, debtInitialCents: 0, debtMinPaymentsCents: 0, expensiveDebtsOpen: 0 };
+const base: CoachFacts = { incomeCents: 500_000, spentCents: 400_000, avgMonthlySpendCents: 400_000, daysLogged7: 5, daysLogged14: 10, limitsCount: 3, overLimitCount: 0, remindersCount: 3, walletsCount: 1, goalsCount: 1, goalContributions: 2, savedCents: 800_000, debtsCount: 0, openDebtsCount: 0, paidOffCount: 0, debtPaymentsCount: 0, debtOwedCents: 0, debtInitialCents: 0, debtMinPaymentsCents: 0, expensiveDebtsOpen: 0, debtPayments7: 0, goalContribs7: 1, streakDays: 3 };
 
 test('saúde: pessoa organizada, com reserva de 2 meses e sem dívida, passa de 60; quem gasta mais do que ganha e deve caro fica crítico', () => {
   const good = healthScore(base);
@@ -42,4 +42,18 @@ test('cenário: juro mensal vira anual e a dívida cara é comparada ao CDI', ()
   assert.ok(list.some((i) => i.id === 'renegociar'));
   assert.ok(list.some((i) => i.id === 'juro_real' && i.tone === 'good'));
   assert.equal(marketInsights({ selicPct: null, ipca12Pct: null, cdiPct: null, usdBrl: null, selicTrend: null, ipcaTrend: null, usdTrend: null }, base).length, 0);
+});
+
+test('desafios da semana: só os aplicáveis, 3 no máximo, rodam por semana; comparação de meses acha o que mudou', () => {
+  const sem = weeklyChallenges(base, 2960);
+  assert.ok(sem.length >= 1 && sem.length <= 3);
+  assert.equal(sem[0].id, 'w_registrar');
+  assert.ok(!weeklyChallenges(base, 1).some((c) => c.id === 'w_divida'), 'sem dívida aberta não propõe pagar dívida');
+  assert.notDeepEqual(weeklyChallenges(base, 1).map((c) => c.id), weeklyChallenges(base, 2).map((c) => c.id));
+  const cmp = compareMonths({ mercado: 80_000, lazer: 20_000 }, { mercado: 50_000, lazer: 40_000 });
+  assert.equal(cmp.verdict, 'mais');
+  assert.equal(cmp.changes[0].category, 'mercado');
+  assert.equal(cmp.changes[0].deltaPct, 60);
+  assert.equal(compareMonths({ a: 100 }, {}).verdict, 'sem_base');
+  assert.equal(compareMonths({ a: 50_000 }, { a: 100_000 }).verdict, 'menos');
 });

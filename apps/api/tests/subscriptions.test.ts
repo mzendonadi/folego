@@ -11,6 +11,8 @@ import { maintenance } from '../src/subscriptions.ts';
 import { sendDueReminders } from '../src/account-extras.ts';
 import { sendWeeklyDigests } from '../src/account-debts.ts';
 import { refreshMarket } from '../src/market.ts';
+import { sendWelcomes } from '../src/coach-program.ts';
+import { todaySaoPaulo } from '../src/services.ts';
 
 let db: Db;
 let app: FastifyInstance;
@@ -385,7 +387,7 @@ test('coach: nota, jornadas por plano, missão confirmada pelos dados e cenário
   await login(c, 'coach-controle@exemplo.com');
   const o = await c('POST', '/api/account/subscription-order', { body: { plan: 'controle' }, headers: { 'idempotency-key': 'sub-coach-00001' } });
   await pay(o.json.orderId, 'sub-coach1');
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todaySaoPaulo();
   await c('POST', '/api/account/entries', { body: { entries: [{ date: today, amountCents: 500_000, note: 'Salario' }, { date: today, amountCents: -200_000, note: 'Aluguel' }] } });
   const ov = (await c('GET', '/api/account/coach/overview')).json;
   assert.equal(ov.plan, 'controle');
@@ -396,7 +398,11 @@ test('coach: nota, jornadas por plano, missão confirmada pelos dados e cenário
   assert.equal((await c('POST', '/api/account/coach/journeys/organizar/start')).status, 204);
   assert.equal((await c('POST', '/api/account/coach/journeys/sair_do_vermelho/start')).status, 403);
   assert.equal((await c('POST', '/api/account/coach/journeys/inexistente/start')).status, 422);
-  assert.equal((await c('GET', '/api/account/coach/overview')).json.focus.kind, 'missao');
+  const again = (await c('GET', '/api/account/coach/overview')).json;
+  assert.equal(again.focus.kind, 'missao');
+  assert.equal(again.streak, 1, 'lançou hoje: sequência de 1 dia');
+  assert.equal(again.challenges[0].id, 'w_registrar');
+  assert.equal(again.compare.verdict, 'sem_base', 'sem mês anterior não há base');
 
   const m = (await c('GET', '/api/account/market')).json;
   assert.equal(m.indicators.selicPct, 14.75);
@@ -417,4 +423,10 @@ test('coach: nota, jornadas por plano, missão confirmada pelos dados e cenário
   await d('POST', '/api/account/simulate', { body: { initialCents: 100_000, monthlyCents: 50_000, months: 12, scenarios: [{ name: 'A', annualPct: 10 }], inflationAnnualPct: 4 } });
   const inv = (await d('GET', '/api/account/coach/overview')).json.journeys.find((j: any) => j.id === 'investir');
   assert.equal(inv.missions[3].done, true, 'usar o simulador confirma a missão');
+  while ((await sendWelcomes({ db, config, gateway, email: mailbox })) > 0) { /* esvazia a fila de boas-vindas */ }
+  mailbox.sent.length = 0;
+  await db.query(`UPDATE app.subscribers SET welcome_sent_at = NULL WHERE email = 'coach-desb@exemplo.com'`);
+  assert.equal(await sendWelcomes({ db, config, gateway, email: mailbox }), 1);
+  assert.match(mailbox.sent[0].subject, /pronta/);
+  assert.equal(await sendWelcomes({ db, config, gateway, email: mailbox }), 0, 'só uma vez');
 });

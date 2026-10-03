@@ -1,6 +1,7 @@
 // Assinatura: abas "Coach" (nota de saúde, foco do dia, jornadas e métodos) e "Mercado" (cenário econômico).
 import { el, icon, toast } from './dom.js';
 import { brl } from './format.js';
+import { CATEGORY_LABEL } from '../vendor/engine.js';
 
 const card = (...c) => el('section', { class: 'card d-section' }, ...c.filter(Boolean));
 const PLAN_NAME = { controle: 'Controle', ousado: 'Ousado', desbravador: 'Desbravador' };
@@ -58,6 +59,28 @@ export function viewCoach(ctx) {
     doIt ? el('div', { class: 'button-row no-print' }, doIt) : null,
   );
 
+  const streak = el('p', { class: 'streak', role: 'status' }, el('strong', {}, String(o.streak)), o.streak === 1 ? ' dia seguido lançando' : ' dias seguidos lançando', o.streak === 0 ? el('span', { class: 'fine muted' }, ' · lance hoje para começar a sequência') : null);
+  const challenges = card(
+    el('h2', {}, 'Desafios da semana'),
+    streak,
+    o.challenges.length
+      ? el('ul', { class: 'challenges' }, ...o.challenges.map((c) => {
+        const go = el('button', { class: 'btn btn-quiet btn-sm', type: 'button' }, 'Abrir');
+        go.addEventListener('click', () => ctx.goTab(c.tab));
+        return el('li', { class: c.done ? 'is-done' : '' }, el('span', { class: 'mission-mark', 'aria-hidden': 'true' }, c.done ? '✓' : '○'), el('span', {}, c.text, el('span', { class: 'sr-only' }, c.done ? ' (feito)' : ' (pendente)')), c.done ? null : go);
+      }))
+      : el('p', { class: 'muted' }, 'Lance seus primeiros gastos para liberar os desafios.'),
+    el('p', { class: 'fine muted' }, 'Os desafios mudam toda semana e se confirmam sozinhos pelos seus lançamentos.'),
+  );
+  const cmp = o.compare;
+  const verdictText = { menos: 'Você está gastando menos do que no mesmo ponto do mês passado.', igual: 'Seu ritmo de gasto está igual ao do mês passado.', mais: 'Você está gastando mais do que no mesmo ponto do mês passado.', sem_base: 'Ainda não há o mês passado para comparar. Continue lançando.' }[cmp.verdict];
+  const compare = card(
+    el('h2', {}, 'Este mês x mês passado'),
+    el('p', {}, el('strong', {}, verdictText)),
+    cmp.verdict !== 'sem_base' ? el('p', { class: 'muted' }, `Até hoje: ${brl(cmp.currentCents)} neste mês contra ${brl(cmp.previousCents)} no mesmo período do mês passado${cmp.deltaPct === null ? '' : ` (${cmp.deltaPct > 0 ? '+' : ''}${cmp.deltaPct}%)`}.`) : null,
+    cmp.verdict !== 'sem_base' && cmp.changes.length ? el('ul', { class: 'compare-list' }, ...cmp.changes.map((c) => el('li', {}, el('span', {}, CATEGORY_LABEL[c.category] ?? c.category), el('strong', { class: c.deltaCents > 0 ? 'neg' : 'pos' }, `${c.deltaCents > 0 ? '+' : '-'}${brl(Math.abs(c.deltaCents))}`)))) : null,
+  );
+
   const journeys = o.journeys.map((j) => {
     const act = el('button', { class: `btn ${j.started ? 'btn-quiet' : 'btn-primary'} btn-sm`, type: 'button' }, j.locked ? `Plano ${PLAN_NAME[j.minPlan]}` : j.started ? 'Pausar jornada' : 'Começar jornada');
     act.addEventListener('click', async () => {
@@ -94,6 +117,8 @@ export function viewCoach(ctx) {
     'div', { class: 'acc-stack' },
     card(gauge, parts),
     focus,
+    challenges,
+    compare,
     card(el('h2', {}, 'Jornadas de transformação'), el('p', { class: 'section-sub' }, 'Cada jornada tem missões que se confirmam sozinhas conforme você usa o Fôlego. Sem tarefa manual, sem enrolação.'), el('div', { class: 'journeys' }, ...journeys)),
     card(el('h2', {}, 'Métodos que funcionam'), el('p', { class: 'section-sub' }, 'Técnicas de planejamento financeiro, aplicadas aos seus números quando dá.'), el('div', { class: 'journeys' }, ...methods)),
   );

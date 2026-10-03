@@ -834,3 +834,11 @@ ul, ol { margin: 0; padding: 0; }
 .insight.tone-good { border-left-color: var(--ok-ink); }
 .insight.tone-warn { border-left-color: #b8860b; }
 .insight p { margin: 4px 0 0; }
+.streak { font-size: 1.05rem; margin: 0 0 var(--s3); }
+.streak strong { font-size: 1.8rem; color: var(--primary); }
+.challenges, .compare-list { list-style: none; margin: 0 0 var(--s3); padding: 0; display: grid; gap: var(--s3); }
+.challenges li { display: grid; grid-template-columns: 24px 1fr auto; gap: var(--s2); align-items: center; }
+.challenges li.is-done span:nth-child(2) { text-decoration: line-through; opacity: .7; }
+.compare-list li { display: flex; justify-content: space-between; gap: var(--s3); border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.compare-list .neg { color: var(--danger-ink, #b3261e); }
+.compare-list .pos { color: var(--ok-ink); }
