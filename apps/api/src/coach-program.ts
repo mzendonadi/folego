@@ -147,7 +147,7 @@ export async function marketView(ctx: Ctx, subscriberId: string) {
     plan,
     indicators: planAtLeast(plan, 'desbravador') ? indicators : { ...indicators, usdBrl: null, usdTrend: null },
     updatedAt,
-    source: 'Banco Central do Brasil (SGS)',
+    source: 'Banco Central do Brasil, IBGE e fontes públicas',
     insights,
     history: planAtLeast(plan, 'desbravador') ? history : null,
     hasData: updatedAt !== null,

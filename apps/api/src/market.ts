@@ -32,7 +32,7 @@ async function fetchSeries(f: typeof fetch, serie: number, last: number, days: n
       if (Array.isArray(rows) && rows.length > 0) return rows;
       lastError = 'bcb_vazio';
     } catch (e) {
-      lastError = e instanceof Error ? `bcb_rede: ${e.message.slice(0, 80)}` : 'bcb_rede';
+      lastError = `bcb_rede: ${reason(e)}`;
     }
   }
   throw new Error(lastError);
@@ -60,7 +60,65 @@ export async function marketStatus(ctx: Ctx): Promise<MarketRun | null> {
   return r.rows[0]?.value ?? null;
 }
 
-/** Cada série é independente: a que falhar fica registrada em `errors` e as outras seguem. */
+type Row = { date: string; value: number };
+
+const spToday = () => new Date(Date.now() - 3 * 3_600_000).toISOString().slice(0, 10);
+const reason = (e: unknown) => {
+  if (!(e instanceof Error)) return 'erro';
+  const cause = (e as { cause?: { code?: string; message?: string } }).cause;
+  return `${e.message.slice(0, 60)}${cause?.code ? ` [${cause.code}]` : cause?.message ? ` [${cause.message.slice(0, 50)}]` : ''}`;
+};
+
+/** Banco Central (SGS): fonte oficial. */
+async function viaBcb(f: typeof fetch, serie: number, last: number, days: number): Promise<Row[]> {
+  const rows = await fetchSeries(f, serie, last, days);
+  return rows.flatMap((r) => {
+    const d = brDate(r.data ?? '');
+    const v = Number(String(r.valor ?? '').replace(',', '.'));
+    return d && Number.isFinite(v) ? [{ date: d, value: v }] : [];
+  });
+}
+
+/** BrasilAPI (espelha Selic e CDI do Banco Central): só o valor de hoje. */
+async function viaBrasilApi(f: typeof fetch, nome: 'Selic' | 'CDI'): Promise<Row[]> {
+  const res = await f('https://brasilapi.com.br/api/taxas/v1', { signal: AbortSignal.timeout(15_000), headers: { accept: 'application/json', 'user-agent': 'Folego/1.0' } });
+  if (!res.ok) throw new Error(`brasilapi_http_${res.status}`);
+  const list = (await res.json()) as Array<{ nome?: string; valor?: number }>;
+  const item = list.find((x) => x.nome === nome);
+  if (!item || typeof item.valor !== 'number') throw new Error('brasilapi_sem_' + nome);
+  return [{ date: spToday(), value: item.valor }];
+}
+
+/** IBGE (SIDRA): IPCA acumulado em 12 meses, uma linha por mês. */
+async function viaIbge(f: typeof fetch): Promise<Row[]> {
+  const res = await f('https://servicodados.ibge.gov.br/api/v3/agregados/1737/periodos/-14/variaveis/2265?localidades=N1[all]', { signal: AbortSignal.timeout(15_000), headers: { accept: 'application/json', 'user-agent': 'Folego/1.0' } });
+  if (!res.ok) throw new Error(`ibge_http_${res.status}`);
+  const body = (await res.json()) as Array<{ resultados?: Array<{ series?: Array<{ serie?: Record<string, string> }> }> }>;
+  const serie = body[0]?.resultados?.[0]?.series?.[0]?.serie ?? {};
+  return Object.entries(serie).flatMap(([ym, v]) => {
+    const value = Number(v);
+    return /^\d{6}$/.test(ym) && Number.isFinite(value) ? [{ date: `${ym.slice(0, 4)}-${ym.slice(4, 6)}-01`, value }] : [];
+  });
+}
+
+/** AwesomeAPI: dólar comercial, um valor por dia. */
+async function viaAwesome(f: typeof fetch): Promise<Row[]> {
+  const res = await f('https://economia.awesomeapi.com.br/json/daily/USD-BRL/130', { signal: AbortSignal.timeout(15_000), headers: { accept: 'application/json', 'user-agent': 'Folego/1.0' } });
+  if (!res.ok) throw new Error(`awesome_http_${res.status}`);
+  const list = (await res.json()) as Array<{ bid?: string; timestamp?: string }>;
+  const byDay = new Map<string, number>();
+  for (const x of list) {
+    const v = Number(x.bid);
+    const t = Number(x.timestamp);
+    if (Number.isFinite(v) && Number.isFinite(t)) byDay.set(new Date(t * 1000 - 3 * 3_600_000).toISOString().slice(0, 10), v);
+  }
+  return [...byDay.entries()].map(([date, value]) => ({ date, value }));
+}
+
+/**
+ * Cada série é independente e tem plano B: o Banco Central é a fonte oficial; se ele não responder (rede, certificado ou
+ * bloqueio do provedor da VPS), usamos o espelho público equivalente. `errors` guarda o motivo de cada tentativa.
+ */
 export async function refreshMarket(ctx: Ctx, opts: { fetchFn?: typeof fetch; force?: boolean; log?: (e: Record<string, unknown>) => void } = {}): Promise<number> {
   if (!opts.force) {
     // "Fresco" = todas as séries têm dado recente; se alguma faltar, tenta de novo (no máximo a cada 30 min).
@@ -71,21 +129,40 @@ export async function refreshMarket(ctx: Ctx, opts: { fetchFn?: typeof fetch; fo
   }
   const f = opts.fetchFn ?? fetch;
   const run: MarketRun = { saved: 0, errors: {}, at: new Date().toISOString() };
-  for (const [code, serie] of Object.entries(SERIES) as [Code, number][]) {
-    try {
-      const rows = await fetchSeries(f, serie, code === 'usd' ? 130 : 30, code === 'usd' ? 200 : code === 'ipca12' ? 800 : 400);
-      let any = 0;
-      for (const r of rows) {
-        const d = brDate(r.data ?? '');
-        const v = Number(String(r.valor ?? '').replace(',', '.'));
-        if (!d || !Number.isFinite(v)) continue;
-        await ctx.db.query(`INSERT INTO app.market_indicators(code, ref_date, value) VALUES ($1,$2,$3) ON CONFLICT (code, ref_date) DO UPDATE SET value = EXCLUDED.value, fetched_at = now()`, [code, d, v]);
-        any += 1;
+  let bcbDown = false; // se o Banco Central nem responde pela rede, não perdemos tempo com as outras séries dele
+  const plans: Record<Code, Array<[string, () => Promise<Row[]>]>> = {
+    selic: [['bcb', () => viaBcb(f, SERIES.selic, 30, 400)], ['brasilapi', () => viaBrasilApi(f, 'Selic')]],
+    cdi: [['bcb', () => viaBcb(f, SERIES.cdi, 30, 400)], ['brasilapi', () => viaBrasilApi(f, 'CDI')]],
+    ipca12: [['bcb', () => viaBcb(f, SERIES.ipca12, 14, 800)], ['ibge', () => viaIbge(f)]],
+    usd: [['bcb', () => viaBcb(f, SERIES.usd, 130, 200)], ['awesomeapi', () => viaAwesome(f)]],
+  };
+  for (const code of Object.keys(plans) as Code[]) {
+    const tried: string[] = [];
+    let ok = false;
+    for (const [name, get] of plans[code]) {
+      if (name === 'bcb' && bcbDown) {
+        tried.push('bcb: pulado (sem rede)');
+        continue;
       }
-      if (any === 0) throw new Error('bcb_formato_inesperado');
-      run.saved += any;
-    } catch (e) {
-      run.errors[code] = e instanceof Error ? e.message : 'erro';
+      try {
+        const rows = await get();
+        let any = 0;
+        for (const r of rows) {
+          await ctx.db.query(`INSERT INTO app.market_indicators(code, ref_date, value) VALUES ($1,$2,$3) ON CONFLICT (code, ref_date) DO UPDATE SET value = EXCLUDED.value, fetched_at = now()`, [code, r.date, r.value]);
+          any += 1;
+        }
+        if (any === 0) throw new Error('formato_inesperado');
+        run.saved += any;
+        ok = true;
+        break;
+      } catch (e) {
+        const why = reason(e);
+        tried.push(`${name}: ${why}`);
+        if (name === 'bcb' && /bcb_rede/.test(why)) bcbDown = true;
+      }
+    }
+    if (!ok) {
+      run.errors[code] = tried.join(' · ');
       opts.log?.({ evento: 'mercado_falhou', serie: code, motivo: run.errors[code] });
     }
   }

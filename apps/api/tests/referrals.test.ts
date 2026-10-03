@@ -307,6 +307,7 @@ test('indicadores do Banco Central: se a consulta "últimos N" for recusada usa 
   const fetchFn = (async (url: string) => {
     seen.push(url);
     if (url.includes('/ultimos/')) return new Response('nope', { status: 406 });
+    if (!/sgs\.(\d+)\//.test(url)) return new Response('erro', { status: 500 });
     const serie = /sgs\.(\d+)\//.exec(url)![1];
     if (serie === '1') return new Response('erro', { status: 500 });
     return new Response(JSON.stringify([{ data: '01/10/2026', valor: '14,75' }]), { status: 200 });
@@ -316,7 +317,31 @@ test('indicadores do Banco Central: se a consulta "últimos N" for recusada usa 
   assert.ok(seen.some((u) => u.includes('dataInicial=')));
   const owner = await ownerClient();
   const st = (await owner('GET', '/api/gestao/mercado')).json;
-  assert.equal(st.lastRun.errors.usd, 'bcb_http_500');
+  assert.match(st.lastRun.errors.usd, /bcb_http_500/);
+  assert.match(st.lastRun.errors.usd, /awesomeapi: awesome_http_500/);
   assert.equal(st.lastRun.errors.selic, undefined);
   assert.equal(st.indicators.selicPct, 14.75);
+});
+
+test('indicadores: se o Banco Central não responde pela rede, usa BrasilAPI, IBGE e AwesomeAPI (planos B) sem perder tempo com as outras séries dele', async () => {
+  await db.query("DELETE FROM app.market_indicators");
+  const urls: string[] = [];
+  const fetchFn = (async (url: string) => {
+    urls.push(url);
+    if (url.includes('bcb.gov.br')) throw Object.assign(new TypeError('fetch failed'), { cause: { code: 'ENOTFOUND' } });
+    if (url.includes('brasilapi')) return new Response(JSON.stringify([{ nome: 'Selic', valor: 14.75 }, { nome: 'CDI', valor: 14.65 }, { nome: 'IPCA', valor: 4.2 }]), { status: 200 });
+    if (url.includes('ibge')) return new Response(JSON.stringify([{ resultados: [{ series: [{ serie: { '202607': '4.44', '202608': '4.22' } }] }] }]), { status: 200 });
+    if (url.includes('awesomeapi')) return new Response(JSON.stringify([{ bid: '5.40', timestamp: '1790967476' }, { bid: '5.30', timestamp: '1790400000' }]), { status: 200 });
+    return new Response('?', { status: 404 });
+  }) as unknown as typeof fetch;
+  const saved = await refreshMarket(ctx(), { fetchFn, force: true });
+  assert.ok(saved >= 6);
+  assert.equal(urls.filter((u) => u.includes('bcb.gov.br')).length, 2, 'só a primeira série tenta o Banco Central (duas formas de consulta); as outras pulam');
+  const owner = await ownerClient();
+  const st = (await owner('GET', '/api/gestao/mercado')).json;
+  assert.deepEqual(st.lastRun.errors, {});
+  assert.equal(st.indicators.selicPct, 14.75);
+  assert.equal(st.indicators.cdiPct, 14.65);
+  assert.equal(st.indicators.ipca12Pct, 4.22);
+  assert.equal(st.indicators.usdBrl, 5.4);
 });
