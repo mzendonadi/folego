@@ -39,7 +39,7 @@ export async function deepHealth(ctx: Ctx): Promise<Health> {
   const beat = await setting<{ at: string }>(ctx, 'worker_heartbeat');
   const beatAge = ageMin(beat?.at);
   checks.worker = prod ? { ok: beatAge < 4, detail: Number.isFinite(beatAge) ? `último sinal há ${Math.round(beatAge)} min` : 'nunca deu sinal' } : { ok: true, detail: 'ignorado fora de produção' };
-  const stuck = await ctx.db.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.deliverables WHERE status IN ('pending','generating') AND created_at < now() - interval '15 minutes' AND updated_at < now() - interval '15 minutes'`);
+  const stuck = await ctx.db.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.deliverables WHERE product_code IN ('negotiation_scripts', 'defense_letters', 'extra_income_plan') AND status IN ('pending','generating') AND created_at < now() - interval '15 minutes' AND updated_at < now() - interval '15 minutes'`);
   checks.fila = { ok: num(stuck.rows[0]?.n ?? 0) === 0, detail: `${num(stuck.rows[0]?.n ?? 0)} entrega(s) parada(s) há mais de 15 min` };
   const hooks = await ctx.db.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.payment_events WHERE processed_at IS NULL AND received_at < now() - interval '10 minutes'`).catch(() => ({ rows: [{ n: '0' }] }));
   checks.webhooks = { ok: num(hooks.rows[0]?.n ?? 0) === 0, detail: `${num(hooks.rows[0]?.n ?? 0)} evento(s) de pagamento sem processar há mais de 10 min` };

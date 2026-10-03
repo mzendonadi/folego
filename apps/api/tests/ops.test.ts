@@ -39,7 +39,7 @@ test('saúde profunda: banco e filas ok; em teste ignora worker/backup', async (
 test('saúde profunda: entrega parada há mais de 15 min acende o alerta', async () => {
   const se = await db.query<{ id: string }>(`INSERT INTO app.sessions(token_hash, expires_at) VALUES ('\x01'::bytea, now() + interval '1 day') RETURNING id`);
   const c = await db.query<{ id: string }>(`INSERT INTO app.cases(session_id, purge_after) VALUES ($1, now() + interval '1 day') RETURNING id`, [se.rows[0]!.id]);
-  await db.query(`INSERT INTO app.deliverables(case_id, product_code, status, created_at, updated_at) VALUES ($1,'mapa','pending', now() - interval '1 hour', now() - interval '1 hour')`, [c.rows[0]!.id]);
+  await db.query(`INSERT INTO app.deliverables(case_id, product_code, status, created_at, updated_at) VALUES ($1,'negotiation_scripts','pending', now() - interval '1 hour', now() - interval '1 hour')`, [c.rows[0]!.id]);
   const h = await deepHealth({ db, config } as never);
   assert.equal(h.checks.fila!.ok, false);
 });
