@@ -103,7 +103,7 @@ async function viaIbge(f: typeof fetch): Promise<Row[]> {
 
 /** AwesomeAPI: dólar comercial, um valor por dia. */
 async function viaAwesome(f: typeof fetch): Promise<Row[]> {
-  const res = await f('https://economia.awesomeapi.com.br/json/daily/USD-BRL/130', { signal: AbortSignal.timeout(15_000), headers: { accept: 'application/json', 'user-agent': 'Folego/1.0' } });
+  const res = await f('https://economia.awesomeapi.com.br/json/daily/USD-BRL/60', { signal: AbortSignal.timeout(15_000), headers: { accept: 'application/json', 'user-agent': 'Folego/1.0' } });
   if (!res.ok) throw new Error(`awesome_http_${res.status}`);
   const list = (await res.json()) as Array<{ bid?: string; timestamp?: string }>;
   const byDay = new Map<string, number>();
@@ -113,6 +113,24 @@ async function viaAwesome(f: typeof fetch): Promise<Row[]> {
     if (Number.isFinite(v) && Number.isFinite(t)) byDay.set(new Date(t * 1000 - 3 * 3_600_000).toISOString().slice(0, 10), v);
   }
   return [...byDay.entries()].map(([date, value]) => ({ date, value }));
+}
+
+/** Frankfurter (taxas de referência do Banco Central Europeu): dólar em reais, um valor por dia útil. */
+async function viaFrankfurter(f: typeof fetch): Promise<Row[]> {
+  const from = new Date(Date.now() - 200 * 86_400_000).toISOString().slice(0, 10);
+  const res = await f(`https://api.frankfurter.dev/v1/${from}..?base=USD&symbols=BRL`, { signal: AbortSignal.timeout(15_000), headers: { accept: 'application/json', 'user-agent': 'Folego/1.0' } });
+  if (!res.ok) throw new Error(`frankfurter_http_${res.status}`);
+  const body = (await res.json()) as { rates?: Record<string, { BRL?: number }> };
+  return Object.entries(body.rates ?? {}).flatMap(([date, r]) => (typeof r.BRL === 'number' ? [{ date, value: r.BRL }] : []));
+}
+
+/** open.er-api.com: só o valor de hoje (último recurso para o dólar). */
+async function viaErApi(f: typeof fetch): Promise<Row[]> {
+  const res = await f('https://open.er-api.com/v6/latest/USD', { signal: AbortSignal.timeout(15_000), headers: { accept: 'application/json', 'user-agent': 'Folego/1.0' } });
+  if (!res.ok) throw new Error(`erapi_http_${res.status}`);
+  const body = (await res.json()) as { rates?: { BRL?: number } };
+  if (typeof body.rates?.BRL !== 'number') throw new Error('erapi_sem_brl');
+  return [{ date: spToday(), value: body.rates.BRL }];
 }
 
 /**
@@ -134,7 +152,7 @@ export async function refreshMarket(ctx: Ctx, opts: { fetchFn?: typeof fetch; fo
     selic: [['bcb', () => viaBcb(f, SERIES.selic, 30, 400)], ['brasilapi', () => viaBrasilApi(f, 'Selic')]],
     cdi: [['bcb', () => viaBcb(f, SERIES.cdi, 30, 400)], ['brasilapi', () => viaBrasilApi(f, 'CDI')]],
     ipca12: [['bcb', () => viaBcb(f, SERIES.ipca12, 14, 800)], ['ibge', () => viaIbge(f)]],
-    usd: [['bcb', () => viaBcb(f, SERIES.usd, 130, 200)], ['awesomeapi', () => viaAwesome(f)]],
+    usd: [['bcb', () => viaBcb(f, SERIES.usd, 130, 200)], ['frankfurter', () => viaFrankfurter(f)], ['awesomeapi', () => viaAwesome(f)], ['er-api', () => viaErApi(f)]],
   };
   for (const code of Object.keys(plans) as Code[]) {
     const tried: string[] = [];
