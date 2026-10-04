@@ -10,7 +10,7 @@
 |---|---|
 | Verificações automatizadas de API e backoffice | **254** (129 API + 125 backoffice) |
 | Testes unitários/integração existentes (domínio 69, API 134, site 6) | **209, todos passando** |
-| Achados reais a corrigir | **22** (2 altos · 8 médios · 12 baixos/info) |
+| Achados reais | **22** (2 altos · 8 médios · 12 baixos/info) — **todos corrigidos, ver seção 6** |
 | Vulnerabilidades de dependências (`npm audit --omit=dev`) | **0** |
 | Acessibilidade automática (axe) | landing, diagnóstico, resultado, pagamento, Mapa e as 18 abas do Prumo em desktop: **0 violações**; violações só em tabelas do Mapa no celular e no backoffice |
 
@@ -114,3 +114,34 @@ Severidade: **Alta** = pode levar a decisão errada do cliente ou quebra séria 
 
 1. **F-01, F-02** (risco de decisão errada do cliente) · 2. **F-03** (500s) · 3. **F-04, F-05** (layout celular) · 4. **F-06, F-07** (regras) · 5. **F-08, F-09, F-10** · 6. demais (baixa).
 Depois das correções: reexecutar `qa/*.mjs`, repetir a varredura de layout em 320/375/768/1280 e rodar uma rodada no sandbox do Asaas quando o MEI sair.
+
+## 6. Correções aplicadas (mesmo dia) — status: **22 de 22 tratados**
+
+Reexecução depois das correções: API 129/129, backoffice 119/119, motor 8 cenários sem falha, força bruta e corrida OK. Testes: domínio 75, API 141, site 12 (todos passando). Varredura de layout em 375/768/1280 sem corte, sem rolagem lateral e sem violação do axe nas telas corrigidas.
+
+| ID | O que foi feito | Onde / prova |
+|---|---|---|
+| F-01 | Número sem vírgula é lido em **reais** ("1700" = R$ 1.700,00; "1700,5" = R$ 1.700,50); a máscara só põe pontos de milhar enquanto digita e fecha em `1.700,00` ao sair do campo. Vale no diagnóstico, no Prumo e na renda extra. Teto de 9 dígitos. | `format.js` (`fieldToCents`, `maskMoneyLive`), `money.js`, `intake.js`, `income.js`; `tests/format.test.mjs`; conferido digitando no navegador (3200 → 3.200 → R$ 3.200,00) |
+| F-02 | Novo aviso `payment_below_interest` e `plan_very_long`; manchete `too_long` ("essas dívidas não acabam em um prazo razoável") quando o prazo passa de 10 anos ou a parcela não cobre os juros; veredito do Mapa também deixa de prometer "livre em 400 meses". | `diagnose.ts`, `strategies.ts`, `config.ts` (`longHorizonMonths`), `copy.js`, `results.js`; 3 testes novos |
+| F-03 | Datas validadas de verdade (calendário real, 1900–2200; atraso não pode ser no futuro); caractere nulo recusado na entrada; mês `AAAA-MM` (01–12) validado em todas as rotas; erros do banco por dado inválido e do motor viram 4xx. | `schemas.ts`, `app.ts`; `tests/qa-fixes.test.ts` |
+| F-04 | Cartões de resumo com fonte fluida, quebra de palavra e 1 coluna no celular. | `styles.css` (`.ref-stats`) |
+| F-05 | Causa raiz: itens de grade sem `min-width: 0` (diagnóstico), margem negativa do menu do Mapa, definições/emblemas sem quebra (backoffice → Configurações). | `styles.css`, `admin.css` |
+| F-06 | Mercado/comida e transporte por app saem do detector; valor que oscila mais de 20% não é cobrança fixa; duplicidade vale também no **mesmo dia**; plural correto ("1 cobrança aumentou"). | `recurring.ts`, `account-insight-views.js`; 3 testes novos |
+| F-07 | Sem renda e com dívida a razão dívida/renda vira o pior caso. | `budget.ts`; teste novo |
+| F-08 | **Decisão registrada:** o Mapa tem um único dono; o link é um "levar o Mapa para este aparelho" e continua válido até o fim do acesso (precisa ser reutilizável para quem limpou o navegador). Em vez de mudar o modelo de dados (o que misturaria a sessão do Prumo entre aparelhos), a tela agora diz com todas as letras: quem tiver o link abre o Mapa, não compartilhe; abrir em outro aparelho passa o Mapa para lá; gerar link novo invalida o anterior. | `extras.js` |
+| F-09 | Limites por campo no formulário (renda/despesa até R$ 1 milhão por mês, dívida até R$ 100 milhões) com mensagem clara; erros do servidor dizem qual campo. | `intake.js`, `main.js` (`diagnosisErrorMessage`) |
+| F-10 | Tabelas do Mapa viram regiões focáveis com rótulo. | `strategies.js` |
+| F-11 | Toda rota da conta sem sessão responde 401 `not_logged_in`. | `app.ts` (`requireSelf`); teste novo |
+| F-12 | 404 e JSON quebrado/vazio/grande demais no formato próprio, em português. | `app.ts` (handlers); teste novo |
+| F-13 | Código queimado por tentativas erradas deixa de contar no limite de pedidos: a pessoa sempre consegue um código novo. | `subscriptions.ts`, `admin/auth.ts`; teste novo |
+| F-14 | `devCode` só com `EXPOSE_DEV_CODES=1` **e** ambiente de desenvolvimento; `NODE_ENV` esquecido não vaza mais. | `config.ts`; teste novo |
+| F-15 | HSTS com `includeSubDomains` (sem `preload`, que é irreversível). | `deploy/nginx/folego.conf` |
+| F-16 | Botões do topo do Mapa empilhados e alinhados; caixas de seleção do backoffice alinhadas ao texto. | `styles.css`, `admin.css` |
+| F-17 | Plano Controle/Ousado/Desbravador listam também "Nota de saúde", "Dívidas com plano" e "Lembretes", iguais à landing. | `account.ts`, `account-views.js` |
+| F-18 | Dicionário: academia, SmartFit, Gympass, pilates, psicólogo… → Saúde; Disney+, HBO, YouTube, iCloud… → Lazer. | `account.ts` |
+| F-19 | Esquemas estritos nas rotas de escrita da conta (lançamento, dívida, meta, carteira, lembrete, aporte) e nos dados do caso: campo desconhecido passa a dar 400 em vez de ser ignorado. | `schemas.ts`; teste novo |
+| F-20 | `<main>`, cabeçalhos de tabela, regiões de rolagem focáveis, ordem de títulos. | `admin/main.js`, `ui.js`, `marketing.js` |
+| F-21 | Mensagem diz "de 8 a 100 caracteres". | `app.ts`; teste novo |
+| F-22 | `/gestao` e `/gestão` redirecionam para `/gestao/` também no servidor de desenvolvimento. | `app.ts` |
+
+**Observação de ambiente (sem impacto em produção):** no desenvolvimento o navegador pode guardar módulos antigos; em produção o pacote tem hash no nome, então não acontece.

@@ -221,6 +221,16 @@ function replaceWith(view) {
   return route();
 }
 
+// Diz QUAL campo o servidor recusou (em vez de um "algo deu errado" genérico).
+const FIELD_LABEL = { netIncomeCents: 'a renda mensal', fixedExpensesCents: 'as despesas fixas', balanceCents: 'o saldo de uma dívida', monthlyPaymentCents: 'a parcela de uma dívida', monthlyRateBps: 'a taxa de uma dívida', remainingInstallments: 'as parcelas restantes', daysOverdue: 'o atraso de uma dívida', firstDefaultOn: 'a data do início do atraso', creditorName: 'o nome de um credor', uf: 'o estado', ageBand: 'a faixa de idade', employmentType: 'o vínculo de trabalho' };
+function diagnosisErrorMessage(error) {
+  if (error?.status === 429) return 'Muitas tentativas seguidas. Espere um minutinho e tente de novo.';
+  if (error?.code === 'turnstile_required' || error?.code === 'turnstile_failed') return error.message;
+  const names = [...new Set((error?.issues ?? []).map((i) => FIELD_LABEL[String(i.path ?? '').split('.').pop()]).filter(Boolean))];
+  if ((error?.status === 400 || error?.status === 422) && names.length) return `Confira ${names.join(', ')}: o valor informado não parece certo.`;
+  return 'Algo deu errado nas contas. Confira os dados e tente de novo.';
+}
+
 // ---------- fluxo ----------
 async function runDiagnosis({ silent = false } = {}) {
   try {
@@ -232,7 +242,7 @@ async function runDiagnosis({ silent = false } = {}) {
     state.orderId = null;
   } catch (error) {
     console.error(error);
-    if (!silent) toast(error?.status === 429 ? 'Muitas tentativas seguidas. Espere um minutinho e tente de novo.' : 'Algo deu errado nas contas. Confira os dados e tente de novo.');
+    if (!silent) toast(diagnosisErrorMessage(error));
     state.preview = null;
   }
 }

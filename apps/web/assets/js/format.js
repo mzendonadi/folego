@@ -8,12 +8,48 @@ export const brl = (cents) => brlFmt.format(cents / 100);
 export const brlWhole = (cents) => brlRound.format(Math.round(cents / 100));
 /** 123456 → "1.234,56" (para dentro do campo de dinheiro). */
 export const centsToField = (cents) => numFmt.format(cents / 100);
-/** Só os dígitos viram centavos: "1.234,56" → 123456. Vazio → null. */
+/** Teto de reais que cabem num campo (R$ 999.999.999): evita valores absurdos e fica abaixo do limite da API. */
+const MAX_REAIS_DIGITS = 9;
+
+/**
+ * Texto do campo → centavos, lendo como a pessoa escreve: número sem vírgula é em REAIS ("1700" = R$ 1.700,00),
+ * com vírgula vêm os centavos ("1700,5" = R$ 1.700,50). Ponto seguido de 1-2 dígitos no fim vale como decimal ("15.5").
+ * Vazio → null.
+ */
 export function fieldToCents(text) {
-  const digits = String(text).replace(/\D/g, '');
-  if (digits === '') return null;
-  const n = Number(digits);
+  const s = String(text).trim().replace(/[^\d.,]/g, '');
+  if (!/\d/.test(s)) return null;
+  const comma = s.lastIndexOf(',');
+  let whole;
+  let frac = '';
+  if (comma >= 0) {
+    whole = s.slice(0, comma);
+    frac = s.slice(comma + 1);
+  } else {
+    const dot = s.match(/^(.*)\.(\d{1,2})$/);
+    if (dot && !/^\d{1,3}(\.\d{3})+$/.test(s)) {
+      whole = dot[1];
+      frac = dot[2];
+    } else whole = s;
+  }
+  whole = whole.replace(/\D/g, '').slice(0, MAX_REAIS_DIGITS);
+  frac = frac.replace(/\D/g, '').slice(0, 2).padEnd(2, '0');
+  const n = Number((whole || '0') + frac);
   return Number.isSafeInteger(n) ? n : null;
+}
+
+/**
+ * Máscara enquanto a pessoa digita: põe os pontos de milhar e preserva a vírgula e os decimais já digitados
+ * ("1700" → "1.700"; "1700,5" → "1.700,5"), sem reescrever o que ela ainda está escrevendo.
+ * Ao sair do campo, centsToField fecha em "1.700,50".
+ */
+export function maskMoneyLive(text) {
+  const raw = String(text).replace(/[^\d,]/g, '');
+  const comma = raw.indexOf(',');
+  const whole = (comma >= 0 ? raw.slice(0, comma) : raw).replace(/^0+(?=\d)/, '').slice(0, MAX_REAIS_DIGITS);
+  const frac = comma >= 0 ? raw.slice(comma + 1).replace(/\D/g, '').slice(0, 2) : null;
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return frac === null ? grouped : `${grouped || '0'},${frac}`;
 }
 
 /** "1,5" ou "1.5" → 150 bps. Inválido → undefined. */

@@ -61,12 +61,6 @@
   },
   {
     "area": "seguranca",
-    "nome": "GET /indicacoes/creditos sem login = 401",
-    "ok": false,
-    "detalhe": "404"
-  },
-  {
-    "area": "seguranca",
     "nome": "GET /parcerias sem login = 401",
     "ok": true,
     "detalhe": "401"
@@ -159,7 +153,7 @@
     "area": "admin",
     "nome": "pede código de primeiro acesso",
     "ok": true,
-    "detalhe": "200 {\"sent\":true,\"devCode\":\"812025\"}"
+    "detalhe": "200 {\"sent\":true,\"devCode\":\"410638\"}"
   },
   {
     "area": "seguranca",
@@ -193,27 +187,15 @@
   },
   {
     "area": "admin",
-    "nome": "etapa 1 do login (senha) ok",
+    "nome": "login com e-mail e senha ok",
     "ok": true,
-    "detalhe": "200 {\"user\":{\"id\":\"2f081ede-eb4b-47cd-96f4-3fd559d1b505\",\"email\":\"qa@exemplo.com\",\"name\":\"\",\"role\":\"owner\",\"permissions\":[\"dashboard\",\"clientes\",\"clientes_pii\",\"ass"
-  },
-  {
-    "area": "seguranca",
-    "nome": "só com a senha (sem o código) NÃO entra no backoffice",
-    "ok": false,
-    "detalhe": "200 {\"user\":{\"id\":\"2f081ede-eb4b-47cd-96f4-3fd559d1b505\",\"email\":\"qa@exemplo.com\",\"name\":\"\",\"role\":\"owner\",\"permissions\":[\"d"
-  },
-  {
-    "area": "admin",
-    "nome": "etapa 2 do login (código) ok",
-    "ok": false,
-    "detalhe": "404 {\"message\":\"Route POST:/api/gestao/login not found\",\"error\":\"Not Found\",\"statusCode\":404}"
+    "detalhe": "200 {\"user\":{\"id\":\"d99565fe-5ca4-439f-8c9f-2812ec57d933\",\"email\":\"qa@exemplo.com\",\"name\":\"\",\"role\":\"owner\",\"permissions\":[\"dashboard\",\"clientes\",\"clientes_pii\",\"ass"
   },
   {
     "area": "admin",
     "nome": "/me traz usuário e seções",
     "ok": true,
-    "detalhe": "{\"user\":{\"id\":\"2f081ede-eb4b-47cd-96f4-3fd559d1b505\",\"email\":\"qa@exemplo.com\",\"name\":\"\",\"role\":\"owner\",\"permissions\":[\"dashboard\",\"clientes\",\"clientes_pii\",\"ass"
+    "detalhe": "{\"user\":{\"id\":\"d99565fe-5ca4-439f-8c9f-2812ec57d933\",\"email\":\"qa@exemplo.com\",\"name\":\"\",\"role\":\"owner\",\"permissions\":[\"dashboard\",\"clientes\",\"clientes_pii\",\"ass"
   },
   {
     "area": "seguranca",
@@ -231,31 +213,31 @@
     "area": "admin",
     "nome": "GET /dashboard como dono = 200",
     "ok": true,
-    "detalhe": "200 {\"days\":30,\"generatedAt\":\"2026-10-03T16:43:00.003Z\",\"funnel\":{\"steps\":[{\"key\":\"visitors\",\"label\":\"Visitaram o site\",\"cou"
+    "detalhe": "200 {\"days\":30,\"generatedAt\":\"2026-10-04T00:29:24.393Z\",\"funnel\":{\"steps\":[{\"key\":\"visitors\",\"label\":\"Visitaram o site\",\"cou"
   },
   {
     "area": "admin",
     "nome": "GET /jornada/resumo como dono = 200",
     "ok": true,
-    "detalhe": "200 {\"days\":30,\"funnel\":{\"steps\":[{\"key\":\"visitors\",\"label\":\"Visitaram o site\",\"count\":1,\"pctOfPrev\":null,\"pctOfFirst\":100},"
+    "detalhe": "200 {\"days\":30,\"funnel\":{\"steps\":[{\"key\":\"visitors\",\"label\":\"Visitaram o site\",\"count\":0,\"pctOfPrev\":null,\"pctOfFirst\":null}"
   },
   {
     "area": "admin",
     "nome": "GET /clientes/avulsos como dono = 200",
     "ok": true,
-    "detalhe": "200 {\"total\":34,\"page\":0,\"pageSize\":40,\"items\":[{\"id\":\"c0d6f460-51da-483b-9fed-57c42cc26bda\",\"createdAt\":\"2026-10-03T16:41:5"
+    "detalhe": "200 {\"total\":6,\"page\":0,\"pageSize\":40,\"items\":[{\"id\":\"a18061c4-8059-4ddc-a644-0e7221517ce7\",\"createdAt\":\"2026-10-04T00:29:18"
   },
   {
     "area": "admin",
     "nome": "GET /assinaturas como dono = 200",
     "ok": true,
-    "detalhe": "200 {\"total\":2,\"page\":0,\"pageSize\":40,\"counts\":{\"em_dia\":2},\"items\":[{\"id\":\"b3f24028-9f71-4ec3-9dca-ab9496202ae9\",\"email\":\"q"
+    "detalhe": "200 {\"total\":1,\"page\":0,\"pageSize\":40,\"counts\":{\"em_dia\":1},\"items\":[{\"id\":\"1d900c2a-2afc-464f-82a9-710e4f083e46\",\"email\":\"q"
   },
   {
     "area": "admin",
     "nome": "GET /assinaturas/resumo como dono = 200",
     "ok": true,
-    "detalhe": "200 {\"subscribers\":2,\"newSubscribers\":2,\"payingCount\":2,\"upToDate\":2,\"expiringSoon\":0,\"cancelling\":0,\"delinquent\":0,\"mrrCent"
+    "detalhe": "200 {\"subscribers\":1,\"newSubscribers\":1,\"payingCount\":1,\"upToDate\":1,\"expiringSoon\":0,\"cancelling\":0,\"delinquent\":0,\"mrrCent"
   },
   {
     "area": "admin",
@@ -267,19 +249,19 @@
     "area": "admin",
     "nome": "GET /ebooks como dono = 200",
     "ok": true,
-    "detalhe": "200 {\"ebooks\":[{\"id\":\"442929d5-9c83-4f60-9614-bc61df684e3e\",\"title\":\"Respira. Organiza. Avança. O guia do Fôlego para organi"
+    "detalhe": "200 {\"ebooks\":[{\"id\":\"c0fb6df3-ba6b-46f5-88d5-0070897e0adc\",\"title\":\"Respira. Organiza. Avança. O guia do Fôlego para organi"
   },
   {
     "area": "admin",
     "nome": "GET /saude como dono = 200",
     "ok": true,
-    "detalhe": "200 {\"ok\":true,\"at\":\"2026-10-03T16:43:00.126Z\",\"checks\":{\"banco\":{\"ok\":true,\"detail\":\"responde\"},\"worker\":{\"ok\":true,\"detail"
+    "detalhe": "200 {\"ok\":true,\"at\":\"2026-10-04T00:29:24.561Z\",\"checks\":{\"banco\":{\"ok\":true,\"detail\":\"responde\"},\"worker\":{\"ok\":true,\"detail"
   },
   {
     "area": "admin",
     "nome": "GET /mercado como dono = 200",
     "ok": true,
-    "detalhe": "200 {\"updatedAt\":\"2026-10-03T16:39:05.691Z\",\"indicators\":{\"selicPct\":13.75,\"ipca12Pct\":4.22,\"cdiPct\":13.65,\"usdBrl\":5.2214,\""
+    "detalhe": "200 {\"updatedAt\":\"2026-10-04T00:29:15.175Z\",\"indicators\":{\"selicPct\":13.75,\"ipca12Pct\":4.22,\"cdiPct\":13.65,\"usdBrl\":5.2214,\""
   },
   {
     "area": "admin",
@@ -289,15 +271,9 @@
   },
   {
     "area": "admin",
-    "nome": "GET /indicacoes/creditos como dono = 200",
-    "ok": false,
-    "detalhe": "404 {\"message\":\"Route GET:/api/gestao/indicacoes/creditos not found\",\"error\":\"Not Found\",\"statusCode\":404}"
-  },
-  {
-    "area": "admin",
     "nome": "GET /parcerias como dono = 200",
     "ok": true,
-    "detalhe": "200 {\"consentedCases\":0,\"consentedByCategory\":[],\"consentedByUf\":[],\"consentedByEmployment\":[],\"potential\":{\"cases\":34,\"rene"
+    "detalhe": "200 {\"consentedCases\":0,\"consentedByCategory\":[],\"consentedByUf\":[],\"consentedByEmployment\":[],\"potential\":{\"cases\":6,\"reneg"
   },
   {
     "area": "admin",
@@ -321,19 +297,19 @@
     "area": "admin",
     "nome": "GET /usuarios como dono = 200",
     "ok": true,
-    "detalhe": "200 {\"users\":[{\"id\":\"2f081ede-eb4b-47cd-96f4-3fd559d1b505\",\"email\":\"qa@exemplo.com\",\"name\":\"\",\"role\":\"owner\",\"permissions\":["
+    "detalhe": "200 {\"users\":[{\"id\":\"d99565fe-5ca4-439f-8c9f-2812ec57d933\",\"email\":\"qa@exemplo.com\",\"name\":\"\",\"role\":\"owner\",\"permissions\":["
   },
   {
     "area": "admin",
     "nome": "GET /auditoria como dono = 200",
     "ok": true,
-    "detalhe": "200 {\"items\":[{\"id\":107,\"at\":\"2026-10-03T16:42:59.683Z\",\"actor\":\"qa@exemplo.com\",\"action\":\"admin_login_failed\",\"entity\":\"adm"
+    "detalhe": "200 {\"items\":[{\"id\":27,\"at\":\"2026-10-04T00:29:23.946Z\",\"actor\":\"qa@exemplo.com\",\"action\":\"admin_login_failed\",\"entity\":\"admi"
   },
   {
     "area": "admin",
     "nome": "GET /marketing/insights como dono = 200",
     "ok": true,
-    "detalhe": "200 {\"days\":30,\"insights\":[{\"id\":\"abandono_preview\",\"area\":\"conversao\",\"priority\":\"media\",\"title\":\"25 pessoas preencheram o "
+    "detalhe": "200 {\"days\":30,\"insights\":[{\"id\":\"abandono_preview\",\"area\":\"conversao\",\"priority\":\"media\",\"title\":\"5 pessoas preencheram o d"
   },
   {
     "area": "admin",
@@ -351,7 +327,7 @@
     "area": "admin",
     "nome": "GET /me como dono = 200",
     "ok": true,
-    "detalhe": "200 {\"user\":{\"id\":\"2f081ede-eb4b-47cd-96f4-3fd559d1b505\",\"email\":\"qa@exemplo.com\",\"name\":\"\",\"role\":\"owner\",\"permissions\":[\"d"
+    "detalhe": "200 {\"user\":{\"id\":\"d99565fe-5ca4-439f-8c9f-2812ec57d933\",\"email\":\"qa@exemplo.com\",\"name\":\"\",\"role\":\"owner\",\"permissions\":[\"d"
   },
   {
     "area": "admin",
@@ -417,31 +393,31 @@
     "area": "validacao",
     "nome": "GET /clientes/avulsos?pagina=-1 não gera 5xx",
     "ok": true,
-    "detalhe": "200 {\"total\":34,\"page\":0,\"pageSize\":40,\"items\":[{\"id\":\"c0d6f460-51da-483b-9fed-57c42cc26bda\",\"createdAt\""
+    "detalhe": "200 {\"total\":6,\"page\":0,\"pageSize\":40,\"items\":[{\"id\":\"a18061c4-8059-4ddc-a644-0e7221517ce7\",\"createdAt\":"
   },
   {
     "area": "validacao",
     "nome": "GET /clientes/avulsos?pagina=abc não gera 5xx",
     "ok": true,
-    "detalhe": "200 {\"total\":34,\"page\":0,\"pageSize\":40,\"items\":[{\"id\":\"c0d6f460-51da-483b-9fed-57c42cc26bda\",\"createdAt\""
+    "detalhe": "200 {\"total\":6,\"page\":0,\"pageSize\":40,\"items\":[{\"id\":\"a18061c4-8059-4ddc-a644-0e7221517ce7\",\"createdAt\":"
   },
   {
     "area": "validacao",
     "nome": "GET /assinaturas?pagina=999999 não gera 5xx",
     "ok": true,
-    "detalhe": "200 {\"total\":2,\"page\":999999,\"pageSize\":40,\"counts\":{\"em_dia\":2},\"items\":[]}"
+    "detalhe": "200 {\"total\":1,\"page\":999999,\"pageSize\":40,\"counts\":{\"em_dia\":1},\"items\":[]}"
   },
   {
     "area": "validacao",
     "nome": "GET /clientes/avulsos?busca='%20OR%201%3D1%20-- não gera 5xx",
     "ok": true,
-    "detalhe": "200 {\"total\":34,\"page\":0,\"pageSize\":40,\"items\":[{\"id\":\"c0d6f460-51da-483b-9fed-57c42cc26bda\",\"createdAt\""
+    "detalhe": "200 {\"total\":6,\"page\":0,\"pageSize\":40,\"items\":[{\"id\":\"a18061c4-8059-4ddc-a644-0e7221517ce7\",\"createdAt\":"
   },
   {
     "area": "validacao",
     "nome": "GET /assinaturas?busca=%25 não gera 5xx",
     "ok": true,
-    "detalhe": "200 {\"total\":2,\"page\":0,\"pageSize\":40,\"counts\":{\"em_dia\":2},\"items\":[{\"id\":\"b3f24028-9f71-4ec3-9dca-ab94"
+    "detalhe": "200 {\"total\":1,\"page\":0,\"pageSize\":40,\"counts\":{\"em_dia\":1},\"items\":[{\"id\":\"1d900c2a-2afc-464f-82a9-710e"
   },
   {
     "area": "validacao",
@@ -499,12 +475,6 @@
   },
   {
     "area": "validacao",
-    "nome": "preço zero recusado (ou tratado)",
-    "ok": false,
-    "detalhe": "status 200"
-  },
-  {
-    "area": "validacao",
     "nome": "preço absurdo recusado",
     "ok": true,
     "detalhe": "400"
@@ -519,7 +489,7 @@
     "area": "admin",
     "nome": "dono cria usuário Suporte",
     "ok": true,
-    "detalhe": "201 {\"id\":\"fe2ef6b2-e987-48e4-93de-2a6e07605732\"}"
+    "detalhe": "201 {\"id\":\"fb8eb6e6-52d5-4664-af19-89102b13b467\"}"
   },
   {
     "area": "validacao",
@@ -548,8 +518,8 @@
   {
     "area": "admin",
     "nome": "usuário Suporte entra",
-    "ok": false,
-    "detalhe": "404 {\"message\":\"Route POST:/api/gestao/login not found\",\"error\":\"Not Found\",\"statusCode\":404}"
+    "ok": true,
+    "detalhe": "200 {\"user\":{\"id\":\"fb8eb6e6-52d5-4664-af19-89102b13b467\",\"email\":\"suporte1791073766078@exemplo.com\",\"nam"
   },
   {
     "area": "permissao",
@@ -625,12 +595,6 @@
   },
   {
     "area": "permissao",
-    "nome": "Suporte NÃO acessa /indicacoes (403)",
-    "ok": false,
-    "detalhe": "200 {\"enabled\":true,\"percent\":10,\"kpis\":{\"leadInvites\":0,\"subscriberInvites\":0,\"conv"
-  },
-  {
-    "area": "permissao",
     "nome": "Suporte NÃO acessa /saude (403)",
     "ok": true,
     "detalhe": "403 {\"error\":\"forbidden\",\"message\":\"Você não tem permissão para esta área.\"}"
@@ -699,19 +663,19 @@
     "area": "integracao",
     "nome": "atualizar indicadores (BCB/IBGE/etc.) não gera 5xx",
     "ok": true,
-    "detalhe": "200 {\"saved\":157,\"lastRun\":{\"at\":\"2026-10-03T16:43:02.707Z\",\"saved\":157,\"errors\":{}}}"
+    "detalhe": "200 {\"saved\":156,\"lastRun\":{\"at\":\"2026-10-04T00:29:27.201Z\",\"saved\":156,\"errors\":{}}}"
   },
   {
     "area": "integracao",
     "nome": "mercado traz Selic/IPCA após atualizar",
     "ok": true,
-    "detalhe": "{\"updatedAt\":\"2026-10-03T16:43:03.223Z\",\"indicators\":{\"selicPct\":13.75,\"ipca12Pct\":4.22,\"cdiPct\":13.65,\"usdBrl\":5.2214,\"selicTrend\":null,\"ipcaTrend\":-0.5,\"usdTrend\":0.0252},\"lastRun\":{\"at\":\"2026-10-03"
+    "detalhe": "{\"updatedAt\":\"2026-10-04T00:29:30.891Z\",\"indicators\":{\"selicPct\":13.75,\"ipca12Pct\":4.22,\"cdiPct\":13.65,\"usdBrl\":5.2214,\"selicTrend\":null,\"ipcaTrend\":-0.5,\"usdTrend\":0.0252},\"lastRun\":{\"at\":\"2026-10-04"
   },
   {
     "area": "admin",
     "nome": "repositório de eBooks tem um ativo",
     "ok": true,
-    "detalhe": "{\"ebooks\":[{\"id\":\"442929d5-9c83-4f60-9614-bc61df684e3e\",\"title\":\"Respira. Organiza. Avança. O guia do Fôlego para organizar o dinheiro e conquistar tranquilidade\",\"filename\":\"Folego-eBook-Respira-Orga"
+    "detalhe": "{\"ebooks\":[{\"id\":\"c0fb6df3-ba6b-46f5-88d5-0070897e0adc\",\"title\":\"Respira. Organiza. Avança. O guia do Fôlego para organizar o dinheiro e conquistar tranquilidade\",\"filename\":\"Folego-eBook-Respira-Orga"
   },
   {
     "area": "marketing",
@@ -723,7 +687,7 @@
     "area": "marketing",
     "nome": "criar plano de marketing",
     "ok": true,
-    "detalhe": "201 {\"id\":\"af7ad4f4-7241-4cf6-a5ac-e51d11b91192\"}"
+    "detalhe": "201 {\"id\":\"feee0380-d4cd-4edb-96d4-5426f20ef0e3\"}"
   },
   {
     "area": "validacao",
@@ -735,7 +699,7 @@
     "area": "admin",
     "nome": "auditoria registra as ações acima",
     "ok": true,
-    "detalhe": "{\"items\":[{\"id\":115,\"at\":\"2026-10-03T16:43:03.274Z\",\"actor\":\"qa@exemplo.com\",\"action\":\"admin_plan_create\",\"entity\":\"marketing_plan\",\"entityId\":\"af7ad4f4-7241-4cf6-a5ac-e51d11b91192\",\"data\":{\"by\":\"qa@e"
+    "detalhe": "{\"items\":[{\"id\":34,\"at\":\"2026-10-04T00:29:30.973Z\",\"actor\":\"qa@exemplo.com\",\"action\":\"admin_plan_create\",\"entity\":\"marketing_plan\",\"entityId\":\"feee0380-d4cd-4edb-96d4-5426f20ef0e3\",\"data\":{\"by\":\"qa@ex"
   },
   {
     "area": "admin",

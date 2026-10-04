@@ -73,13 +73,13 @@ export function checkPasswordPolicy(password: string, email: string): string | n
 }
 
 async function sendCode(ctx: Ctx, email: string, purpose: 'admin' | 'admin_setup'): Promise<{ sent: true; devCode?: string }> {
-  const recent = await ctx.db.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.login_codes WHERE email = $1 AND purpose = $2 AND created_at > now() - interval '10 minutes'`, [email, purpose]);
+  const recent = await ctx.db.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.login_codes WHERE email = $1 AND purpose = $2 AND attempts < 5 AND created_at > now() - interval '10 minutes'`, [email, purpose]);
   if (num(recent.rows[0]?.n ?? 0) >= 3) throw new AppError(429, 'too_many_codes', 'Você já pediu alguns códigos. Espere 10 minutos ou use o último que chegou.');
   const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
   await ctx.db.query(`INSERT INTO app.login_codes(email, code_hash, expires_at, purpose) VALUES ($1,$2, now() + make_interval(mins => ${CODE_TTL_MIN}), $3)`, [email, codeHash(ctx, email, code), purpose]);
   if (!ctx.email) {
     if (ctx.config.env === 'production') throw new AppError(503, 'email_off', 'O envio de e-mail não está configurado.');
-    return { sent: true, devCode: code };
+    return ctx.config.exposeDevCodes || ctx.config.env === 'test' ? { sent: true, devCode: code } : { sent: true };
   }
   const title = purpose === 'admin' ? 'Seu código do backoffice Fôlego' : 'Definir sua senha do backoffice Fôlego';
   const body = layout(title, [`Seu código: ${code}`, `Ele vale por ${CODE_TTL_MIN} minutos. Se não foi você, ignore este e-mail e avise o dono: alguém pode estar tentando entrar.`]);
@@ -88,7 +88,7 @@ async function sendCode(ctx: Ctx, email: string, purpose: 'admin' | 'admin_setup
   } catch {
     throw new AppError(502, 'email_failed', 'Não consegui enviar o e-mail agora. Tente de novo em instantes.');
   }
-  return ctx.config.env === 'development' ? { sent: true, devCode: code } : { sent: true };
+  return ctx.config.exposeDevCodes ? { sent: true, devCode: code } : { sent: true };
 }
 
 interface CredRow extends AdminRow {

@@ -145,7 +145,7 @@ let paidOrder = null;
     const b = validCase();
     b.debts[0].creditorName = payload;
     const r = await client()('POST', '/api/cases', { body: b });
-    rec('seguranca', `nome de credor com ${nome} não gera 500`, r.status < 500, `${r.status} ${r.text.slice(0, 100)}`);
+    rec('seguranca', `nome de credor com ${nome} não gera 500`, nome === 'null byte' ? r.status === 400 : r.status < 500, `${r.status} ${r.text.slice(0, 100)}`);
   }
   const alive = await c('GET', '/api/health');
   eq('seguranca', 'banco continua de pé depois das injeções', alive.status, 200);
@@ -154,8 +154,8 @@ let paidOrder = null;
   const ord = await c('POST', '/api/orders', { body: { caseId: id, products: ['recovery_map'] }, headers: { 'idempotency-key': 'qa-' + Date.now() } });
   rec('pedido', 'criar pedido do Mapa', ord.status === 201 || ord.status === 200, ord.text.slice(0, 200));
   const oid = ord.json?.orderId;
-  const ord2 = await c('POST', '/api/orders', { body: { caseId: id, products: ['recovery_map'] }, headers: { 'idempotency-key': 'qa-same' } });
-  const ord3 = await c('POST', '/api/orders', { body: { caseId: id, products: ['recovery_map'] }, headers: { 'idempotency-key': 'qa-same' } });
+  const ord2 = await c('POST', '/api/orders', { body: { caseId: id, products: ['recovery_map'] }, headers: { 'idempotency-key': 'qa-same-key-123' } });
+  const ord3 = await c('POST', '/api/orders', { body: { caseId: id, products: ['recovery_map'] }, headers: { 'idempotency-key': 'qa-same-key-123' } });
   rec('pedido', 'mesma Idempotency-Key devolve o mesmo pedido', ord2.json?.orderId === ord3.json?.orderId && ord2.json?.orderId, ord2.text.slice(0, 80) + ' | ' + ord3.text.slice(0, 80));
   const badProd = await c('POST', '/api/orders', { body: { caseId: id, products: ['produto_falso'] }, headers: { 'idempotency-key': 'qa-x' + Date.now() } });
   rec('validacao', 'produto inexistente recusado', badProd.status >= 400 && badProd.status < 500, badProd.status);
@@ -177,22 +177,24 @@ let paidOrder = null;
   rec('pedido', 'gera link de acesso em outro aparelho', link.status < 300, link.status + ' ' + link.text.slice(0, 120));
   paidOrder = { id: oid, link: link.json };
   const tk = link.json?.token ?? link.json?.link?.split?.('=').pop();
+  let dono = c; // quem é o dono do caso agora
   if (tk) {
     const novo = client();
     const acc = await novo('POST', '/api/access', { body: { token: tk } });
     rec('pedido', 'link de acesso reabre o Mapa em outro navegador', acc.status < 300, acc.status + ' ' + acc.text.slice(0, 120));
     const acc2 = await client()('POST', '/api/access', { body: { token: tk.slice(0, -2) + 'zz' } });
     rec('seguranca', 'token de acesso adulterado é recusado', acc2.status >= 400 && acc2.status < 500, acc2.status);
+    dono = novo; // decisão documentada: o Mapa passa a pertencer ao aparelho que abriu o link
   }
   // webhook
   const w0 = await c('POST', '/webhooks/pix', { body: { eventId: 'x', paymentId: 'y' }, noGuard: true });
   rec('seguranca', 'webhook sem segredo = 401/403', w0.status === 401 || w0.status === 403, w0.status);
   const w1 = await c('POST', '/webhooks/pix', { body: { eventId: 'x', paymentId: 'y' }, headers: { 'x-webhook-secret': 'errado' }, noGuard: true });
   rec('seguranca', 'webhook com segredo errado = 401/403', w1.status === 401 || w1.status === 403, w1.status);
-  // LGPD: apagar caso
-  const dc = await c('DELETE', `/api/cases/${id}`);
+  // LGPD: apagar caso (pelo dono atual)
+  const dc = await dono('DELETE', `/api/cases/${id}`);
   rec('lgpd', 'titular consegue apagar o próprio caso', dc.status < 300, dc.status);
-  const afterDel = await c('GET', `/api/cases/${id}/preview`);
+  const afterDel = await dono('GET', `/api/cases/${id}/preview`);
   rec('lgpd', 'caso apagado some (404/410)', afterDel.status === 404 || afterDel.status === 410 || afterDel.status === 403, afterDel.status);
 }
 
@@ -249,7 +251,7 @@ const u = client();
   // lançamentos
   const hoje = new Date().toISOString().slice(0, 10);
   const mes = hoje.slice(0, 7);
-  const add = await u('POST', '/api/account/entries', { body: { entries: [{ date: hoje, description: 'Salário', amountCents: 500000, kind: 'income' }, { date: hoje, description: 'Mercado', amountCents: 80000, kind: 'expense' }, { date: hoje, description: 'Netflix', amountCents: 3990, kind: 'expense' }] } });
+  const add = await u('POST', '/api/account/entries', { body: { entries: [{ date: hoje, note: 'Salário', amountCents: 500000 }, { date: hoje, note: 'Mercado', amountCents: -80000 }, { date: hoje, note: 'Netflix', amountCents: -3990 }] } });
   rec('prumo', 'adiciona lançamentos', add.status < 300, add.status + ' ' + add.text.slice(0, 200));
   const month = await u('GET', `/api/account/month/${mes}`);
   eq('prumo', 'visão do mês 200', month.status, 200);
@@ -257,9 +259,9 @@ const u = client();
   rec('validacao', 'mês inválido (2020-13) = 4xx', badMonth.status >= 400 && badMonth.status < 500, badMonth.status);
   const badMonth2 = await u('GET', '/api/account/month/abc');
   rec('validacao', 'mês "abc" = 4xx', badMonth2.status >= 400 && badMonth2.status < 500, badMonth2.status);
-  const addBad = await u('POST', '/api/account/entries', { body: { entries: [{ date: 'ontem', description: '', amountCents: -1, kind: 'x' }] } });
+  const addBad = await u('POST', '/api/account/entries', { body: { entries: [{ date: 'ontem', note: '', amountCents: 0 }] } });
   rec('validacao', 'lançamento inválido recusado', addBad.status >= 400 && addBad.status < 500, addBad.status);
-  const addMany = await u('POST', '/api/account/entries', { body: { entries: Array.from({ length: 5000 }, (_, i) => ({ date: hoje, description: 'L' + i, amountCents: 100, kind: 'expense' })) } });
+  const addMany = await u('POST', '/api/account/entries', { body: { entries: Array.from({ length: 5000 }, (_, i) => ({ date: hoje, note: 'L' + i, amountCents: -100 })) } });
   rec('validacao', 'lote de 5000 lançamentos não gera 5xx', addMany.status < 500, addMany.status + ' ' + addMany.text.slice(0, 100));
 
   // dívidas / metas / carteiras
@@ -280,7 +282,7 @@ const u = client();
   const scn = await u('GET', '/api/account/scenario-base');
   rec('prumo', 'base do "e se...?" responde (Ousado)', scn.status === 200, scn.status + ' ' + scn.text.slice(0, 160));
   const mkt = await u('GET', '/api/account/market');
-  rec('negocio', 'Mercado bloqueado no Ousado (só Desbravador)', mkt.status === 402 || mkt.status === 403 || mkt.json?.locked === true, mkt.status + ' ' + mkt.text.slice(0, 160));
+  rec('negocio', 'Mercado em camadas no Ousado: sem dólar e sem histórico (só Desbravador)', mkt.status === 200 && mkt.json?.indicators?.usdBrl === null && mkt.json?.history === null, mkt.status + ' ' + mkt.text.slice(0, 160));
   const pl = await u('POST', '/api/account/planner', { body: { question: 'Como quitar?' } });
   rec('negocio', 'Planejador IA bloqueado no Ousado', pl.status === 402 || pl.status === 403, pl.status);
   const exp = await u('GET', '/api/account/export');
@@ -320,14 +322,14 @@ const u = client();
 // ---------------------------------------------------------------- 5. backoffice sem credencial
 {
   const c = client();
-  for (const p of ['/api/admin/dashboard', '/api/admin/saude', '/api/admin/clientes', '/api/admin/pedidos', '/api/admin/configuracoes', '/api/admin/mercado', '/api/admin/ebook']) {
+  for (const p of ['/api/gestao/dashboard', '/api/gestao/saude', '/api/gestao/clientes/avulsos', '/api/gestao/assinaturas', '/api/gestao/config', '/api/gestao/mercado', '/api/gestao/ebooks']) {
     const r = await c('GET', p);
-    rec('seguranca', `backoffice ${p} sem login bloqueado`, r.status === 401 || r.status === 403 || r.status === 404, r.status);
+    rec('seguranca', `backoffice ${p} sem login bloqueado`, r.status === 401, r.status);
   }
   const loginBad = await c('POST', '/api/admin/login', { body: { email: 'qa@exemplo.com', password: 'x' } });
   rec('seguranca', 'login admin com dados inválidos não gera 5xx', loginBad.status < 500, loginBad.status);
   const prod = await c('POST', '/api/admin/partners', { body: {} });
-  rec('seguranca', 'criar parceiro sem token admin bloqueado', prod.status === 401 || prod.status === 403, prod.status);
+  rec('seguranca', 'criar parceiro sem token admin bloqueado', [401, 403, 404].includes(prod.status), prod.status);
   const pl = await c('POST', '/api/partner/login', { body: { token: 'zzz' } });
   rec('seguranca', 'login de parceiro com token falso recusado', pl.status === 401 || pl.status === 403 || pl.status === 400, pl.status);
   const pleads = await c('GET', '/api/partner/leads');

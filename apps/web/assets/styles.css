@@ -369,7 +369,7 @@ ul, ol { margin: 0; padding: 0; }
 .review-row dd { margin: 0; font-weight: 700; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 
 /* formulário: linha do tempo (desktop) e passo a passo (celular) */
-.intake-layout { display: grid; gap: var(--s6); padding-bottom: var(--s8); }
+.intake-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s6); padding-bottom: var(--s8); }
 .progress-mobile { margin-bottom: var(--s4); }
 .progress-track { height: 8px; background: var(--line); border-radius: 999px; overflow: hidden; }
 .progress-fill { height: 100%; width: 0; background: var(--primary); border-radius: 999px; transition: width 0.4s var(--ease); }
@@ -382,7 +382,7 @@ ul, ol { margin: 0; padding: 0; }
 .step-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--s4); }
 .step-title { font-size: clamp(1.5rem, 1.2rem + 1.4vw, 1.9rem); scroll-margin-top: 96px; }
 .step-done-summary { display: none; }
-.step-body { margin-top: var(--s5); display: grid; gap: var(--s4); }
+.step-body { margin-top: var(--s5); display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s4); }
 .step-body > .hint { margin-top: -6px; }
 .step-actions { display: flex; justify-content: space-between; align-items: center; gap: var(--s3); margin-top: var(--s4); }
 .step-actions .btn-primary { flex: 1; max-width: 320px; margin-left: auto; }
@@ -503,7 +503,7 @@ ul, ol { margin: 0; padding: 0; }
 .d-head { display: flex; justify-content: space-between; align-items: flex-end; gap: var(--s5); flex-wrap: wrap; }
 .d-head h1 { font-size: clamp(2rem, 1.2rem + 3.2vw, 3.2rem); }
 .d-actions { display: flex; gap: var(--s2); flex-wrap: wrap; }
-.d-nav { position: sticky; top: 68px; z-index: 20; display: flex; gap: 8px; overflow-x: auto; padding: 10px 2px; margin-inline: -2px; background: color-mix(in srgb, var(--paper) 92%, transparent); backdrop-filter: blur(8px); scrollbar-width: none; }
+.d-nav { position: sticky; top: 68px; z-index: 20; display: flex; gap: 8px; overflow-x: auto; padding: 10px 0; margin-inline: 0; background: color-mix(in srgb, var(--paper) 92%, transparent); backdrop-filter: blur(8px); scrollbar-width: none; }
 .d-nav::-webkit-scrollbar { display: none; }
 .d-nav a { flex: none; padding: 8px 16px; min-height: 44px; display: inline-flex; align-items: center; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink-2); text-decoration: none; font-weight: 700; font-size: 0.9375rem; }
 .d-nav a:hover { border-color: var(--primary); color: var(--primary); }
@@ -936,3 +936,15 @@ ul, ol { margin: 0; padding: 0; }
 /* Caixa do Turnstile (só aparece quando o Cloudflare pede interação) */
 .ts-box { position: fixed; inset: auto 0 16px 0; display: flex; justify-content: center; z-index: 9999; pointer-events: none; }
 .ts-box > * { pointer-events: auto; }
+
+/* QA F-04: valores grandes não podem estourar o cartão em telas estreitas */
+.ref-stats { grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr)); }
+.ref-stats > div { min-width: 0; }
+.ref-stats strong { font-size: clamp(1.1rem, 0.7rem + 2.6vw, 1.6rem); overflow-wrap: anywhere; }
+@media (max-width: 480px) { .ref-stats { grid-template-columns: 1fr; } }
+
+.intake-layout > * { min-width: 0; }
+
+/* QA F-16: botões do topo do Mapa alinhados no celular */
+@media (max-width: 480px) { .d-actions { flex-direction: column; align-items: stretch; } .d-actions .btn { width: 100%; justify-content: center; } }
+.step-body > * { min-width: 0; }

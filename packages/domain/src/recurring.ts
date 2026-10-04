@@ -1,6 +1,8 @@
 // Detector de cobranças recorrentes: acha, nos lançamentos da pessoa, o que se repete (assinaturas, mensalidades, anuidades),
 // avisa de aumento de preço e de cobrança em duplicidade. Cálculo puro, centavos inteiros; não conhece banco nem rede.
 
+import { categorize } from './account.ts';
+
 export interface RecurringEntry {
   date: string; // yyyy-mm-dd
   amountCents: number; // negativo = gasto
@@ -63,6 +65,9 @@ export function detectRecurring(entries: RecurringEntry[], today: string): Recur
     if (e.amountCents >= 0) continue;
     const key = merchantKey(e.note);
     if (key.length < 3) continue;
+    // consumo variável (mercado, comida, transporte por app) não é assinatura: gera ruído e tira a confiança do detector
+    const cat = categorize(e.note, e.amountCents);
+    if (cat === 'mercado' || cat === 'transporte') continue;
     const g = groups.get(key) ?? [];
     g.push(e);
     groups.set(key, g);
@@ -87,6 +92,12 @@ export function detectRecurring(entries: RecurringEntry[], today: string): Recur
     else if (yearly >= 1) cadence = 'anual';
     if (!cadence) continue;
     const amounts = distinct.map((e) => Math.abs(e.amountCents));
+    // cobrança fixa tem valor estável; valor que oscila muito (mais de 20% entre as anteriores) é consumo, não assinatura
+    if (cadence === 'mensal' && distinct.length >= 3) {
+      const before = amounts.slice(0, -1);
+      const mid = median(before);
+      if (before.some((v) => Math.abs(v - mid) > mid * 0.2)) continue;
+    }
     const last = distinct[distinct.length - 1]!;
     const lastCents = Math.abs(last.amountCents);
     const previous = amounts.slice(0, -1);
@@ -95,13 +106,14 @@ export function detectRecurring(entries: RecurringEntry[], today: string): Recur
     const priceChange = previous.length >= 2 && rise >= 100 && rise / typical >= 0.03
       ? { fromCents: typical, toCents: lastCents, pct: Math.round((rise / typical) * 100), since: last.date }
       : null;
-    // duplicidade: duas cobranças iguais do mesmo estabelecimento em até 5 dias, no mês mais recente
+    // duplicidade: duas cobranças iguais do mesmo estabelecimento em até 5 dias (inclusive no MESMO dia), no mês mais recente.
+    // A importação de extrato já descarta linhas repetidas, então duas iguais no mesmo dia são, de fato, cobradas duas vezes.
     let duplicate: RecurringItem['duplicate'] = null;
     const recent = list.filter((e) => days(e.date, today) <= 70);
     for (let i = 1; i < recent.length && !duplicate; i += 1) {
       const a = recent[i - 1]!;
       const b = recent[i]!;
-      if (a.amountCents === b.amountCents && days(a.date, b.date) <= 5 && a.date !== b.date) duplicate = { date: b.date, cents: Math.abs(b.amountCents) };
+      if (a.amountCents === b.amountCents && days(a.date, b.date) <= 5) duplicate = { date: b.date, cents: Math.abs(b.amountCents) };
     }
     const monthlyCents = cadence === 'mensal' ? lastCents : Math.round(lastCents / 12);
     const step = cadence === 'mensal' ? 30 : 365;

@@ -113,6 +113,7 @@ export function buildStrategies(input: DiagnoseInput, rules: Rules = RULES, give
   let verdict = '';
   if (included.length > 0) {
     if (d.budget.deficit) verdict = `Hoje faltam ${formatBrl(d.budget.gapCents)} por mês: nenhuma ordem de pagamento resolve enquanto a conta não fechar. O primeiro passo é abrir espaço no orçamento (veja as estratégias abaixo).`;
+    else if (d.plan.months !== null && d.plan.months > rules.longHorizonMonths) verdict = `Mesmo seguindo o plano, a quitação levaria ${Math.round(d.plan.months / 12)} anos: é uma conta teórica, não um prazo realista. Para ficar livre de verdade é preciso renegociar a taxa ou o desconto e aumentar o que sobra para as dívidas (veja as estratégias abaixo).`;
     else if (d.plan.months === null) verdict = 'Com o valor disponível hoje, as dívidas não acabam: a parcela não cobre os juros. A saída passa por renegociar a taxa ou trocar a dívida por uma mais barata.';
     else {
       const saved = d.interestSavedCents ?? 0;

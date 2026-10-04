@@ -44,7 +44,7 @@ export const cardOpts = (o) => ({ __card: true, ...o });
 export function kpi(label, value, sub = null, tone = '') {
   return el('div', { class: `bo-kpi ${tone ? `bo-kpi-${tone}` : ''}` }, el('span', { class: 'bo-kpi-label' }, label), el('strong', { class: 'bo-kpi-value' }, value), sub ? el('span', { class: 'bo-kpi-sub muted' }, sub) : null);
 }
-export const kpis = (...items) => el('div', { class: 'bo-kpis' }, ...items);
+export const kpis = (...items) => el('div', { class: 'bo-kpis', tabindex: '0', role: 'group', 'aria-label': 'Indicadores' }, ...items);
 
 export const grid = (cols, ...children) => el('div', { class: `bo-grid bo-grid-${cols}` }, ...children.filter(Boolean));
 
@@ -83,7 +83,7 @@ export function table(cols, rows, { emptyText = 'Nada por aqui ainda.', onRow = 
     }
     return tr;
   });
-  return el('div', { class: 'bo-table-wrap' }, el('table', { class: 'bo-table' }, el('thead', {}, el('tr', {}, ...cols.map((c) => el('th', { class: c.align === 'right' ? 'num' : '', scope: 'col' }, c.label)))), el('tbody', {}, ...body)));
+  return el('div', { class: 'bo-table-wrap', tabindex: '0', role: 'group', 'aria-label': 'Tabela' }, el('table', { class: 'bo-table' }, el('thead', {}, el('tr', {}, ...cols.map((c) => el('th', { class: c.align === 'right' ? 'num' : '', scope: 'col' }, c.label || el('span', { class: 'sr-only' }, 'Detalhes'))))), el('tbody', {}, ...body)));
 }
 
 export function tabs(items, current, onChange) {

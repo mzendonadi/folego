@@ -92,6 +92,13 @@ export function diagnose(input: DiagnoseInput, rules: Rules = RULES): Diagnosis 
   if (prescriptionFlags.length > 0) warnings.push({ code: 'prescription_check_before_paying', debtIds: prescriptionFlags });
   if (included.length > 0 && baseline.months === null) warnings.push({ code: 'baseline_never_pays_off' });
   if (included.length > 0 && plan.months === null) warnings.push({ code: 'plan_never_pays_off' });
+  // Parcela menor que os juros do mês: a dívida só cresce (o teto de juros esconde isso no prazo, que vira décadas).
+  const belowInterest = included
+    .filter((d) => d.balanceCents > 0 && d.minPaymentCents < Math.round((d.balanceCents * d.rateBps) / 10_000))
+    .map((d) => d.id);
+  if (belowInterest.length > 0) warnings.push({ code: 'payment_below_interest', debtIds: belowInterest });
+  const veryLong = included.length > 0 && (plan.months === null || plan.months > rules.longHorizonMonths);
+  if (veryLong) warnings.push({ code: 'plan_very_long' });
 
   const includedBalance = included.reduce((s, d) => s + d.balanceCents, 0);
   const estimatedBalance = included.filter((d) => d.rateSource === 'default').reduce((s, d) => s + d.balanceCents, 0);
@@ -101,6 +108,7 @@ export function diagnose(input: DiagnoseInput, rules: Rules = RULES): Diagnosis 
   let headline: Headline = { kind: 'none' };
   if (included.length > 0) {
     if (budget.deficit) headline = { kind: 'monthly_gap', cents: budget.gapCents };
+    else if (veryLong) headline = plan.months === null ? { kind: 'too_long' } : { kind: 'too_long', months: plan.months };
     else if (interestSavedCents !== null && interestSavedCents > 0) headline = { kind: 'interest_saved', cents: interestSavedCents };
     else if (plan.months !== null) headline = { kind: 'debt_free_in', months: plan.months };
   }

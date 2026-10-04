@@ -59,3 +59,29 @@ test('cenário: novo emprego com transição, ponto de equilíbrio e alerta de r
   assert.equal(worse.verdict, 'piora');
   assert.ok(worse.warnings.some((w) => /vermelho/.test(w)));
 });
+
+// QA F-06
+test('consumo variável (mercado, Uber) não vira "assinatura"', () => {
+  const entries = [
+    ...mk('SUPERMERCADO EXTRA', 80_000, ['2026-07-03', '2026-08-03', '2026-09-03']),
+    ...mk('UBER TRIP', 15_000, ['2026-07-04', '2026-08-04', '2026-09-04']),
+    ...mk('NETFLIX', 3_990, ['2026-07-05', '2026-08-05', '2026-09-05']),
+  ];
+  const r = detectRecurring(entries, '2026-09-20');
+  assert.deepEqual(r.items.map((i) => i.key), ['NETFLIX']);
+});
+
+test('valor que oscila muito não é cobrança fixa', () => {
+  const entries = [
+    { date: '2026-07-05', amountCents: -10_000, note: 'LOJA DO ZE' },
+    { date: '2026-08-05', amountCents: -35_000, note: 'LOJA DO ZE' },
+    { date: '2026-09-05', amountCents: -12_000, note: 'LOJA DO ZE' },
+  ];
+  assert.equal(detectRecurring(entries, '2026-09-20').items.length, 0);
+});
+
+test('duas cobranças iguais no MESMO dia são duplicidade', () => {
+  const entries = [...mk('SPOTIFY', 2_190, ['2026-07-02', '2026-08-02', '2026-09-02', '2026-09-02'])];
+  const r = detectRecurring(entries, '2026-09-20');
+  assert.equal(r.duplicates.length, 1);
+});

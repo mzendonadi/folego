@@ -55,6 +55,8 @@ export interface Config {
   canceledPurgeDays: number;
   /** Programa de indicações (convites por e-mail e desconto para assinantes). */
   referralEnabled: boolean;
+  /** Devolve o código de login no corpo da resposta (só para desenvolver). Exige EXPOSE_DEV_CODES=1 E ambiente de desenvolvimento: um NODE_ENV esquecido não basta. */
+  exposeDevCodes: boolean;
   /** Cloudflare Turnstile (anti-robô). Sem as duas chaves fica desligado. */
   turnstileSiteKey: string | null;
   turnstileSecret: string | null;
@@ -94,6 +96,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
 
   return {
     env: mode,
+    exposeDevCodes: mode === 'development' && env.EXPOSE_DEV_CODES === '1',
     port: Number(env.PORT ?? 3000),
     host: env.HOST ?? '127.0.0.1',
     databaseUrl: env.DATABASE_URL ?? null,

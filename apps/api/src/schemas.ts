@@ -7,7 +7,21 @@ const KINDS = ['credit_card', 'overdraft', 'personal_loan', 'payroll_loan', 'fin
 
 const cents = z.number().int().min(0).max(100_000_000_000);
 
-export const debtSchema = z.object({
+/** Data de calendário de verdade (2026-02-31 não existe) e entre 1900 e 2200: o banco recusa o resto com erro 500. */
+const isoDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine((v) => {
+    const t = Date.parse(`${v}T00:00:00Z`);
+    return Number.isFinite(t) && new Date(t).toISOString().slice(0, 10) === v && v >= '1900-01-01' && v <= '2200-12-31';
+  }, 'Data inválida');
+/** Quando começou o atraso: não pode ser no futuro (com um dia de folga para o fuso horário). */
+const pastDate = isoDate.refine((v) => v <= new Date(Date.now() + 86_400_000).toISOString().slice(0, 10), 'A data não pode ser no futuro');
+
+/** Mês no formato AAAA-MM, de 01 a 12. */
+export const monthParam = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Mês inválido');
+
+export const debtSchema = z.strictObject({
   creditorName: z.string().trim().min(1).max(60),
   kind: z.enum(KINDS),
   kindNote: z.string().trim().max(60).optional(),
@@ -16,11 +30,11 @@ export const debtSchema = z.object({
   remainingInstallments: z.number().int().min(1).max(600).optional(),
   monthlyRateBps: z.number().int().min(0).max(10_000).optional(),
   daysOverdue: z.number().int().min(0).max(36_500),
-  firstDefaultOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  firstDefaultOn: pastDate.optional(),
 });
 
 export const createCaseSchema = z.object({
-  profile: z.object({
+  profile: z.strictObject({
     netIncomeCents: cents,
     fixedExpensesCents: cents,
     employmentType: z.enum(['inss_retiree', 'public_servant', 'clt', 'self_employed', 'other']),
@@ -98,8 +112,8 @@ export const profileSchema = z.object({ displayName: z.string().trim().max(60).n
 export const purgeSchema = z.object({ confirmEmail: z.string().trim().max(200) });
 export const cancelSchema = z.object({ cancel: z.boolean() });
 
-const entrySchema = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+const entrySchema = z.strictObject({
+  date: isoDate,
   amountCents: z.number().int().refine((v) => v !== 0).refine((v) => Math.abs(v) <= 100_000_000_00),
   note: z.string().trim().max(120).default(''),
   category: z.string().max(30).optional(),
@@ -108,17 +122,17 @@ const entrySchema = z.object({
 });
 export const addEntriesSchema = z.object({ entries: z.array(entrySchema).min(1).max(500) });
 export const setCategorySchema = z.object({ category: z.string().max(30) });
-export const walletSchema = z.object({ name: z.string().trim().min(1).max(40), kind: z.enum(['dinheiro', 'conta', 'cartao', 'poupanca', 'outra']) });
+export const walletSchema = z.strictObject({ name: z.string().trim().min(1).max(40), kind: z.enum(['dinheiro', 'conta', 'cartao', 'poupanca', 'outra']) });
 export const entryWalletSchema = z.object({ walletId: z.string().uuid().nullable() });
-export const reminderSchema = z.object({
+export const reminderSchema = z.strictObject({
   title: z.string().trim().min(2).max(80),
-  dueOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  dueOn: isoDate,
   amountCents: z.number().int().min(1).max(100_000_000_00).nullable().optional(),
   repeatMonthly: z.boolean().optional(),
   emailDaysBefore: z.number().int().min(0).max(10).optional(),
 });
 export const reminderPatchSchema = reminderSchema.partial().extend({ done: z.boolean().optional() });
-export const accountDebtSchema = z.object({
+export const accountDebtSchema = z.strictObject({
   name: z.string().trim().min(1).max(60),
   balanceCents: z.number().int().min(1).max(100_000_000_00),
   monthlyRateBps: z.number().int().min(0).max(10_000).optional(),
@@ -128,7 +142,7 @@ export const accountDebtSchema = z.object({
 export const accountDebtPatchSchema = accountDebtSchema.partial();
 export const debtPaymentSchema = z.object({
   amountCents: z.number().int().min(1).max(100_000_000_00),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  date: isoDate.optional(),
   addToLedger: z.boolean().optional(),
 });
 export const objectiveSchema = z.object({ objective: z.enum(['organizar', 'sair_do_vermelho', 'reserva', 'investir']) });
@@ -137,16 +151,16 @@ export const recurringDecisionSchema = z.object({ status: z.enum(['keep', 'cance
 export const plannerSchema = z.object({ question: z.string().trim().min(5).max(500) });
 export const monthLimitSchema = z.object({ limitCents: z.number().int().positive().max(100_000_000_00).nullable() });
 export const setLimitSchema = z.object({ limitCents: z.number().int().positive().max(100_000_000_00).nullable() });
-export const goalSchema = z.object({
+export const goalSchema = z.strictObject({
   id: z.string().uuid().optional(),
   name: z.string().trim().min(1).max(80),
   targetCents: z.number().int().positive().max(100_000_000_00),
   savedCents: z.number().int().min(0).max(100_000_000_00).default(0),
-  dueOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  dueOn: isoDate.nullable().optional(),
 });
-export const contributionSchema = z.object({
+export const contributionSchema = z.strictObject({
   amountCents: z.number().int().min(1).max(100_000_000_00),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  date: isoDate.optional(),
   note: z.string().trim().max(120).optional(),
 });
 export const simulateSchema = z.object({

@@ -6,7 +6,7 @@ import { addDaysIso, formatBrl } from './calendar.ts';
 // Planos
 // ---------------------------------------------------------------------------
 export type PlanCode = 'controle' | 'ousado' | 'desbravador';
-export type Feature = 'ledger' | 'import' | 'alerts' | 'coach_limited' | 'goals' | 'coach' | 'simulator' | 'planner' | 'journeys' | 'market' | 'market_pro' | 'household' | 'ebook' | 'recurring' | 'scenarios';
+export type Feature = 'health' | 'debts' | 'reminders' | 'ledger' | 'import' | 'alerts' | 'coach_limited' | 'goals' | 'coach' | 'simulator' | 'planner' | 'journeys' | 'market' | 'market_pro' | 'household' | 'ebook' | 'recurring' | 'scenarios';
 
 export interface Plan {
   code: PlanCode;
@@ -23,19 +23,19 @@ export const PLANS: Plan[] = [
   {
     code: 'controle', name: 'Controle', priceCents: 1999, productCode: 'sub_controle',
     tagline: 'Saber para onde vai o dinheiro e organizar o mês',
-    features: ['ledger', 'import', 'alerts', 'coach_limited', 'market', 'recurring'],
+    features: ['health', 'ledger', 'import', 'alerts', 'debts', 'reminders', 'coach_limited', 'market', 'recurring'],
     soon: [],
   },
   {
     code: 'ousado', name: 'Ousado', priceCents: 3999, productCode: 'sub_ousado',
     tagline: 'Sair do vermelho, criar reserva e cumprir metas',
-    features: ['ledger', 'import', 'alerts', 'goals', 'coach', 'market', 'journeys', 'household', 'ebook', 'recurring', 'scenarios'],
+    features: ['health', 'ledger', 'import', 'alerts', 'debts', 'reminders', 'goals', 'coach', 'market', 'journeys', 'household', 'ebook', 'recurring', 'scenarios'],
     soon: [],
   },
   {
     code: 'desbravador', name: 'Desbravador', priceCents: 5999, productCode: 'sub_desbravador',
     tagline: 'Tudo, mais planejador com IA, dólar e histórico de mercado',
-    features: ['ledger', 'import', 'alerts', 'goals', 'coach', 'simulator', 'planner', 'market', 'journeys', 'market_pro', 'household', 'ebook', 'recurring', 'scenarios'],
+    features: ['health', 'ledger', 'import', 'alerts', 'debts', 'reminders', 'goals', 'coach', 'simulator', 'planner', 'market', 'journeys', 'market_pro', 'household', 'ebook', 'recurring', 'scenarios'],
     soon: ['Contas conectadas (Open Finance): depende de parceiro autorizado pelo Banco Central.'],
   },
 ];
@@ -61,11 +61,11 @@ const RULES: [Category, RegExp][] = [
   ['moradia', /(aluguel|condominio|iptu|financiamento imob|reforma)/],
   ['mercado', /(mercado|supermercado|padaria|acougue|hortifruti|atacadao|assai|carrefour|ifood|restaurante|lanchonete|comida)/],
   ['transporte', /(uber|99app|99 |combustivel|posto|gasolina|estacionamento|onibus|metro|bilhete|pedagio|ipva|oficina)/],
-  ['saude', /(farmacia|drogaria|droga|consulta|medic|plano de saude|dentista|exame|hospital)/],
+  ['saude', /(farmacia|drogaria|droga|consulta|medic|plano de saude|dentista|exame|hospital|academia|smartfit|smart fit|gympass|crossfit|pilates|psicolog|terapia|clinica)/],
   ['contas', /(energia|luz|cemig|enel|copel|agua|sabesp|saneamento|internet|vivo|claro|tim |oi |telefone|gas )/],
   ['educacao', /(escola|faculdade|curso|mensalidade|livro|colegio)/],
   ['dividas', /(fatura|cartao|emprestimo|parcela|financiamento|consignado|cheque especial|juros|iof)/],
-  ['lazer', /(netflix|spotify|cinema|streaming|bar |shopping|loja|amazon|mercado livre|shopee|viagem|jogo)/],
+  ['lazer', /(netflix|spotify|cinema|streaming|bar |shopping|loja|amazon|mercado livre|shopee|viagem|jogo|disney|hbo|prime video|youtube|deezer|globoplay|paramount|apple.com|icloud|google one|xbox|playstation|steam)/],
 ];
 
 export function categorize(note: string, amountCents: number): Category {

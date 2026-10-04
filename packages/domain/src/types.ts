@@ -116,7 +116,7 @@ export interface RefinanceAssessment {
   reason: 'ok' | 'no_payroll_eligibility' | 'no_beneficial_swap';
 }
 
-export type HeadlineKind = 'interest_saved' | 'debt_free_in' | 'monthly_gap' | 'none';
+export type HeadlineKind = 'interest_saved' | 'debt_free_in' | 'too_long' | 'monthly_gap' | 'none';
 
 export interface Headline {
   kind: HeadlineKind;
@@ -131,7 +131,9 @@ export interface Warning {
     | 'essential_overdue'
     | 'prescription_check_before_paying'
     | 'baseline_never_pays_off'
-    | 'plan_never_pays_off';
+    | 'plan_never_pays_off'
+    | 'payment_below_interest'
+    | 'plan_very_long';
   debtIds?: string[];
 }
 

@@ -9,7 +9,7 @@
     "area": "infra",
     "nome": "GET /api/health/deep responde JSON com checks",
     "ok": true,
-    "detalhe": "{\"ok\":true,\"at\":\"2026-10-03T16:41:14.700Z\",\"checks\":{\"banco\":{\"ok\":true,\"detail\":\"responde\"},\"worker\":{\"ok\":true,\"detail\":\"ignorado fora de produção\"},\"fila\":{\"ok\":true,\"detail\":\"0 entrega(s) parada(s) há mais de 15 min\"},\"webhooks\":{\"ok\":true,\"detail\":\"0 evento(s) de pagamento sem processar há mais de 10 min\"},\"ebook\":{\"ok\":true,\"detail\":\"e-mail não configurado\"},\"backup\":{\"ok\":true,\"detail\":\"ign"
+    "detalhe": "{\"ok\":true,\"at\":\"2026-10-04T00:29:17.693Z\",\"checks\":{\"banco\":{\"ok\":true,\"detail\":\"responde\"},\"worker\":{\"ok\":true,\"detail\":\"ignorado fora de produção\"},\"fila\":{\"ok\":true,\"detail\":\"0 entrega(s) parada(s) há mais de 15 min\"},\"webhooks\":{\"ok\":true,\"detail\":\"0 evento(s) de pagamento sem processar há mais de 10 min\"},\"ebook\":{\"ok\":true,\"detail\":\"e-mail não configurado\"},\"backup\":{\"ok\":true,\"detail\":\"ign"
   },
   {
     "area": "infra",
@@ -51,13 +51,13 @@
     "area": "infra",
     "nome": "404 da API é JSON (não HTML/stack)",
     "ok": true,
-    "detalhe": "{\"message\":\"Route GET:/api/nao-existe not found\",\"error\":\"Not Found\",\"statusCode\":404}"
+    "detalhe": "{\"error\":\"not_found\",\"message\":\"Não encontrado\"}"
   },
   {
     "area": "infra",
     "nome": "JSON quebrado = 4xx (não 500)",
     "ok": true,
-    "detalhe": "400 {\"error\":\"FST_ERR_CTP_INVALID_JSON_BODY\",\"message\":\"Body is not valid JSON but content-type is set to 'application/json'\"}"
+    "detalhe": "400 {\"error\":\"invalid_json\",\"message\":\"O corpo da requisição não é um JSON válido.\"}"
   },
   {
     "area": "infra",
@@ -81,7 +81,7 @@
     "area": "seguranca",
     "nome": "cookie de sessão HttpOnly + SameSite",
     "ok": true,
-    "detalhe": "folego_sid=azKtFypdYblMSqV8ifineJ3843OiQFf7rauPVWdQOcI; Max-Age=2592000; Path=/; HttpOnly; SameSite=Lax"
+    "detalhe": "folego_sid=R--0J9h6ALVbYSWcawByrstk6nUm99kxKfaqoN8s_rA; Max-Age=2592000; Path=/; HttpOnly; SameSite=Lax"
   },
   {
     "area": "seguranca",
@@ -141,7 +141,7 @@
     "area": "caso",
     "nome": "resposta traz id do caso",
     "ok": true,
-    "detalhe": "{\"caseId\":\"f919ab48-5306-4eb0-8a2c-7d81aa9b08c2\",\"preview\":{\"engineVersion\":\"0.1.0\",\"debtCount\":3,\"totalBalanceCents\":660000,\"health\":{\"score\":55,\"band\":\"attention\"},\"headline\":{\"kind\":\"debt_free_in\","
+    "detalhe": "{\"caseId\":\"866cc6ad-afae-4d24-b0cc-5810dde734fa\",\"preview\":{\"engineVersion\":\"0.1.0\",\"debtCount\":3,\"totalBalanceCents\":660000,\"health\":{\"score\":55,\"band\":\"attention\"},\"headline\":{\"kind\":\"debt_free_in\","
   },
   {
     "area": "caso",
@@ -249,7 +249,7 @@
     "area": "validacao",
     "nome": "caso: campo extra desconhecido",
     "ok": true,
-    "detalhe": "status 201 {\"caseId\":\"ada3ee37-105a-4f7a-b00d-58ea95ab25f4\",\"preview\":{\"engineVersion\":\"0.1.0\",\"debtCount\":3,\"totalBalanceCents\":66"
+    "detalhe": "status 201 {\"caseId\":\"518dcb44-f528-4916-adbe-d016b36aa529\",\"preview\":{\"engineVersion\":\"0.1.0\",\"debtCount\":3,\"totalBalanceCents\":66"
   },
   {
     "area": "validacao",
@@ -266,8 +266,8 @@
   {
     "area": "validacao",
     "nome": "caso: data futura inadimplência",
-    "ok": false,
-    "detalhe": "status 500 {\"error\":\"internal\",\"message\":\"Algo deu errado. Tente de novo.\"}"
+    "ok": true,
+    "detalhe": "status 400 {\"error\":\"invalid_input\",\"message\":\"Dados inválidos\",\"issues\":[{\"path\":\"debts.0.firstDefaultOn\",\"message\":\"Data inválida"
   },
   {
     "area": "validacao",
@@ -279,25 +279,25 @@
     "area": "seguranca",
     "nome": "nome de credor com SQLi não gera 500",
     "ok": true,
-    "detalhe": "201 {\"caseId\":\"80bbaff1-2450-420a-afb6-f090e9c4e432\",\"preview\":{\"engineVersion\":\"0.1.0\",\"debtCount\":3,\"t"
+    "detalhe": "201 {\"caseId\":\"153e8671-6473-413d-abd5-f25fa02003f0\",\"preview\":{\"engineVersion\":\"0.1.0\",\"debtCount\":3,\"t"
   },
   {
     "area": "seguranca",
     "nome": "nome de credor com XSS não gera 500",
     "ok": true,
-    "detalhe": "201 {\"caseId\":\"06c1f3f3-1bfb-46ad-93c0-91ac8da5bdac\",\"preview\":{\"engineVersion\":\"0.1.0\",\"debtCount\":3,\"t"
+    "detalhe": "201 {\"caseId\":\"f51c6b7e-2218-4634-8386-fa9f18b0988a\",\"preview\":{\"engineVersion\":\"0.1.0\",\"debtCount\":3,\"t"
   },
   {
     "area": "seguranca",
     "nome": "nome de credor com unicode/emoji não gera 500",
     "ok": true,
-    "detalhe": "201 {\"caseId\":\"1c0fe148-c3fa-46d7-84dc-9c43a557cfdf\",\"preview\":{\"engineVersion\":\"0.1.0\",\"debtCount\":3,\"t"
+    "detalhe": "201 {\"caseId\":\"a18061c4-8059-4ddc-a644-0e7221517ce7\",\"preview\":{\"engineVersion\":\"0.1.0\",\"debtCount\":3,\"t"
   },
   {
     "area": "seguranca",
     "nome": "nome de credor com null byte não gera 500",
-    "ok": false,
-    "detalhe": "500 {\"error\":\"internal\",\"message\":\"Algo deu errado. Tente de novo.\"}"
+    "ok": true,
+    "detalhe": "400 {\"error\":\"invalid_input\",\"message\":\"O texto contém um caractere inválido.\"}"
   },
   {
     "area": "seguranca",
@@ -309,12 +309,13 @@
     "area": "pedido",
     "nome": "criar pedido do Mapa",
     "ok": true,
-    "detalhe": "{\"orderId\":\"1400e7fc-e024-45e6-b2f8-196d63debd25\",\"totalCents\":2900,\"items\":[\"recovery_map\"],\"expiresAt\":1791047475005,\"pixCode\":\"DEMO-FOLEGO-FAKE_A296EBFC7C888696-002900-NAO-E-UM-PIX-REAL\",\"status\":\""
+    "detalhe": "{\"orderId\":\"0db1a06a-1e72-4294-9f19-fd710bbc7a4e\",\"totalCents\":2900,\"items\":[\"recovery_map\"],\"expiresAt\":1791075558459,\"pixCode\":\"DEMO-FOLEGO-FAKE_5F84BE2DF1526E88-002900-NAO-E-UM-PIX-REAL\",\"status\":\""
   },
   {
     "area": "pedido",
     "nome": "mesma Idempotency-Key devolve o mesmo pedido",
-    "detalhe": "{\"error\":\"idempotency_key\",\"message\":\"Cabeçalho Idempotency-Key obrigatório\"} | {\"error\":\"idempotency_key\",\"message\":\"Cabeçalho Idempotency-Key obrigatório\"}"
+    "ok": "5ad8105b-a82b-4f3c-af57-c877363c3ad4",
+    "detalhe": "{\"orderId\":\"5ad8105b-a82b-4f3c-af57-c877363c3ad4\",\"totalCents\":2900,\"items\":[\"re | {\"orderId\":\"5ad8105b-a82b-4f3c-af57-c877363c3ad4\",\"totalCents\":2900,\"items\":[\"re"
   },
   {
     "area": "validacao",
@@ -350,7 +351,7 @@
     "area": "negocio",
     "nome": "entrega DEPOIS de pagar é liberada",
     "ok": true,
-    "detalhe": "200 {\"generated\":{\"scripts\":{\"status\":\"ready\",\"source\":\"template\",\"content\":{\"held\":[{\"id\":\"d3\",\"aviso\":\"Esta dívida pode estar prescrita. Não pague nem n"
+    "detalhe": "200 {\"generated\":{\"scripts\":{\"status\":\"pending\",\"source\":null,\"content\":null}},\"input\":{\"asOf\":\"2026-10-03\",\"profile\":{\"netIncomeCents\":320000,\"fixedExpen"
   },
   {
     "area": "seguranca",
@@ -362,13 +363,13 @@
     "area": "pedido",
     "nome": "gera link de acesso em outro aparelho",
     "ok": true,
-    "detalhe": "200 {\"token\":\"OYTdaOhwBWO8f2QrjdUKruz6_yjDzZfTPsaM93nicmE\",\"expiresAt\":1793637675054}"
+    "detalhe": "200 {\"token\":\"D-b-EFla8w3gQI4rDFG5-zCcP5FUyrW8ck7nPJTTZrg\",\"expiresAt\":1793665758628}"
   },
   {
     "area": "pedido",
     "nome": "link de acesso reabre o Mapa em outro navegador",
     "ok": true,
-    "detalhe": "200 {\"caseId\":\"f919ab48-5306-4eb0-8a2c-7d81aa9b08c2\",\"orderId\":\"1400e7fc-e024-45e6-b2f8-196d63debd25\",\"kind\":\"map\",\"expiresA"
+    "detalhe": "200 {\"caseId\":\"866cc6ad-afae-4d24-b0cc-5810dde734fa\",\"orderId\":\"0db1a06a-1e72-4294-9f19-fd710bbc7a4e\",\"kind\":\"map\",\"expiresA"
   },
   {
     "area": "seguranca",
@@ -391,8 +392,8 @@
   {
     "area": "lgpd",
     "nome": "titular consegue apagar o próprio caso",
-    "ok": false,
-    "detalhe": "404"
+    "ok": true,
+    "detalhe": "204"
   },
   {
     "area": "lgpd",
@@ -421,50 +422,50 @@
   {
     "area": "prumo",
     "nome": "GET /api/account sem login = 401",
-    "ok": false,
-    "detalhe": "esperado 401, veio 404"
+    "ok": true,
+    "detalhe": "esperado 401, veio 401"
   },
   {
     "area": "info",
     "nome": "corpo do erro sem login",
     "ok": "info",
-    "detalhe": "{\"error\":\"not_found\",\"message\":\"Não encontrado\"}"
+    "detalhe": "{\"error\":\"not_logged_in\",\"message\":\"Entre com seu e-mail para continuar.\"}"
   },
   {
     "area": "seguranca",
     "nome": "GET /api/account/export sem login bloqueado",
-    "ok": false,
-    "detalhe": "404 {\"error\":\"not_found\",\"message\":\"Não encontrado\"}"
+    "ok": true,
+    "detalhe": "401 {\"error\":\"not_logged_in\",\"message\":\"Entre com seu e-mail para continuar.\"}"
   },
   {
     "area": "seguranca",
     "nome": "GET /api/account/debts sem login bloqueado",
-    "ok": false,
-    "detalhe": "404 {\"error\":\"not_found\",\"message\":\"Não encontrado\"}"
+    "ok": true,
+    "detalhe": "401 {\"error\":\"not_logged_in\",\"message\":\"Entre com seu e-mail para continuar.\"}"
   },
   {
     "area": "seguranca",
     "nome": "POST /api/account/entries sem login bloqueado",
-    "ok": false,
-    "detalhe": "404 {\"error\":\"not_found\",\"message\":\"Não encontrado\"}"
+    "ok": true,
+    "detalhe": "401 {\"error\":\"not_logged_in\",\"message\":\"Entre com seu e-mail para continuar.\"}"
   },
   {
     "area": "seguranca",
     "nome": "GET /api/account/coach sem login bloqueado",
-    "ok": false,
-    "detalhe": "404 {\"error\":\"not_found\",\"message\":\"Não encontrado\"}"
+    "ok": true,
+    "detalhe": "401 {\"error\":\"not_logged_in\",\"message\":\"Entre com seu e-mail para continuar.\"}"
   },
   {
     "area": "seguranca",
     "nome": "GET /api/account/market sem login bloqueado",
-    "ok": false,
-    "detalhe": "404 {\"error\":\"not_found\",\"message\":\"Não encontrado\"}"
+    "ok": true,
+    "detalhe": "401 {\"error\":\"not_logged_in\",\"message\":\"Entre com seu e-mail para continuar.\"}"
   },
   {
     "area": "seguranca",
     "nome": "DELETE /api/account sem login bloqueado",
-    "ok": false,
-    "detalhe": "404 {\"error\":\"not_found\",\"message\":\"Não encontrado\"}"
+    "ok": true,
+    "detalhe": "401 {\"error\":\"not_logged_in\",\"message\":\"Entre com seu e-mail para continuar.\"}"
   },
   {
     "area": "validacao",
@@ -476,7 +477,7 @@
     "area": "prumo",
     "nome": "pede código de acesso",
     "ok": true,
-    "detalhe": "200 {\"sent\":true,\"devCode\":\"617273\"}"
+    "detalhe": "200 {\"sent\":true,\"devCode\":\"681373\"}"
   },
   {
     "area": "prumo",
@@ -494,7 +495,7 @@
     "area": "prumo",
     "nome": "login com o código certo",
     "ok": true,
-    "detalhe": "200 {\"email\":\"qa1791045675717@exemplo.com\",\"subscription\":null,\"billing\":null,\"profile\":{\"displayName\":n"
+    "detalhe": "200 {\"email\":\"qa1791073759384@exemplo.com\",\"subscription\":null,\"billing\":null,\"profile\":{\"displayName\":n"
   },
   {
     "area": "seguranca",
@@ -512,13 +513,13 @@
     "area": "prumo",
     "nome": "conta sem assinatura ainda (sem plano)",
     "ok": true,
-    "detalhe": "{\"email\":\"qa1791045675717@exemplo.com\",\"subscription\":null,\"billing\":null,\"profile\":{\"displayName\":null,\"notifyDigest\":true,\"notifyReminders\":true,\"marketing\":true},\"role\":\"owner\",\"ownerEmail\":null}"
+    "detalhe": "{\"email\":\"qa1791073759384@exemplo.com\",\"subscription\":null,\"billing\":null,\"profile\":{\"displayName\":null,\"notifyDigest\":true,\"notifyReminders\":true,\"marketing\":true},\"role\":\"owner\",\"ownerEmail\":null}"
   },
   {
     "area": "prumo",
     "nome": "cria pedido de assinatura Ousado",
     "ok": true,
-    "detalhe": "201 {\"orderId\":\"cba45c2c-0248-4a45-9d7f-3e3f4104e5db\",\"totalCents\":3999,\"items\":[\"sub_ousado\"],\"expiresAt\":1791047476540,\"pixCode\":\"DEMO-FOLEGO-FAKE_607955E95F11454B-003999-NAO-E-UM-PIX-REAL\",\"status\":\"pe"
+    "detalhe": "201 {\"orderId\":\"1a1a35dc-ec99-4d1d-90a3-a96ba61091cc\",\"totalCents\":3999,\"items\":[\"sub_ousado\"],\"expiresAt\":1791075560308,\"pixCode\":\"DEMO-FOLEGO-FAKE_3D3F938D4EAADC33-003999-NAO-E-UM-PIX-REAL\",\"status\":\"pe"
   },
   {
     "area": "validacao",
@@ -536,7 +537,7 @@
     "area": "prumo",
     "nome": "assinatura ativa no plano Ousado",
     "ok": true,
-    "detalhe": "{\"plan\":\"ousado\",\"active\":true,\"periodEnd\":1793637676588,\"cancelAtPeriodEnd\":false}"
+    "detalhe": "{\"plan\":\"ousado\",\"active\":true,\"periodEnd\":1793665760358,\"cancelAtPeriodEnd\":false}"
   },
   {
     "area": "prumo",
@@ -553,14 +554,14 @@
   {
     "area": "validacao",
     "nome": "mês inválido (2020-13) = 4xx",
-    "ok": false,
-    "detalhe": "500"
+    "ok": true,
+    "detalhe": "400"
   },
   {
     "area": "validacao",
     "nome": "mês \"abc\" = 4xx",
-    "ok": false,
-    "detalhe": "500"
+    "ok": true,
+    "detalhe": "400"
   },
   {
     "area": "validacao",
@@ -572,19 +573,19 @@
     "area": "validacao",
     "nome": "lote de 5000 lançamentos não gera 5xx",
     "ok": true,
-    "detalhe": "413 {\"error\":\"FST_ERR_CTP_BODY_TOO_LARGE\",\"message\":\"Request body is too large\"}"
+    "detalhe": "413 {\"error\":\"too_large\",\"message\":\"A requisição é grande demais.\"}"
   },
   {
     "area": "prumo",
     "nome": "cria dívida na conta",
     "ok": true,
-    "detalhe": "201 {\"id\":\"4715c606-35ef-409b-8c23-923f57ffa83c\"}"
+    "detalhe": "201 {\"id\":\"aba95f4b-8ec2-4c58-bbff-2534e1fffc23\"}"
   },
   {
     "area": "prumo",
     "nome": "lista dívidas com plano de quitação",
     "ok": true,
-    "detalhe": "{\"debts\":[{\"id\":\"4715c606-35ef-409b-8c23-923f57ffa83c\",\"name\":\"Banco QA\",\"initialCents\":1000000,\"balanceCents\":1000000,\"monthlyRateBps\":450,\"minPaymentCents\":50000,\"dueDay\":null,\"paidOff\":false}],\"tot"
+    "detalhe": "{\"debts\":[{\"id\":\"aba95f4b-8ec2-4c58-bbff-2534e1fffc23\",\"name\":\"Banco QA\",\"initialCents\":1000000,\"balanceCents\":1000000,\"monthlyRateBps\":450,\"minPaymentCents\":50000,\"dueDay\":null,\"paidOff\":false}],\"tot"
   },
   {
     "area": "prumo",
@@ -602,13 +603,13 @@
     "area": "prumo",
     "nome": "cria carteira",
     "ok": true,
-    "detalhe": "201 {\"id\":\"36ac3c82-5ceb-429f-8971-75433a726e21\"}"
+    "detalhe": "201 {\"id\":\"bac5d963-cf5f-41ae-a2c1-c1b84e8949f4\"}"
   },
   {
     "area": "prumo",
     "nome": "cria lembrete",
     "ok": true,
-    "detalhe": "201 {\"id\":\"d2d3358f-eace-4c23-b953-816e833f7f3c\"}"
+    "detalhe": "201 {\"id\":\"ceb7a82f-9d5c-4932-afdf-1a442afc5f72\"}"
   },
   {
     "area": "prumo",
@@ -620,12 +621,12 @@
     "area": "prumo",
     "nome": "base do \"e se...?\" responde (Ousado)",
     "ok": true,
-    "detalhe": "200 {\"months\":1,\"base\":{\"incomeCents\":583990,\"essentialCents\":0,\"flexibleCents\":0,\"debtPaymentsCents\":50000,\"reserveCents\":0}}"
+    "detalhe": "200 {\"months\":1,\"base\":{\"incomeCents\":500000,\"essentialCents\":80000,\"flexibleCents\":3990,\"debtPaymentsCents\":50000,\"reserveCents\":0}}"
   },
   {
     "area": "negocio",
-    "nome": "Mercado bloqueado no Ousado (só Desbravador)",
-    "ok": false,
+    "nome": "Mercado em camadas no Ousado: sem dólar e sem histórico (só Desbravador)",
+    "ok": true,
     "detalhe": "200 {\"plan\":\"ousado\",\"indicators\":{\"selicPct\":13.75,\"ipca12Pct\":4.22,\"cdiPct\":13.65,\"usdBrl\":null,\"selicTrend\":null,\"ipcaTrend\":-0.5,\"usdTrend\":null},\"updatedAt\":\"2"
   },
   {
@@ -674,7 +675,7 @@
     "area": "prumo",
     "nome": "indicações: código/link",
     "ok": true,
-    "detalhe": "{\"enabled\":true,\"percent\":10,\"code\":\"hbavpuyy\",\"link\":\"https://folego.online/?ind=hbavpuyy#/conta\",\"invited\":0,\"converted\":0,\"credits\":{\"available\":0,\"applied\":0},\"next\":null,\"recent\":[]}"
+    "detalhe": "{\"enabled\":true,\"percent\":10,\"code\":\"ra9ejksz\",\"link\":\"https://folego.online/?ind=ra9ejksz#/conta\",\"invited\":0,\"converted\":0,\"credits\":{\"available\":0,\"applied\":0},\"next\":null,\"recent\":[]}"
   },
   {
     "area": "prumo",
@@ -686,7 +687,7 @@
     "area": "negocio",
     "nome": "cancelamento: continua ativo até o fim do período",
     "ok": true,
-    "detalhe": "{\"plan\":\"ousado\",\"active\":true,\"periodEnd\":1793637676588,\"cancelAtPeriodEnd\":true}"
+    "detalhe": "{\"plan\":\"ousado\",\"active\":true,\"periodEnd\":1793665760358,\"cancelAtPeriodEnd\":true}"
   },
   {
     "area": "prumo",
@@ -708,45 +709,45 @@
   },
   {
     "area": "seguranca",
-    "nome": "backoffice /api/admin/dashboard sem login bloqueado",
+    "nome": "backoffice /api/gestao/dashboard sem login bloqueado",
     "ok": true,
-    "detalhe": "404"
+    "detalhe": "401"
   },
   {
     "area": "seguranca",
-    "nome": "backoffice /api/admin/saude sem login bloqueado",
+    "nome": "backoffice /api/gestao/saude sem login bloqueado",
     "ok": true,
-    "detalhe": "404"
+    "detalhe": "401"
   },
   {
     "area": "seguranca",
-    "nome": "backoffice /api/admin/clientes sem login bloqueado",
+    "nome": "backoffice /api/gestao/clientes/avulsos sem login bloqueado",
     "ok": true,
-    "detalhe": "404"
+    "detalhe": "401"
   },
   {
     "area": "seguranca",
-    "nome": "backoffice /api/admin/pedidos sem login bloqueado",
+    "nome": "backoffice /api/gestao/assinaturas sem login bloqueado",
     "ok": true,
-    "detalhe": "404"
+    "detalhe": "401"
   },
   {
     "area": "seguranca",
-    "nome": "backoffice /api/admin/configuracoes sem login bloqueado",
+    "nome": "backoffice /api/gestao/config sem login bloqueado",
     "ok": true,
-    "detalhe": "404"
+    "detalhe": "401"
   },
   {
     "area": "seguranca",
-    "nome": "backoffice /api/admin/mercado sem login bloqueado",
+    "nome": "backoffice /api/gestao/mercado sem login bloqueado",
     "ok": true,
-    "detalhe": "404"
+    "detalhe": "401"
   },
   {
     "area": "seguranca",
-    "nome": "backoffice /api/admin/ebook sem login bloqueado",
+    "nome": "backoffice /api/gestao/ebooks sem login bloqueado",
     "ok": true,
-    "detalhe": "404"
+    "detalhe": "401"
   },
   {
     "area": "seguranca",
@@ -757,7 +758,7 @@
   {
     "area": "seguranca",
     "nome": "criar parceiro sem token admin bloqueado",
-    "ok": false,
+    "ok": true,
     "detalhe": "404"
   },
   {

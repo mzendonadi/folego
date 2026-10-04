@@ -17,6 +17,8 @@ export interface Rules {
   /** Parcela do excedente mensal destinada às dívidas (o resto fica de reserva). Parâmetro de produto. */
   extraToDebtShare: number;
   maxMonths: number;
+  /** Acima disso (em meses), "quitar em X" deixa de ser uma promessa honesta: vira aviso de que o ritmo atual não resolve. */
+  longHorizonMonths: number;
   /** Faixa de desconto esperada em negociação de dívida em atraso. Premissa de produto, não promessa. */
   negotiationDiscount: { lowPct: number; highPct: number };
   refinance: {
@@ -65,6 +67,7 @@ export const RULES: Rules = {
   interestCapShare: { credit_card: 1, overdraft: 1, store_credit: 1 },
   extraToDebtShare: 0.9,
   maxMonths: 600,
+  longHorizonMonths: 120,
   negotiationDiscount: { lowPct: 0.1, highPct: 0.5 },
   refinance: { minRateBps: 400, termMonths: 36, payrollRateBps: 200, marginMaxShare: 0.35 },
   health: {

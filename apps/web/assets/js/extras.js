@@ -39,6 +39,7 @@ export function accessSection(makeLink, expiresAt, sendEmail = null) {
   return card(
     'acesso', 'Guarde seu link de acesso',
     el('p', { class: 'section-sub' }, `Você não precisa criar conta nem senha. Este aparelho já reconhece você, mas se trocar de celular, limpar o navegador ou quiser abrir em outro computador, o link abre o seu Mapa${until ? ` até ${until}` : ''}.`),
+    el('p', { class: 'fine' }, 'Quem tiver o link abre o seu Mapa: não compartilhe. Ao abrir o link em outro aparelho, o Mapa passa a abrir só lá; para voltar a abrir neste, gere um link novo (o anterior deixa de valer).'),
     el('div', { class: 'no-print' }, btn, out),
     sendEmail ? emailForm(sendEmail) : null,
   );

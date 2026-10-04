@@ -32,7 +32,7 @@ const codeHash = (ctx: Ctx, email: string, code: string) => hmac(ctx.config.secr
 
 export async function requestLoginCode(ctx: Ctx, email: string): Promise<{ sent: true; devCode?: string }> {
   assertEnabled(ctx);
-  const recent = await ctx.db.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.login_codes WHERE email = $1 AND created_at > now() - interval '10 minutes'`, [email]);
+  const recent = await ctx.db.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.login_codes WHERE email = $1 AND attempts < 5 AND created_at > now() - interval '10 minutes'`, [email]);
   if (num(recent.rows[0]?.n ?? 0) >= 3) throw new AppError(429, 'too_many_codes', 'Você já pediu alguns códigos. Espere 10 minutos ou use o último que chegou.');
   const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
   await ctx.db.query(`INSERT INTO app.login_codes(email, code_hash, expires_at) VALUES ($1,$2, now() + make_interval(mins => ${CODE_TTL_MIN}))`, [email, codeHash(ctx, email, code)]);
@@ -42,7 +42,7 @@ export async function requestLoginCode(ctx: Ctx, email: string): Promise<{ sent:
   } catch {
     throw new AppError(502, 'email_failed', 'Não consegui enviar o e-mail agora. Tente de novo em instantes.');
   }
-  return ctx.config.env === 'development' ? { sent: true, devCode: code } : { sent: true };
+  return ctx.config.exposeDevCodes ? { sent: true, devCode: code } : { sent: true };
 }
 
 export async function verifyLoginCode(ctx: Ctx, sessionId: string, email: string, code: string): Promise<{ subscriberId: string }> {

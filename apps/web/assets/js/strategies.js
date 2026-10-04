@@ -12,7 +12,7 @@ const block = (title, ...children) => el('div', { class: 'strat-block' }, el('h3
 
 function table(headers, rows, { caption } = {}) {
   return el(
-    'div', { class: 'table-wrap' },
+    'div', { class: 'table-wrap', tabindex: '0', role: 'region', 'aria-label': caption || 'Tabela com rolagem' },
     el(
       'table', { class: 'data-table' },
       caption ? el('caption', { class: 'sr-only' }, caption) : null,

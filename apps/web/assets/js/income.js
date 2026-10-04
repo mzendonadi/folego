@@ -2,7 +2,7 @@
 // um plano de verdade (a IA só escreve texto sobre os números e as ideias que o motor já calculou).
 import { partnerButton } from './partner-cta.js';
 import { el, icon, toast, copyText } from './dom.js';
-import { fieldToCents, centsToField } from './format.js';
+import { fieldToCents, centsToField, maskMoneyLive } from './format.js';
 
 const block = (title, ...children) => el('div', { class: 'script-block' }, el('h4', {}, title), ...children);
 const list = (items, cls = 'bullets') => el('ul', { class: cls }, ...items.map((t) => el('li', {}, t)));
@@ -34,9 +34,12 @@ function interviewForm(onSubmit) {
   const submit = el('button', { class: 'btn btn-primary btn-block', type: 'submit' }, icon('arrow-right'), 'Gerar meu plano personalizado');
 
   capital.addEventListener('input', () => {
+    capital.value = maskMoneyLive(capital.value);
+    capital.setSelectionRange(capital.value.length, capital.value.length);
+  });
+  capital.addEventListener('blur', () => {
     const cents = fieldToCents(capital.value);
     capital.value = cents === null ? '' : centsToField(cents);
-    capital.setSelectionRange(capital.value.length, capital.value.length);
   });
 
   const form = el(

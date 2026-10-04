@@ -147,3 +147,25 @@ test('preview traz só contagens do que há a mais, sem revelar quais dívidas n
   assert.ok(!/cartao|cheque|aluguel|CREDOR/i.test(json));
   assert.deepEqual(Object.keys(p.discoveries).sort(), ['essentialOverdue', 'lettersEligible', 'moreInQueue', 'negotiable']);
 });
+
+// QA F-02 / F-07
+test('renda zero com dívida: nota baixa (não "quase controlado")', () => {
+  const d = diagnose(input([debt({ id: 'a', balanceCents: 300_000, daysOverdue: 10 })], { netIncomeCents: 0, fixedExpensesCents: 0 }));
+  assert.ok(d.health.score < 60, `nota ${d.health.score}`);
+  assert.notEqual(d.health.band, 'under_control');
+});
+
+test('parcela abaixo dos juros: aviso e manchete "demora demais", nunca "livre em 400 meses"', () => {
+  const d = diagnose(
+    input([debt({ id: 'a', kind: 'credit_card', balanceCents: 2_000_000, monthlyPaymentCents: 10_000, monthlyRateBps: 1400, daysOverdue: 90 })], { netIncomeCents: 200_000, fixedExpensesCents: 190_000 }),
+  );
+  assert.ok(d.warnings.some((w) => w.code === 'payment_below_interest'));
+  assert.ok(d.warnings.some((w) => w.code === 'plan_very_long'));
+  assert.equal(d.headline.kind, 'too_long');
+});
+
+test('prazo curto continua com a manchete normal', () => {
+  const d = diagnose(input([debt({ id: 'a', balanceCents: 100_000, monthlyPaymentCents: 20_000, monthlyRateBps: 200 })], { netIncomeCents: 500_000, fixedExpensesCents: 100_000 }));
+  assert.ok(!d.warnings.some((w) => w.code === 'plan_very_long'));
+  assert.notEqual(d.headline.kind, 'too_long');
+});

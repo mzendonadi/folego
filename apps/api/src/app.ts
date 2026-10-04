@@ -31,7 +31,8 @@ import { deepHealth } from './health.ts';
 import { eventSchema, recordEvent } from './admin/events.ts';
 import { publicCatalog } from './admin/manage.ts';
 import { refreshRuntime } from './runtime.ts';
-import { accessSchema, addEntriesSchema, cancelSchema, contributionSchema, createCaseSchema, entryWalletSchema, accountDebtSchema, accountDebtPatchSchema, debtPaymentSchema, monthLimitSchema, plannerSchema, objectiveSchema, inviteSchema, checkoutSchema, profileSchema, referralLeadSchema, referralInviteSchema, recurringDecisionSchema, reminderPatchSchema, reminderSchema, walletSchema, createOrderSchema, emailLinkSchema, emailOnlySchema, goalSchema, incomeInterviewSchema, leadSchema, loginCodeSchema, newPartnerSchema, partnerLoginSchema, partnerStatusSchema, setCategorySchema, setLimitSchema, simulateSchema, subscriptionOrderSchema, toggleIncomeTaskSchema, translationSchema, uuidParam } from './schemas.ts';
+import { accessSchema, addEntriesSchema, cancelSchema, contributionSchema, createCaseSchema, entryWalletSchema, accountDebtSchema, accountDebtPatchSchema, debtPaymentSchema, monthLimitSchema, plannerSchema, objectiveSchema, inviteSchema, checkoutSchema, profileSchema, referralLeadSchema, referralInviteSchema, recurringDecisionSchema, reminderPatchSchema, reminderSchema, walletSchema, createOrderSchema, emailLinkSchema, emailOnlySchema, goalSchema, incomeInterviewSchema, leadSchema, loginCodeSchema, newPartnerSchema, partnerLoginSchema, partnerStatusSchema, setCategorySchema, setLimitSchema, simulateSchema, subscriptionOrderSchema, toggleIncomeTaskSchema, translationSchema, uuidParam, monthParam } from './schemas.ts';
+import { EngineInputError } from './engine.ts';
 import { CSP } from './security.ts';
 import * as svc from './services.ts';
 import type { Ctx } from './services.ts';
@@ -103,13 +104,30 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   app.setErrorHandler((error: unknown, req, reply) => {
     if (error instanceof AppError) return reply.status(error.status).send({ error: error.code, message: error.message });
+    // Entrada que o motor de cálculo recusa (dados incoerentes): é do cliente, não do servidor.
+    if (error instanceof EngineInputError) return reply.status(422).send({ error: 'invalid_input', message: 'Os dados informados não fecham. Confira os valores e tente de novo.', issues: error.issues });
     if (error instanceof ZodError) {
       return reply.status(400).send({ error: 'invalid_input', message: 'Dados inválidos', issues: error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })) });
     }
     const e = error as { statusCode?: number; code?: string; message?: string };
+    // Erros do framework (JSON quebrado, corpo grande...) com mensagem nossa, em português e no mesmo formato.
+    if (e.code === 'FST_ERR_CTP_INVALID_JSON_BODY' || e.code === 'FST_ERR_CTP_EMPTY_JSON_BODY') return reply.status(400).send({ error: 'invalid_json', message: 'O corpo da requisição não é um JSON válido.' });
+    if (e.code === 'FST_ERR_CTP_BODY_TOO_LARGE') return reply.status(413).send({ error: 'too_large', message: 'A requisição é grande demais.' });
+    if (e.code === 'FST_ERR_CTP_INVALID_MEDIA_TYPE') return reply.status(415).send({ error: 'unsupported_media', message: 'Tipo de conteúdo não aceito.' });
+    // Texto que o banco recusa (caractere nulo, data impossível): é dado inválido do cliente.
+    if (typeof e.code === 'string' && ['22021', '22P05', '22007', '22008', '22P02', '22003'].includes(e.code)) return reply.status(400).send({ error: 'invalid_input', message: 'Dados inválidos' });
     if (typeof e.statusCode === 'number' && e.statusCode < 500) return reply.status(e.statusCode).send({ error: e.code ?? 'bad_request', message: e.message ?? 'Requisição inválida' });
     req.log.error({ err: error }, 'erro interno');
     return reply.status(500).send({ error: 'internal', message: 'Algo deu errado. Tente de novo.' });
+  });
+
+  // Rota inexistente: mesmo formato e idioma dos outros erros (o 404 padrão do framework vaza o texto em inglês).
+  app.setNotFoundHandler((_req, reply) => reply.status(404).send({ error: 'not_found', message: 'Não encontrado' }));
+  // O caractere nulo (\u0000) quebra o Postgres: recusa na entrada, antes de chegar ao banco.
+  app.addHook('preValidation', async (req) => {
+    if (req.body !== undefined && req.body !== null && typeof req.body === 'object' && JSON.stringify(req.body).includes('\\u0000')) {
+      throw new AppError(400, 'invalid_input', 'O texto contém um caractere inválido.');
+    }
   });
 
   // ---------- sessão ----------
@@ -158,7 +176,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.post('/api/orders', { config: { rateLimit: { max: 20 * scale, timeWindow: '1 minute' } } }, async (req, reply) => {
     const sessionId = await requireSession(req);
     const key = req.headers['idempotency-key'];
-    if (typeof key !== 'string' || key.length < 8 || key.length > 100) throw new AppError(400, 'idempotency_key', 'Cabeçalho Idempotency-Key obrigatório');
+    if (typeof key !== 'string' || key.length < 8 || key.length > 100) throw new AppError(400, 'idempotency_key', 'Cabeçalho Idempotency-Key obrigatório (de 8 a 100 caracteres)');
     const body = createOrderSchema.parse(req.body);
     const order = await svc.createOrder(ctx, { sessionId, caseId: body.caseId, products: body.products ?? ['recovery_map', ...(body.withLetters ? ['defense_letters'] : [])], idempotencyKey: key });
     return reply.status(201).send(order);
@@ -282,7 +300,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // ---------- assinatura (desligada por padrão; exige e-mail configurado) ----------
   /** A pessoa que está logada (sempre ela mesma). */
   const requireSelf = async (req: FastifyRequest): Promise<string> => {
-    const sessionId = await requireSession(req);
+    // sem sessão nenhuma também é "não entrou" (401), como depois do logout
+    const sessionId = await requireSession(req).catch(() => {
+      throw new AppError(401, 'not_logged_in', 'Entre com seu e-mail para continuar.');
+    });
     const subscriberId = await sub.subscriberOf(ctx, sessionId);
     if (!subscriberId) throw new AppError(401, 'not_logged_in', 'Entre com seu e-mail para continuar.');
     return subscriberId;
@@ -308,17 +329,18 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
   app.get('/api/account', async (req) => household.accountViewFor(ctx, await requireSelf(req)));
   app.delete('/api/account', async (req, reply) => {
+    const selfId = await requireSelf(req); // sem sessão: 401, como nas outras rotas da conta
     const sessionId = await requireSession(req);
-    await accountData.purgeSubscriber(ctx, await requireSelf(req), `session:${sessionId}`);
+    await accountData.purgeSubscriber(ctx, selfId, `session:${sessionId}`);
     return reply.status(204).send();
   });
 
   app.post('/api/account/subscription-order', { config: { rateLimit: { max: 10 * scale, timeWindow: '1 minute' } } }, async (req, reply) => {
-    const sessionId = await requireSession(req);
     const subscriberId = await requireSelf(req);
+    const sessionId = await requireSession(req);
     await household.assertNotMember(ctx, subscriberId);
     const key = req.headers['idempotency-key'];
-    if (typeof key !== 'string' || key.length < 8 || key.length > 100) throw new AppError(400, 'idempotency_key', 'Cabeçalho Idempotency-Key obrigatório');
+    if (typeof key !== 'string' || key.length < 8 || key.length > 100) throw new AppError(400, 'idempotency_key', 'Cabeçalho Idempotency-Key obrigatório (de 8 a 100 caracteres)');
     const { plan } = subscriptionOrderSchema.parse(req.body);
     return reply.status(201).send(await sub.createSubscriptionOrder(ctx, { sessionId, subscriberId, plan, idempotencyKey: key }));
   });
@@ -377,7 +399,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     return (await household.accountViewFor(ctx, selfId)).profile;
   });
 
-  app.get('/api/account/month/:month', async (req) => sub.monthView(ctx, await requireSubscriber(req), (req.params as { month: string }).month));
+  app.get('/api/account/month/:month', async (req) => sub.monthView(ctx, await requireSubscriber(req), monthParam.parse((req.params as { month: string }).month)));
   app.post('/api/account/entries', async (req) => sub.addEntries(ctx, await requireSubscriber(req), addEntriesSchema.parse(req.body).entries));
   app.delete('/api/account/entries/:id', async (req, reply) => {
     await sub.deleteEntry(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id));
@@ -425,13 +447,13 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.post('/api/account/debts/:id/payments', async (req) => debts.payDebt(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id), debtPaymentSchema.parse(req.body)));
   app.post('/api/account/budget/:month/limits/:category', async (req) => {
     const { month, category } = req.params as { month: string; category: string };
-    if (!/^\d{4}-\d{2}$/.test(month)) throw new AppError(400, 'invalid_month', 'Mês inválido.');
+    if (!monthParam.safeParse(month).success) throw new AppError(400, 'invalid_month', 'Mês inválido.');
     await debts.setMonthLimit(ctx, await requireSubscriber(req), month, category, monthLimitSchema.parse(req.body).limitCents);
     return { ok: true };
   });
   app.post('/api/account/budget/:month/copy', async (req) => {
     const { month } = req.params as { month: string };
-    if (!/^\d{4}-\d{2}$/.test(month)) throw new AppError(400, 'invalid_month', 'Mês inválido.');
+    if (!monthParam.safeParse(month).success) throw new AppError(400, 'invalid_month', 'Mês inválido.');
     return { copied: await debts.copyPreviousMonthLimits(ctx, await requireSubscriber(req), month) };
   });
   app.post('/api/account/planner', { config: { rateLimit: { max: 12, timeWindow: '10 minutes' } } }, async (req) => askPlanner(ctx, await requireSubscriber(req), plannerSchema.parse(req.body).question));
@@ -571,6 +593,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         }
       });
     }
+    // Como o Nginx: /gestao (e /gestão) leva à página do backoffice.
+    for (const p of ['/gestao', '/gest%C3%A3o']) app.get(p, async (_req, reply) => reply.redirect('/gestao/', 301));
     await app.register(staticPlugin, { root: config.staticDir, cacheControl: false, index: 'index.html' });
     // Mesmos cabeçalhos que o Nginx envia em produção, para testar o site sob a política real.
     app.addHook('onSend', async (_req, reply, payload) => {

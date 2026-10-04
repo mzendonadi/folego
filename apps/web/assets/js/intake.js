@@ -3,7 +3,7 @@
 import { $, $$, el, icon, announce, focusSoon, prefersReducedMotion } from './dom.js';
 import { state, saveDraft, newDebt } from './state.js';
 import { EMPLOYMENT, AGE_BANDS, UFS, DEBT_KINDS, OVERDUE_BANDS, KIND_LABEL } from './copy.js';
-import { brl, centsToField, fieldToCents, percentToBps, todayISO, plural } from './format.js';
+import { brl, centsToField, fieldToCents, maskMoneyLive, percentToBps, todayISO, plural } from './format.js';
 
 const STEPS = [
   { id: 'vinculo', title: 'Como o seu dinheiro chega hoje?', short: 'Vínculo' },
@@ -360,22 +360,28 @@ function clearStepErrors(i) {
   });
 }
 
+const MAX_MONTHLY_CENTS = 100_000_000; // R$ 1.000.000 por mês
+const MAX_DEBT_CENTS = 10_000_000_000; // R$ 100.000.000
+
 function validateStep(i) {
   const a = state.answers;
   const errors = []; // [controlId, message]
   if (i === 0 && !a.employmentType) errors.push(['employment', 'Escolha a opção que mais parece com a sua.']);
   if (i === 1 && a.netIncomeCents === null) errors.push(['income', 'Conte quanto entra por mês, mesmo que aproximado. Se não entra nada, digite 0.']);
+  if (i === 1 && a.netIncomeCents !== null && a.netIncomeCents > MAX_MONTHLY_CENTS) errors.push(['income', 'Esse valor parece alto demais para um mês. Confira (digite só os reais, ex.: 3200).']);
   if (i === 2) {
     if (!a.ageBand) errors.push(['age', 'Escolha sua faixa de idade.']);
     if (!a.uf) errors.push(['uf', 'Escolha seu estado.']);
   }
   if (i === 3 && a.fixedExpensesCents === null) errors.push(['fixed', 'Conte quanto sai por mês, mesmo que aproximado.']);
+  if (i === 3 && a.fixedExpensesCents !== null && a.fixedExpensesCents > MAX_MONTHLY_CENTS) errors.push(['fixed', 'Esse valor parece alto demais para um mês. Confira (digite só os reais, ex.: 1700).']);
   if (i === 4) {
     for (const d of a.debts) {
       if (!d.creditor.trim()) errors.push([`${d.uid}-creditor`, 'Escreva o nome do credor. Pode ser só “Banco” ou “Loja”.']);
       if (!d.kind) errors.push([`${d.uid}-kind`, 'Escolha o tipo de dívida.']);
       if (d.kind === 'other' && !(d.kindNote ?? '').trim()) errors.push([`${d.uid}-kindnote`, 'Diga em poucas palavras qual dívida é.']);
       if (!d.balanceCents) errors.push([`${d.uid}-balance`, 'Diga quanto falta pagar, mesmo que aproximado.']);
+      else if (d.balanceCents > MAX_DEBT_CENTS) errors.push([`${d.uid}-balance`, 'Esse valor parece alto demais para uma dívida. Confira os números.']);
       if (!d.overdue) errors.push([`${d.uid}-overdue`, 'Diga se está em dia ou em atraso.']);
       if (d.overdue === 'yes' && !d.overdueBand && !d.firstDefaultMonth) errors.push([`${d.uid}-band`, 'Escolha há quanto tempo está em atraso.']);
       if (d.installments !== '' && !(Number.isInteger(Number(d.installments)) && Number(d.installments) >= 1 && Number(d.installments) <= 600)) errors.push([`${d.uid}-inst`, 'Use um número inteiro, de 1 a 600.']);
@@ -481,9 +487,14 @@ function onInput(event) {
   if (!(t instanceof HTMLInputElement || t instanceof HTMLSelectElement)) return;
 
   if (t.matches('[data-money]')) {
-    const cents = fieldToCents(t.value);
-    t.value = cents === null ? '' : centsToField(cents);
-    t.setSelectionRange(t.value.length, t.value.length);
+    if (event.type === 'change') {
+      // saiu do campo: fecha o valor ("1.700" → "1.700,00")
+      const closed = fieldToCents(t.value);
+      t.value = closed === null ? '' : centsToField(closed);
+    } else {
+      t.value = maskMoneyLive(t.value);
+      t.setSelectionRange(t.value.length, t.value.length);
+    }
   }
 
   const key = t.dataset.field;

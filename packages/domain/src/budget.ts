@@ -18,7 +18,11 @@ export function buildBudget(
   const deficit = surplusCents < 0;
   const extraToDebtCents = deficit ? 0 : Math.floor(surplusCents * rules.extraToDebtShare);
   const debtServiceRatio =
-    profile.netIncomeCents > 0 ? declaredPaymentsCents / profile.netIncomeCents : declaredPaymentsCents > 0 ? 1 : 0;
+    profile.netIncomeCents > 0
+      ? declaredPaymentsCents / profile.netIncomeCents
+      : declaredPaymentsCents > 0 || allDebts.some((d) => d.balanceCents > 0)
+        ? 1 // sem renda e com dívida: pior caso (antes a razão virava 0 e a nota ficava alta)
+        : 0;
 
   return {
     netIncomeCents: profile.netIncomeCents,

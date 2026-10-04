@@ -89,7 +89,7 @@ export async function marketingScreen(ctx) {
         return el(
           'article', { class: `bo-insight bo-insight-${i.priority}` },
           el('header', { class: 'bo-head-line' }, badge(AREA[i.area] ?? i.area, 'muted'), badge(...PRIORITY[i.priority])),
-          el('h3', {}, i.title),
+          el('h2', { class: 'bo-h-sub' }, i.title),
           el('p', { class: 'bo-evidence' }, i.evidence),
           el('ul', { class: 'bullets' }, ...i.actions.map((a) => el('li', {}, a))),
           i.plan ? el('div', { class: 'no-print' }, plan) : null,
@@ -108,7 +108,7 @@ export async function marketingScreen(ctx) {
         copy.addEventListener('click', async () => toast((await copyText(a.message)) ? 'Mensagem copiada.' : 'Não consegui copiar.'));
         const plan = el('button', { class: 'btn btn-secondary btn-sm', type: 'button' }, icon('plus'), 'Planejar campanha');
         plan.addEventListener('click', () => planForm({ title: `Campanha: ${a.name}`, goal: '', segment: a.name, channel: a.channel, status: 'ideia', notes: a.message }, () => { st.tab = 'planejamento'; draw(); }));
-        return el('article', { class: 'bo-insight' }, el('header', { class: 'bo-head-line' }, el('h3', {}, a.name), badge(`${int(a.count)} pessoas`, a.count ? 'ok' : 'muted')), el('p', { class: 'muted' }, `Canal: ${a.channel}`), el('p', { class: 'fine' }, a.basis), el('blockquote', { class: 'quote' }, a.message), el('div', { class: 'bo-actions' }, copy, plan));
+        return el('article', { class: 'bo-insight' }, el('header', { class: 'bo-head-line' }, el('h2', { class: 'bo-h-sub' }, a.name), badge(`${int(a.count)} pessoas`, a.count ? 'ok' : 'muted')), el('p', { class: 'muted' }, `Canal: ${a.channel}`), el('p', { class: 'fine' }, a.basis), el('blockquote', { class: 'quote' }, a.message), el('div', { class: 'bo-actions' }, copy, plan));
       }),
     );
   }
@@ -120,7 +120,7 @@ export async function marketingScreen(ctx) {
       const items = plans.filter((p) => p.status === id);
       return el(
         'section', { class: 'bo-col', 'aria-label': label },
-        el('h3', {}, label, el('span', { class: 'bo-tab-count' }, int(items.length))),
+        el('h2', { class: 'bo-h-sub' }, label, el('span', { class: 'bo-tab-count' }, int(items.length))),
         ...items.map((p) => {
           const del = el('button', { class: 'btn btn-quiet btn-sm', type: 'button', 'aria-label': `Apagar ${p.title}` }, icon('trash'));
           del.addEventListener('click', async (ev) => {

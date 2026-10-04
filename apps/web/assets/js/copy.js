@@ -56,6 +56,12 @@ export function headlineCopy(preview) {
       note: 'Estimativa comparando com pagar só as parcelas de hoje.',
     };
   }
+  if (h.kind === 'too_long') {
+    return {
+      title: 'Do jeito que está, essas dívidas não acabam em um prazo razoável.',
+      note: 'Pagar só a parcela de hoje não resolve. O Mapa mostra o que renegociar e por onde começar.',
+    };
+  }
   if (h.kind === 'debt_free_in') {
     return {
       title: `Dá pra quitar tudo em ${formatMonths(h.months)} seguindo o Mapa.`,

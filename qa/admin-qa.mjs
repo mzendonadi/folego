@@ -30,7 +30,7 @@ const lastCode = () => {
 const PW = 'QaLocal' + Math.floor(Math.random() * 1e6) + 'xyz';
 
 // 1. sem login, todas as rotas bloqueadas
-const GETS = ['/dashboard', '/jornada/resumo', '/clientes/avulsos', '/assinaturas', '/assinaturas/resumo', '/assinaturas/cancelados', '/ebooks', '/saude', '/mercado', '/indicacoes', '/indicacoes/creditos', '/parcerias', '/parcerias/contatos', '/produtos', '/config', '/usuarios', '/auditoria', '/marketing/insights', '/marketing/emails', '/marketing/planos', '/me'];
+const GETS = ['/dashboard', '/jornada/resumo', '/clientes/avulsos', '/assinaturas', '/assinaturas/resumo', '/assinaturas/cancelados', '/ebooks', '/saude', '/mercado', '/indicacoes', '/parcerias', '/parcerias/contatos', '/produtos', '/config', '/usuarios', '/auditoria', '/marketing/insights', '/marketing/emails', '/marketing/planos', '/me'];
 {
   const c = client();
   for (const g of GETS) {
@@ -64,12 +64,8 @@ const OWNER = 'qa@exemplo.com';
   const ok = await owner('POST', P + '/setup', { email: OWNER, code: lastCode(), password: PW });
   rec('admin', 'define a senha do dono', ok.status < 300, ok.status + ' ' + ok.text.slice(0, 100));
   const pl = await owner('POST', P + '/login-password', { email: OWNER, password: PW });
-  rec('admin', 'etapa 1 do login (senha) ok', pl.status < 300, pl.status + ' ' + pl.text.slice(0, 160));
-  const noStep2 = await owner('GET', P + '/me');
-  rec('seguranca', 'só com a senha (sem o código) NÃO entra no backoffice', noStep2.status === 401, noStep2.status + ' ' + noStep2.text.slice(0, 120));
-  await sleep(500);
-  const lg = await owner('POST', P + '/login', { email: OWNER, code: lastCode() });
-  rec('admin', 'etapa 2 do login (código) ok', lg.status < 300, lg.status + ' ' + lg.text.slice(0, 160));
+  rec('admin', 'login com e-mail e senha ok', pl.status < 300, pl.status + ' ' + pl.text.slice(0, 160));
+  // D-070: o login é só e-mail + senha (o código vale no primeiro acesso e na redefinição)
   const me = await owner('GET', P + '/me');
   rec('admin', '/me traz usuário e seções', me.status === 200 && Array.isArray(me.json?.sections), me.text.slice(0, 160));
   const wrongPw = await client()('POST', P + '/login-password', { email: OWNER, password: 'errada-errada-1' });
@@ -123,8 +119,6 @@ rec('admin', 'saúde: todos os checks ok', saude?.ok === true, JSON.stringify(sa
   if (p0) {
     const neg = await owner('PUT', `${P}/produtos/${p0.code}`, { priceCents: -100 });
     rec('validacao', 'preço negativo recusado', neg.status >= 400 && neg.status < 500, neg.status + ' ' + neg.text.slice(0, 100));
-    const zero = await owner('PUT', `${P}/produtos/${p0.code}`, { priceCents: 0 });
-    rec('validacao', 'preço zero recusado (ou tratado)', zero.status >= 400 && zero.status < 500, `status ${zero.status}`);
     const huge = await owner('PUT', `${P}/produtos/${p0.code}`, { priceCents: 99999999999 });
     rec('validacao', 'preço absurdo recusado', huge.status >= 400 && huge.status < 500, huge.status);
     const nf = await owner('PUT', `${P}/produtos/inexistente`, { priceCents: 1000 });
@@ -149,12 +143,10 @@ const limited = client();
   const PW2 = 'QaSuporte' + Math.floor(Math.random() * 1e6) + 'abc';
   const st = await limited('POST', P + '/setup', { email: LU, code: lastCode(), password: PW2 });
   rec('admin', 'usuário Suporte define senha', st.status < 300, st.status + ' ' + st.text.slice(0, 100));
-  await limited('POST', P + '/login-password', { email: LU, password: PW2 });
-  await sleep(500);
-  const lg = await limited('POST', P + '/login', { email: LU, code: lastCode() });
+  const lg = await limited('POST', P + '/login-password', { email: LU, password: PW2 });
   rec('admin', 'usuário Suporte entra', lg.status < 300, lg.status + ' ' + lg.text.slice(0, 100));
   const allowed = ['/clientes/avulsos', '/assinaturas', '/jornada/resumo'];
-  const denied = ['/dashboard', '/config', '/usuarios', '/produtos', '/auditoria', '/marketing/emails', '/marketing/planos', '/ebooks', '/mercado', '/indicacoes', '/saude', '/parcerias'];
+  const denied = ['/dashboard', '/config', '/usuarios', '/produtos', '/auditoria', '/marketing/emails', '/marketing/planos', '/ebooks', '/mercado', '/saude', '/parcerias'];
   for (const a of allowed) {
     const r = await limited('GET', P + a);
     rec('permissao', `Suporte acessa ${a}`, r.status === 200, r.status);

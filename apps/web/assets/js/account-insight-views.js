@@ -18,8 +18,10 @@ export function viewCobrancas(ctx) {
     return card(el('h2', {}, 'Cobranças recorrentes'), el('p', { class: 'muted' }, 'Lance ou importe o extrato dos últimos meses (aba Lançamentos). Quando houver pelo menos duas ou três cobranças do mesmo lugar, mostramos aqui o que se repete, o que subiu de preço e o que foi cobrado em duplicidade.'));
   }
   const alerts = [];
-  if (r.alerts.priceIncreases) alerts.push(`${r.alerts.priceIncreases} cobrança(s) aumentaram de preço`);
-  if (r.alerts.duplicates) alerts.push(`${r.alerts.duplicates} possível(is) cobrança(s) em duplicidade`);
+  const up = r.alerts.priceIncreases;
+  const dup = r.alerts.duplicates;
+  if (up) alerts.push(up === 1 ? '1 cobrança aumentou de preço' : `${up} cobranças aumentaram de preço`);
+  if (dup) alerts.push(dup === 1 ? '1 possível cobrança em duplicidade' : `${dup} possíveis cobranças em duplicidade`);
   const summary = el(
     'div', { class: 'ref-stats' },
     el('div', {}, el('strong', {}, String(r.items.length)), el('span', { class: 'fine muted' }, 'cobranças que se repetem')),

@@ -131,7 +131,7 @@ function drawShell() {
     sidebar.classList.toggle('is-open', navOpen);
     toggle.setAttribute('aria-expanded', String(navOpen));
   });
-  const content = el('div', { class: 'bo-content', id: 'bo-content', tabindex: '-1' });
+  const content = el('main', { class: 'bo-content', id: 'bo-content', tabindex: '-1' });
   root.replaceChildren(el('div', { class: 'bo-shell' }, sidebar, el('div', { class: 'bo-main' }, el('header', { class: 'bo-top' }, toggle, el('h1', { id: 'bo-title' }, route.label)), content)));
   document.title = `${route.label} — Backoffice Fôlego`;
   renderScreen(route, content);
