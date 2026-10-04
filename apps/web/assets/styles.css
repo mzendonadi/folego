@@ -1046,3 +1046,8 @@ fieldset.offer-box { min-inline-size: 0; }
 
 .lis-fields { grid-template-columns: repeat(auto-fit, minmax(min(100%, 175px), 1fr)); }
 .lis-fields .label { align-self: start; }
+
+.scn-base { grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr)); gap: var(--s3); }
+.scn-tile { display: grid; gap: 4px; align-content: start; padding: var(--s3) var(--s4); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); min-width: 0; }
+.scn-tile dt { margin: 0; }
+.scn-tile dd { margin: 0; font-size: 1.15rem; overflow-wrap: anywhere; }

@@ -187,7 +187,7 @@ export function viewCenarios(ctx) {
       el('p', { class: 'section-sub' }, 'Teste uma mudança na sua vida antes de fazer: o app parte da média dos seus últimos meses e mostra o efeito no mês e no saldo.'),
       hasBase ? null : el('div', { class: 'note note-amber' }, icon('alert'), el('span', {}, 'Ainda não há lançamentos suficientes: lance ou importe seus últimos meses para o simulador partir da sua realidade.')),
       el('dl', { class: 'scn-base' },
-        ...[['Renda', base.incomeCents], ['Essencial', base.essentialCents], ['Variável', base.flexibleCents], ['Parcelas de dívida', base.debtPaymentsCents], ['Reserva guardada', base.reserveCents]].flatMap(([k, v]) => [el('dt', {}, k), el('dd', {}, brl(v))])),
+        ...[['Renda', base.incomeCents], ['Essencial', base.essentialCents], ['Variável', base.flexibleCents], ['Parcelas de dívida', base.debtPaymentsCents], ['Reserva guardada', base.reserveCents]].map(([k, v]) => el('div', { class: 'scn-tile' }, el('dt', {}, k), el('dd', {}, brl(v))))),
       el('p', { class: 'fine muted' }, 'Ponto de partida: média mensal dos seus lançamentos recentes, parcelas mínimas cadastradas em Dívidas e o que você guardou em metas e carteiras de poupança.'),
     ),
     card(el('h2', {}, 'Comece por um modelo'), presets, form),
