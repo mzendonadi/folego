@@ -1054,3 +1054,15 @@ fieldset.offer-box { min-inline-size: 0; }
 .scn-tile { display: grid; gap: 4px; align-content: start; padding: var(--s3) var(--s4); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); min-width: 0; }
 .scn-tile dt { margin: 0; }
 .scn-tile dd { margin: 0; font-size: 1.15rem; overflow-wrap: anywhere; }
+
+/* Guias sob medida: o formulário ocupa toda a largura do cartão e os campos de uma fileira alinham rótulo, campo e ajuda. */
+.tool-form > .form-grid, .tool-form > .offers, .tool-form > .note, .tool-form > .field, .tool-form > .fine { justify-self: stretch; }
+.tool-form > .btn, .tool-form > button { justify-self: start; }
+.form-grid > .field { align-content: start; }
+@supports (grid-template-rows: subgrid) {
+  .form-grid > .field { grid-row: span 3; grid-template-rows: subgrid; row-gap: 6px; }
+}
+.field .hint { margin: 0; }
+.tool-form h3 { margin: var(--s2) 0 0; }
+.tool-form { grid-template-columns: minmax(0, 1fr); }
+.tool-form > .tool-form { justify-self: stretch; }

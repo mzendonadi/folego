@@ -40,7 +40,7 @@ export const GUIDE_KINDS = Object.keys(GUIDES);
 
 const card = (...c) => el('section', { class: 'card d-section' }, ...c.filter(Boolean));
 const list = (items, cls = 'bullets') => el('ul', { class: cls }, ...items.map((t) => el('li', {}, t)));
-const field = (label, control, hint, id) => el('div', { class: 'field' }, el('label', { class: 'label', for: id ?? control.id }, label), hint ? el('p', { class: 'hint' }, hint) : null, control);
+const field = (label, control, hint, id) => el('div', { class: 'field' }, el('label', { class: 'label', for: id ?? control.id }, label), control, hint ? el('p', { class: 'hint' }, hint) : null);
 const input = (id, attrs = {}) => el('input', { class: 'input', id, autocomplete: 'off', ...attrs });
 const select = (id, options, value) => {
   const s = el('select', { class: 'input select', id }, ...options.map(([v, l]) => el('option', { value: v }, l)));
@@ -486,7 +486,7 @@ export function renderGuided(root, kind, ctx) {
         toast(error?.status === 429 ? 'Muitas tentativas seguidas. Espere um minutinho.' : error?.status === 422 || error?.status === 400 ? (error.message?.startsWith('Confira') ? error.message : 'Confira os valores preenchidos e tente de novo.') : 'Não consegui calcular agora. Tente de novo.');
       }
     });
-    root.replaceChildren(card(el('h2', {}, spec.title), el('p', { class: 'section-sub' }, spec.lead), wrap, el('p', { class: 'fine' }, 'Ao continuar você aceita os Termos e a Política de Privacidade. O que você digitou não fica guardado: só o resultado.')));
+    root.replaceChildren(card(el('p', { class: 'section-sub' }, spec.lead), wrap, el('p', { class: 'fine' }, 'Ao continuar você aceita os Termos e a Política de Privacidade. O que você digitou não fica guardado: só o resultado.')));
   }
 
   function drawPreview(p, caseId) {
@@ -534,7 +534,7 @@ export function renderGuided(root, kind, ctx) {
 export function renderGuideList(root, { onOpen, mine = [] }) {
   const owned = new Map(mine.map((g) => [g.kind, g]));
   root.replaceChildren(
-    card(el('h2', {}, 'Guias sob medida'), el('p', { class: 'section-sub' }, 'Cada guia começa com uma prévia grátis. Você só paga se gostar, por Pix, uma vez.')),
+    card(el('p', { class: 'section-sub' }, 'Cada guia começa com uma prévia grátis. Você só paga se gostar, por Pix, uma vez.')),
     ...GUIDE_KINDS.map((k) => {
       const g = GUIDES[k];
       const item = CATALOG[g.code];
