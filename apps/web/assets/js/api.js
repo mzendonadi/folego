@@ -43,6 +43,7 @@ export const submitIncomeInterview = impl.submitIncomeInterview;
 export const setIncomeProgress = impl.setIncomeProgress;
 export const getWallets = impl.getWallets;
 export const createWallet = impl.createWallet;
+export const updateWallet = impl.updateWallet;
 export const deleteWallet = impl.deleteWallet;
 export const setEntryWallet = impl.setEntryWallet;
 export const getReminders = impl.getReminders;

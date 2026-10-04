@@ -65,8 +65,13 @@ export async function findSession(ctx: Ctx, token: string | undefined): Promise<
   return found.rows[0]?.id ?? null;
 }
 
+/** Quem pode abrir o caso: a sessão que o criou OU uma que abriu o link de acesso (vários aparelhos ao mesmo tempo). */
+const caseOf = (c: string, p: string) => `(${c}.session_id = ${p} OR EXISTS (SELECT 1 FROM app.case_access ca WHERE ca.case_id = ${c}.id AND ca.session_id = ${p}))`;
+/** O mesmo para um pedido (o pedido é do caso). */
+const orderOf = (o: string, p: string) => `(${o}.session_id = ${p} OR EXISTS (SELECT 1 FROM app.case_access ca WHERE ca.case_id = ${o}.case_id AND ca.session_id = ${p}))`;
+
 export async function ownedCase(q: Queryable, sessionId: string, caseId: string): Promise<void> {
-  const r = await q.query(`SELECT 1 FROM app.cases WHERE id = $1 AND session_id = $2 AND status <> 'purged'`, [caseId, sessionId]);
+  const r = await q.query(`SELECT 1 FROM app.cases c WHERE c.id = $1 AND ${caseOf('c', '$2')} AND c.status <> 'purged'`, [caseId, sessionId]);
   if (r.rows.length === 0) throw notFound();
 }
 
@@ -87,7 +92,8 @@ async function termsDocumentId(q: Queryable): Promise<string> {
 export async function createCase(ctx: Ctx, args: { sessionId: string; ipHash: Buffer | null; input: CreateCaseInput; userAgent: string | null }): Promise<{ caseId: string; preview: Preview }> {
   const { input } = args;
   const debts: DebtInput[] = input.debts.map((d, i) => ({ id: `d${i + 1}`, ...d }));
-  const engineInput = { asOf: todaySaoPaulo(), profile: input.profile, debts };
+  const { employmentNote, ...engineProfile } = input.profile; // a observação é só descritiva: não entra no cálculo
+  const engineInput = { asOf: todaySaoPaulo(), profile: engineProfile, debts };
   const diagnosis = diagnose(engineInput);
   const preview = buildPreview(diagnosis, debts);
 
@@ -95,7 +101,7 @@ export async function createCase(ctx: Ctx, args: { sessionId: string; ipHash: Bu
     const created = await q.query<{ id: string }>(
       `INSERT INTO app.cases(session_id, status, employment_type, net_income_cents, fixed_expenses_cents, age_band, uf, inputs, purge_after, debt_total_cents, debt_count, has_overdue, debt_kinds)
        VALUES ($1, 'previewed', $2, $3, $4, $5, $6, $7::jsonb, now() + interval '7 days', $8, $9, $10, $11) RETURNING id`,
-      [args.sessionId, input.profile.employmentType, input.profile.netIncomeCents, input.profile.fixedExpensesCents, input.profile.ageBand, input.profile.uf, JSON.stringify({ asOf: engineInput.asOf, debts }), debts.reduce((s, x) => s + x.balanceCents, 0), debts.length, debts.some((x) => x.daysOverdue > 0), [...new Set(debts.map((x) => x.kind))]],
+      [args.sessionId, input.profile.employmentType, input.profile.netIncomeCents, input.profile.fixedExpensesCents, input.profile.ageBand, input.profile.uf, JSON.stringify({ asOf: engineInput.asOf, debts, ...(employmentNote && input.profile.employmentType === 'other' ? { employmentNote } : {}) }), debts.reduce((s, x) => s + x.balanceCents, 0), debts.length, debts.some((x) => x.daysOverdue > 0), [...new Set(debts.map((x) => x.kind))]],
     );
     const id = created.rows[0]?.id;
     if (!id) throw new Error('falha ao criar caso');
@@ -123,7 +129,7 @@ export async function createCase(ctx: Ctx, args: { sessionId: string; ipHash: Bu
 
 export async function getPreview(ctx: Ctx, sessionId: string, caseId: string): Promise<Preview> {
   const r = await ctx.db.query<{ preview: Preview }>(
-    `SELECT d.preview FROM app.diagnoses d JOIN app.cases c ON c.id = d.case_id WHERE c.id = $1 AND c.session_id = $2 AND c.status <> 'purged'`,
+    `SELECT d.preview FROM app.diagnoses d JOIN app.cases c ON c.id = d.case_id WHERE c.id = $1 AND ${caseOf('c', '$2')} AND c.status <> 'purged'`,
     [caseId, sessionId],
   );
   const row = r.rows[0];
@@ -236,7 +242,7 @@ export async function createOrder(ctx: Ctx, args: { sessionId: string; caseId: s
 
 export async function getOrder(ctx: Ctx, sessionId: string, orderId: string): Promise<{ status: string; totalCents: number }> {
   const r = await ctx.db.query<{ status: string; total_cents: string; pix_expires_at: Date | string }>(
-    `SELECT o.status, o.total_cents, p.pix_expires_at FROM app.orders o JOIN app.payments p ON p.order_id = o.id WHERE o.id = $1 AND o.session_id = $2 ORDER BY p.created_at DESC LIMIT 1`,
+    `SELECT o.status, o.total_cents, p.pix_expires_at FROM app.orders o JOIN app.payments p ON p.order_id = o.id WHERE o.id = $1 AND ${orderOf('o', '$2')} ORDER BY p.created_at DESC LIMIT 1`,
     [orderId, sessionId],
   );
   const row = r.rows[0];
@@ -367,7 +373,7 @@ export interface Delivery {
 }
 
 export async function getDelivery(ctx: Ctx, sessionId: string, orderId: string): Promise<Delivery> {
-  const o = await ctx.db.query<{ status: string; case_id: string }>(`SELECT status, case_id FROM app.orders WHERE id = $1 AND session_id = $2`, [orderId, sessionId]);
+  const o = await ctx.db.query<{ status: string; case_id: string }>(`SELECT status, case_id FROM app.orders o WHERE o.id = $1 AND ${orderOf('o', '$2')}`, [orderId, sessionId]);
   const order = o.rows[0];
   if (!order) throw notFound();
   if (order.status !== 'paid') throw new AppError(402, 'payment_required', 'Pagamento ainda não confirmado');
@@ -503,7 +509,7 @@ export async function toggleIncomeTask(ctx: Ctx, sessionId: string, caseId: stri
 export async function deleteCase(ctx: Ctx, sessionId: string, caseId: string): Promise<void> {
   await ctx.db.tx(async (q) => {
     await ownedCase(q, sessionId, caseId);
-    for (const table of ['debts', 'deliverables', 'diagnoses', 'lead_contacts', 'lead_profiles', 'access_tokens', 'entitlements']) {
+    for (const table of ['debts', 'deliverables', 'diagnoses', 'lead_contacts', 'lead_profiles', 'access_tokens', 'entitlements', 'case_access']) {
       await q.query(`DELETE FROM app.${table} WHERE case_id = $1`, [caseId]);
     }
     await q.query(`UPDATE app.cases SET status = 'purged', inputs = '{}'::jsonb, purged_at = now() WHERE id = $1`, [caseId]);
@@ -521,7 +527,7 @@ export async function purgeExpired(ctx: Ctx, limit = 500): Promise<number> {
 // Voltar ao Mapa sem cadastro nem senha
 //  - Mesmo navegador: o cookie de sessão acha o pedido pago (GET /api/me).
 //  - Outro aparelho ou cookie apagado: LINK DE ACESSO (token aleatório de 256 bits; só o hash fica no banco).
-// O caso é a "conta". Abrir o link passa o caso para a sessão de quem abriu (o aparelho antigo perde o acesso).
+// O caso é a "conta". Abrir o link dá acesso ao aparelho de quem abriu SEM tirar o dos outros (até 5 aparelhos).
 // ---------------------------------------------------------------------------
 export type AccessKind = 'map' | 'translator';
 export interface AccessInfo {
@@ -548,7 +554,7 @@ export async function meAccess(ctx: Ctx, sessionId: string, kind: AccessKind = '
        JOIN app.cases c ON c.id = o.case_id AND c.status <> 'purged'
        JOIN app.entitlements e ON e.case_id = o.case_id AND e.product_code = $2 AND e.expires_at > now()
        JOIN app.order_items oi ON oi.order_id = o.id AND oi.product_code = $2
-      WHERE o.session_id = $1 AND o.status = 'paid'
+      WHERE ${orderOf('o', '$1')} AND o.status = 'paid'
       ORDER BY o.paid_at DESC LIMIT 1`,
     [sessionId, base],
   );
@@ -574,7 +580,7 @@ async function accessForCase(ctx: Ctx, caseId: string): Promise<AccessInfo | nul
 }
 
 export async function createAccessLink(ctx: Ctx, sessionId: string, orderId: string): Promise<{ token: string; expiresAt: number }> {
-  const o = await ctx.db.query<{ case_id: string }>(`SELECT case_id FROM app.orders WHERE id = $1 AND session_id = $2 AND status = 'paid'`, [orderId, sessionId]);
+  const o = await ctx.db.query<{ case_id: string }>(`SELECT case_id FROM app.orders o WHERE o.id = $1 AND ${orderOf('o', '$2')} AND o.status = 'paid'`, [orderId, sessionId]);
   const caseId = o.rows[0]?.case_id;
   const access = caseId ? await accessForCase(ctx, caseId) : null;
   if (!caseId || !access) throw notFound();
@@ -596,8 +602,10 @@ export async function redeemAccess(ctx: Ctx, sessionId: string, token: string): 
   const row = t.rows[0];
   if (!row) throw new AppError(404, 'invalid_link', 'Este link não vale mais. Ele pode ter expirado ou ter sido trocado por um mais novo.');
   await ctx.db.tx(async (q) => {
-    await q.query(`UPDATE app.cases SET session_id = $2 WHERE id = $1`, [row.case_id, sessionId]);
-    await q.query(`UPDATE app.orders SET session_id = $2 WHERE case_id = $1`, [row.case_id, sessionId]);
+    // Vários aparelhos: quem abre o link GANHA acesso; o aparelho que já tinha continua com o dele.
+    // No máximo 5 aparelhos por caso (o acesso mais antigo sai quando passa disso).
+    await q.query(`INSERT INTO app.case_access(case_id, session_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [row.case_id, sessionId]);
+    await q.query(`DELETE FROM app.case_access WHERE case_id = $1 AND session_id IN (SELECT session_id FROM app.case_access WHERE case_id = $1 ORDER BY created_at DESC OFFSET 5)`, [row.case_id]);
     await q.query(`UPDATE app.access_tokens SET last_used_at = now() WHERE id = $1`, [row.id]);
     await audit(q, `session:${sessionId}`, 'access_link_redeemed', 'case', row.case_id);
   });
@@ -630,7 +638,7 @@ export async function createTranslation(ctx: Ctx, args: { sessionId: string; ipH
 }
 
 export async function getTranslation(ctx: Ctx, sessionId: string, orderId: string): Promise<{ analysis: TranslatorAnalysis; accessUntil: number }> {
-  const o = await ctx.db.query<{ status: string; case_id: string }>(`SELECT status, case_id FROM app.orders WHERE id = $1 AND session_id = $2`, [orderId, sessionId]);
+  const o = await ctx.db.query<{ status: string; case_id: string }>(`SELECT status, case_id FROM app.orders o WHERE o.id = $1 AND ${orderOf('o', '$2')}`, [orderId, sessionId]);
   const order = o.rows[0];
   if (!order) throw notFound();
   if (order.status !== 'paid') throw new AppError(402, 'payment_required', 'Pagamento ainda não confirmado');

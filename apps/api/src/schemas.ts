@@ -38,6 +38,8 @@ export const createCaseSchema = z.object({
     netIncomeCents: cents,
     fixedExpensesCents: cents,
     employmentType: z.enum(['inss_retiree', 'public_servant', 'clt', 'self_employed', 'other']),
+    /** Só com vínculo "outra situação": como o dinheiro entra, em poucas palavras (opcional). */
+    employmentNote: z.string().trim().max(60).optional(),
     ageBand: z.enum(AGE_BANDS),
     uf: z.enum(UFS),
   }),
@@ -122,7 +124,22 @@ const entrySchema = z.strictObject({
 });
 export const addEntriesSchema = z.object({ entries: z.array(entrySchema).min(1).max(500) });
 export const setCategorySchema = z.object({ category: z.string().max(30) });
-export const walletSchema = z.strictObject({ name: z.string().trim().min(1).max(40), kind: z.enum(['dinheiro', 'conta', 'cartao', 'poupanca', 'outra']) });
+const signedCents = z.number().int().min(-10_000_000_000).max(10_000_000_000);
+export const walletSchema = z.strictObject({
+  name: z.string().trim().min(1).max(40),
+  kind: z.enum(['dinheiro', 'conta', 'cartao', 'poupanca', 'outra']),
+  /** Saldo de partida (negativo = já está no cheque especial). */
+  openingBalanceCents: signedCents.optional(),
+  /** Cheque especial (LIS): limite contratado e taxa ao mês em pontos-base (8% = 800). Só faz sentido em conta bancária. */
+  overdraftLimitCents: z.number().int().min(0).max(10_000_000_000).optional(),
+  overdraftRateBps: z.number().int().min(0).max(2000).optional(),
+});
+export const walletPatchSchema = z.strictObject({
+  name: z.string().trim().min(1).max(40).optional(),
+  openingBalanceCents: signedCents.optional(),
+  overdraftLimitCents: z.number().int().min(0).max(10_000_000_000).optional(),
+  overdraftRateBps: z.number().int().min(0).max(2000).optional(),
+});
 export const entryWalletSchema = z.object({ walletId: z.string().uuid().nullable() });
 export const reminderSchema = z.strictObject({
   title: z.string().trim().min(2).max(80),

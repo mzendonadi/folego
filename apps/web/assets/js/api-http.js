@@ -183,6 +183,9 @@ export async function getWallets() {
 export async function createWallet(body) {
   return request('POST', '/account/wallets', { body });
 }
+export async function updateWallet(id, body) {
+  return request('PUT', `/account/wallets/${id}`, { body });
+}
 export async function deleteWallet(id) {
   return request('DELETE', `/account/wallets/${id}`);
 }

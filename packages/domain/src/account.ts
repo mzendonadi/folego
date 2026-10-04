@@ -252,6 +252,49 @@ export interface Goal {
   contributions?: { id: string; date: string; amountCents: number; note: string }[];
 }
 
+// ---------------------------------------------------------------------------
+// Cheque especial (LIS): o que a pessoa está usando do limite da conta e quanto isso custa por mês.
+// ---------------------------------------------------------------------------
+export interface OverdraftStatus {
+  usedCents: number; // quanto do saldo está negativo
+  withinLimitCents: number; // parte dentro do limite contratado
+  overLimitCents: number; // parte que passa do limite (conta estourada)
+  availableCents: number; // o que ainda resta do limite
+  usedPct: number; // % do limite em uso (100 se não há limite e a conta está negativa)
+  monthlyCostCents: number; // juros estimados de um mês com esse uso
+  level: 'none' | 'low' | 'high' | 'over';
+}
+
+export function overdraftStatus(input: { balanceCents: number; limitCents: number; rateBps: number }): OverdraftStatus {
+  const used = Math.max(0, -input.balanceCents);
+  const limit = Math.max(0, input.limitCents);
+  const within = Math.min(used, limit);
+  const over = used - within;
+  const usedPct = used === 0 ? 0 : limit > 0 ? Math.min(100, Math.round((within / limit) * 100)) : 100;
+  const level: OverdraftStatus['level'] = used === 0 ? 'none' : over > 0 ? 'over' : usedPct >= 50 ? 'high' : 'low';
+  return {
+    usedCents: used,
+    withinLimitCents: within,
+    overLimitCents: over,
+    availableCents: Math.max(0, limit - used),
+    usedPct,
+    monthlyCostCents: Math.round((used * Math.max(0, input.rateBps)) / 10_000),
+    level,
+  };
+}
+
+export function overdraftAlerts(wallets: { name: string; balanceCents: number; limitCents: number; rateBps: number }[]): AlertItem[] {
+  const out: AlertItem[] = [];
+  for (const w of wallets) {
+    const s = overdraftStatus(w);
+    if (s.level === 'none') continue;
+    const cost = `Se ficar assim por um mês, o banco cobra cerca de ${formatBrl(s.monthlyCostCents)} de juros.`;
+    if (s.level === 'over') out.push({ level: 'warn', title: `${w.name}: passou do limite do cheque especial`, detail: `A conta está ${formatBrl(s.usedCents)} no negativo, ${formatBrl(s.overLimitCents)} acima do limite de ${formatBrl(w.limitCents)}. ${cost}` });
+    else out.push({ level: s.level === 'high' ? 'warn' : 'info', title: `${w.name}: você está usando o cheque especial`, detail: `Usando ${formatBrl(s.usedCents)} de ${formatBrl(w.limitCents)} (${s.usedPct}% do limite). ${cost}` });
+  }
+  return out;
+}
+
 export interface AlertItem {
   level: 'warn' | 'info';
   title: string;

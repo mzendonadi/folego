@@ -13,12 +13,17 @@ const KINDS = ['credit_card', 'overdraft', 'personal_loan', 'store_credit', 'uti
 // ---------- calculadora de prescrição ----------
 function prescriptionTool() {
   const kind = el('select', { class: 'input', id: 'pt-kind' }, ...KINDS.map((k) => el('option', { value: k }, KIND_LABEL[k] ?? k)));
+  const kindHint = el('p', { class: 'fine', id: 'pt-kind-dica', hidden: true }, 'Para "Outra", usamos o prazo geral presumido. O prazo de verdade depende do tipo de dívida (contrato, cheque, aluguel, conta de consumo...), então confirme com um advogado ou a Defensoria Pública.');
+  kind.setAttribute('aria-describedby', 'pt-kind-dica');
+  kind.addEventListener('change', () => {
+    kindHint.hidden = kind.value !== 'other';
+  });
   const month = el('input', { class: 'input', id: 'pt-month', type: 'month', max: todayISO().slice(0, 7), required: true });
   const out = el('div', { class: 'tool-out', role: 'status', 'aria-live': 'polite' });
   const btn = el('button', { class: 'btn btn-primary', type: 'submit' }, 'Ver se pode ter prescrito');
   const form = el(
     'form', { class: 'tool-form' },
-    el('div', { class: 'field' }, el('label', { class: 'label', for: 'pt-kind' }, 'Tipo da dívida'), kind),
+    el('div', { class: 'field' }, el('label', { class: 'label', for: 'pt-kind' }, 'Tipo da dívida'), kind, kindHint),
     el('div', { class: 'field' }, el('label', { class: 'label', for: 'pt-month' }, 'Mês em que você deixou de pagar (a parcela mais antiga em aberto)'), month),
     btn,
   );

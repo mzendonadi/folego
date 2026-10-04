@@ -10,7 +10,7 @@ import { AppError, notFound } from './errors.ts';
 import type { Ctx, OrderView } from './services.ts';
 import { audit, num, orderView, todaySaoPaulo } from './services.ts';
 import type { Queryable } from './db.ts';
-import { ownedWalletId } from './account-extras.ts';
+import { ownedWalletId, walletOverdraftAlerts } from './account-extras.ts';
 import { monthLimits } from './account-debts.ts';
 import { markMissionDone } from './coach-program.ts';
 import { billingView, CARD_GRACE_DAYS } from './billing.ts';
@@ -348,7 +348,7 @@ export async function monthView(ctx: Ctx, subscriberId: string, month: string) {
     summary: summarizeMonth(entries, limits, month),
     limits,
     goals,
-    alerts: buildAlerts(entries, limits, goals, monthOf(today) === month ? today : `${month}-28`),
+    alerts: [...(await walletOverdraftAlerts(ctx, subscriberId)), ...buildAlerts(entries, limits, goals, monthOf(today) === month ? today : `${month}-28`)],
   };
 }
 

@@ -82,10 +82,17 @@ function bodyVinculo() {
     input.checked = state.answers.employmentType === opt.value;
     group.append(el('label', { class: 'choice' }, input, el('span', { class: 'choice-body' }, el('strong', {}, opt.label), el('span', { class: 'muted' }, opt.hint))));
   }
+  // "Outra situação": abre um campo opcional para a pessoa contar como o dinheiro entra (aparece na conferência e fica no caso).
+  const note = el('input', { id: 'employment-note', class: 'input', type: 'text', maxlength: '60', autocomplete: 'off', placeholder: 'Ex.: bicos, diarista, aguardando benefício, ajuda da família', 'data-field': 'employmentNote' });
+  note.value = state.answers.employmentNote ?? '';
+  describe(note, 'employment-note', true);
+  const noteField = field({ id: 'employment-note', label: 'Conte em poucas palavras (opcional)', hint: 'Não pedimos nome nem CPF. Só ajuda a entender o seu caso.', control: note, className: 'field-employment-note' });
+  noteField.hidden = state.answers.employmentType !== 'other';
   return [
     el('p', { class: 'hint' }, 'Isso ajuda a entender quais caminhos fazem sentido pra você. A gente não pede CPF.'),
     group,
     el('p', { class: 'error', id: 'employment-err', hidden: true }),
+    noteField,
   ];
 }
 
@@ -270,7 +277,10 @@ function buildTimeline() {
 
 function stepSummary(i) {
   const a = state.answers;
-  if (i === 0) return EMPLOYMENT.find((e) => e.value === a.employmentType)?.label ?? '';
+  if (i === 0) {
+    const label = EMPLOYMENT.find((e) => e.value === a.employmentType)?.label ?? '';
+    return a.employmentType === 'other' && (a.employmentNote ?? '').trim() ? `${label}: ${a.employmentNote.trim()}` : label;
+  }
   if (i === 1) return a.netIncomeCents === null ? '' : brl(a.netIncomeCents);
   if (i === 2) return [AGE_BANDS.find(([v]) => v === a.ageBand)?.[1], a.uf].filter(Boolean).join(' · ');
   if (i === 3) return a.fixedExpensesCents === null ? '' : brl(a.fixedExpensesCents);
@@ -452,6 +462,7 @@ export function buildInput() {
       netIncomeCents: a.netIncomeCents ?? 0,
       fixedExpensesCents: a.fixedExpensesCents ?? 0,
       employmentType: a.employmentType,
+      ...(a.employmentType === 'other' && (a.employmentNote ?? '').trim() ? { employmentNote: a.employmentNote.trim() } : {}),
       ageBand: a.ageBand,
       uf: a.uf,
     },
@@ -524,9 +535,16 @@ function onInput(event) {
     else if (key === 'ratePct') d.ratePct = t.value;
     else if (key === 'firstDefaultMonth') d.firstDefaultMonth = t.value;
     if (key === 'installments' && t.value !== d.installments) t.value = d.installments;
+  } else if (key === 'employmentNote') {
+    a.employmentNote = t.value;
   } else if (key === 'employmentType') {
     a.employmentType = t.value;
     clearError('employment');
+    const noteField = $('.field-employment-note');
+    if (noteField) {
+      noteField.hidden = a.employmentType !== 'other';
+      if (a.employmentType === 'other') $('#employment-note')?.focus();
+    }
   } else if (key === 'consent') {
     a.consent = t.checked;
     clearError('consent');

@@ -93,3 +93,22 @@ test('simulador: juros compostos mensais equivalentes, inflação desconta o val
   const [real] = simulateInvestment({ initialCents: 100_000, monthlyCents: 0, months: 12, scenarios: [{ name: 'X', annualPct: 12 }], inflationAnnualPct: 5 });
   assert.ok(real!.realFinalCents < real!.finalCents);
 });
+
+// Cheque especial (LIS)
+test('overdraftStatus: sem uso, dentro do limite e acima do limite', async () => {
+  const { overdraftStatus, overdraftAlerts } = await import('../src/account.ts');
+  const none = overdraftStatus({ balanceCents: 5_000, limitCents: 100_000, rateBps: 800 });
+  assert.equal(none.level, 'none');
+  assert.equal(none.usedCents, 0);
+  assert.equal(none.availableCents, 100_000);
+  const low = overdraftStatus({ balanceCents: -20_000, limitCents: 100_000, rateBps: 800 });
+  assert.deepEqual([low.usedCents, low.usedPct, low.monthlyCostCents, low.level], [20_000, 20, 1_600, 'low']);
+  const high = overdraftStatus({ balanceCents: -60_000, limitCents: 100_000, rateBps: 800 });
+  assert.equal(high.level, 'high');
+  const over = overdraftStatus({ balanceCents: -130_000, limitCents: 100_000, rateBps: 800 });
+  assert.deepEqual([over.overLimitCents, over.withinLimitCents, over.availableCents, over.level], [30_000, 100_000, 0, 'over']);
+  const noLimit = overdraftStatus({ balanceCents: -10_000, limitCents: 0, rateBps: 800 });
+  assert.deepEqual([noLimit.usedPct, noLimit.level], [100, 'over']);
+  assert.equal(overdraftAlerts([{ name: 'Banco', balanceCents: 1, limitCents: 1, rateBps: 800 }]).length, 0);
+  assert.equal(overdraftAlerts([{ name: 'Banco', balanceCents: -130_000, limitCents: 100_000, rateBps: 800 }])[0]!.level, 'warn');
+});

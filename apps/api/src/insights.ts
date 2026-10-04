@@ -58,7 +58,7 @@ export async function scenarioBase(ctx: Ctx, subscriberId: string): Promise<{ ba
   const debts = await listDebts(ctx, subscriberId);
   const saved = await ctx.db.query<{ saved: string; poup: string }>(
     `SELECT coalesce((SELECT sum(g.saved_cents + coalesce((SELECT sum(c.amount_cents) FROM app.goal_contributions c WHERE c.goal_id = g.id), 0)) FROM app.goals g WHERE g.subscriber_id = $1), 0)::text AS saved,
-            coalesce((SELECT sum(l.amount_cents) FROM app.ledger_entries l JOIN app.wallets w ON w.id = l.wallet_id WHERE l.subscriber_id = $1 AND w.kind = 'poupanca'), 0)::text AS poup`,
+            (coalesce((SELECT sum(l.amount_cents) FROM app.ledger_entries l JOIN app.wallets w ON w.id = l.wallet_id WHERE l.subscriber_id = $1 AND w.kind = 'poupanca'), 0) + coalesce((SELECT sum(opening_balance_cents) FROM app.wallets WHERE subscriber_id = $1 AND kind = 'poupanca'), 0))::text AS poup`,
     [subscriberId],
   );
   return {

@@ -1,6 +1,6 @@
 // Assinatura: abas "Carteiras" e "Lembretes" (o plano é exigido no servidor; aqui só desenhamos).
 import { el, icon, toast } from './dom.js';
-import { brl } from './format.js';
+import { brl, percentToBps } from './format.js';
 import { moneyInput } from './money.js';
 import { confirmDialog } from './confirm.js';
 
@@ -8,23 +8,90 @@ const card = (...c) => el('section', { class: 'card d-section' }, ...c.filter(Bo
 const fmtDate = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString('pt-BR');
 export const WALLET_KIND_LABEL = { dinheiro: 'Dinheiro', conta: 'Conta bancária', cartao: 'Cartão', poupanca: 'Poupança', outra: 'Outra' };
 
+/** "1.234,50" → 123450 (aceita vazio = 0). */
+const centsOrZero = (m) => m.cents() ?? 0;
+const bpsToField = (bps) => String(bps / 100).replace('.', ',');
+
+const OVERDRAFT_TONE = { none: '', low: 'note', high: 'note note-amber', over: 'note note-amber' };
+
+/** Faixa do cheque especial (LIS) de uma conta bancária: limite, quanto está em uso e o custo estimado. */
+function overdraftBlock(x) {
+  const o = x.overdraft;
+  if (!o || (x.overdraftLimitCents === 0 && o.usedCents === 0)) return null;
+  const pct = Math.min(100, o.usedPct);
+  const meter = el('div', { class: `lis-meter lis-${o.level}`, role: 'img', 'aria-label': `${o.usedPct}% do limite do cheque especial em uso` }, el('span', { style: `width:${pct}%` }));
+  const lines = [
+    el('p', { class: 'fine' }, x.overdraftLimitCents > 0 ? `Limite do cheque especial (LIS): ${brl(x.overdraftLimitCents)} · taxa ${bpsToField(x.overdraftRateBps)}% ao mês` : 'Você não informou limite de cheque especial.'),
+  ];
+  if (o.usedCents > 0) {
+    lines.push(el('p', { class: OVERDRAFT_TONE[o.level] ? `${OVERDRAFT_TONE[o.level]} lis-note` : 'fine' }, icon(o.level === 'low' ? 'info' : 'alert'), el('span', {}, `Usando ${brl(o.usedCents)} do limite (${o.usedPct}%). Se ficar assim por um mês, o banco cobra cerca de ${brl(o.monthlyCostCents)} de juros.${o.overLimitCents > 0 ? ` A conta passou ${brl(o.overLimitCents)} do limite.` : ''}`)));
+  } else {
+    lines.push(el('p', { class: 'fine' }, `Limite todo livre: ${brl(o.availableCents)} disponíveis. Não está pagando juros.`));
+  }
+  return el('div', { class: 'lis-block' }, meter, ...lines);
+}
+
+/** Formulário de cheque especial / saldo (usado ao criar e ao ajustar uma conta bancária). */
+function accountFields(init = {}) {
+  const opening = moneyInput({ id: init.prefix ? `${init.prefix}-saldo` : 'cw-saldo', ariaLabel: 'Saldo de partida', value: Math.abs(init.openingBalanceCents ?? 0) || null, placeholder: '0,00' });
+  const negative = el('input', { type: 'checkbox', id: init.prefix ? `${init.prefix}-neg` : 'cw-neg' });
+  negative.checked = (init.openingBalanceCents ?? 0) < 0;
+  const limit = moneyInput({ id: init.prefix ? `${init.prefix}-lis` : 'cw-lis', ariaLabel: 'Limite do cheque especial (LIS)', value: init.overdraftLimitCents || null, placeholder: 'sem limite' });
+  const rate = el('input', { class: 'input', id: init.prefix ? `${init.prefix}-taxa` : 'cw-taxa', type: 'text', inputmode: 'decimal', maxlength: '5', 'aria-label': 'Taxa do cheque especial ao mês (%)', value: bpsToField(init.overdraftRateBps ?? 800) });
+  const node = el(
+    'div', { class: 'lis-fields' },
+    el('div', { class: 'field' }, el('label', { class: 'label', for: opening.input.id }, 'Saldo da conta hoje'), opening.input, el('div', { class: 'check' }, negative, el('label', { for: negative.id }, 'A conta está no negativo (usando o cheque especial)'))),
+    el('div', { class: 'field' }, el('label', { class: 'label', for: limit.input.id }, 'Limite do cheque especial (LIS), se tiver'), limit.input, el('p', { class: 'fine' }, 'Está no app ou no extrato do banco. Deixe em branco se não tem.')),
+    el('div', { class: 'field' }, el('label', { class: 'label', for: rate.id }, 'Taxa do cheque especial (% ao mês)'), rate, el('p', { class: 'fine' }, 'Usamos 8% ao mês se você não souber. É o teto que os bancos podem cobrar.')),
+  );
+  const read = () => {
+    const base = centsOrZero(opening);
+    const r = percentToBps(rate.value);
+    return { openingBalanceCents: negative.checked ? -base : base, overdraftLimitCents: centsOrZero(limit), overdraftRateBps: r === undefined ? 800 : r, rateOk: r !== undefined };
+  };
+  return { node, read };
+}
+
 export function viewCarteiras(ctx) {
   const w = ctx.wallets;
   const name = el('input', { class: 'input', id: 'cw-nome', type: 'text', maxlength: '40', placeholder: 'Ex.: Nubank, carteira, cartão do mercado' });
+  const nameLabel = el('label', { class: 'label', for: 'cw-nome' }, 'Nome');
   const kind = el('select', { class: 'input', id: 'cw-tipo', 'aria-label': 'Tipo da carteira' }, ...Object.entries(WALLET_KIND_LABEL).map(([v, l]) => el('option', { value: v }, l)));
+  const fields = accountFields();
+  const lisBox = el('div', { class: 'field field-wide' }, fields.node);
+  lisBox.hidden = true;
+  // "Outra": a pessoa diz qual é (vale-refeição, PicPay, cofrinho...); o nome é essa descrição.
+  const kindHint = el('p', { class: 'fine', id: 'cw-dica' });
+  kindHint.hidden = true;
+  const onKind = () => {
+    const other = kind.value === 'outra';
+    nameLabel.textContent = other ? 'Qual é essa carteira?' : 'Nome';
+    name.placeholder = other ? 'Ex.: vale-refeição, PicPay, cofrinho, conta de um parente' : 'Ex.: Nubank, carteira, cartão do mercado';
+    kindHint.textContent = other ? 'Como é um tipo diferente dos da lista, escreva aqui o que ela é: é o nome que vai aparecer nos seus lançamentos.' : '';
+    kindHint.hidden = !other;
+    lisBox.hidden = kind.value !== 'conta';
+  };
+  kind.addEventListener('change', onKind);
   const add = el('button', { class: 'btn btn-primary', type: 'submit' }, icon('plus'), 'Criar carteira');
   const form = el(
     'form', { class: 'entry-form' },
-    el('div', { class: 'field field-wide' }, el('label', { class: 'label', for: 'cw-nome' }, 'Nome'), name),
+    el('div', { class: 'field field-wide' }, nameLabel, name, kindHint),
     el('div', { class: 'field' }, el('label', { class: 'label', for: 'cw-tipo' }, 'Tipo'), kind),
+    lisBox,
     add,
   );
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    if (!name.value.trim()) return toast('Dê um nome à carteira.');
+    if (!name.value.trim()) return toast(kind.value === 'outra' ? 'Escreva qual é essa carteira.' : 'Dê um nome à carteira.');
+    const body = { name: name.value.trim(), kind: kind.value };
+    if (kind.value === 'conta') {
+      const v = fields.read();
+      if (!v.rateOk) return toast('A taxa do cheque especial deve ser um número entre 0 e 100.');
+      Object.assign(body, { openingBalanceCents: v.openingBalanceCents, overdraftLimitCents: v.overdraftLimitCents, overdraftRateBps: v.overdraftRateBps });
+    }
     add.disabled = true;
     try {
-      await ctx.api.createWallet({ name: name.value.trim(), kind: kind.value });
+      await ctx.api.createWallet(body);
       toast('Carteira criada.');
       ctx.refresh();
     } catch (err) {
@@ -33,30 +100,61 @@ export function viewCarteiras(ctx) {
     }
   });
 
-  const row = (title, sub, cents, walletId) => {
+  const row = (x) => {
+    const title = x.name;
+    const sub = x.id ? `${WALLET_KIND_LABEL[x.kind] ?? x.kind} · ${x.entries} ${x.entries === 1 ? 'lançamento' : 'lançamentos'}` : `${x.entries} ${x.entries === 1 ? 'lançamento' : 'lançamentos'}`;
     let del = null;
-    if (walletId) {
+    let edit = null;
+    if (x.id) {
       del = el('button', { class: 'btn btn-quiet btn-sm icon-btn', type: 'button', 'aria-label': `Apagar a carteira ${title}` }, icon('trash'));
       del.addEventListener('click', async () => {
         if (!(await confirmDialog({ title: `Apagar "${title}"?`, text: 'Os lançamentos dela não somem: ficam sem carteira.', confirmLabel: 'Apagar' }))) return;
         try {
-          await ctx.api.deleteWallet(walletId);
+          await ctx.api.deleteWallet(x.id);
           toast('Carteira apagada.');
           ctx.refresh();
         } catch {
           toast('Não consegui apagar agora.');
         }
       });
+      if (x.kind === 'conta') edit = adjustForm(x);
     }
-    return el('li', { class: 'wallet-row' }, el('div', {}, el('strong', {}, title), el('p', { class: 'muted fine' }, sub)), el('strong', { class: `entry-amount ${cents < 0 ? 'neg' : 'pos'}` }, brl(cents)), del);
+    return el(
+      'li', { class: 'wallet-row' },
+      el('div', {}, el('strong', {}, title), el('p', { class: 'muted fine' }, sub), x.id ? overdraftBlock(x) : null, edit),
+      el('strong', { class: `entry-amount ${x.balanceCents < 0 ? 'neg' : 'pos'}` }, brl(x.balanceCents)),
+      del,
+    );
   };
+
+  /** "Ajustar saldo e cheque especial" dentro da linha da conta bancária. */
+  function adjustForm(x) {
+    const f = accountFields({ prefix: `aj-${x.id.slice(0, 8)}`, openingBalanceCents: x.openingBalanceCents, overdraftLimitCents: x.overdraftLimitCents, overdraftRateBps: x.overdraftRateBps });
+    const save = el('button', { class: 'btn btn-secondary btn-sm', type: 'button' }, 'Salvar');
+    save.addEventListener('click', async () => {
+      const v = fields2(f);
+      if (!v.rateOk) return toast('A taxa deve ser um número entre 0 e 100.');
+      save.disabled = true;
+      try {
+        await ctx.api.updateWallet(x.id, { openingBalanceCents: v.openingBalanceCents, overdraftLimitCents: v.overdraftLimitCents, overdraftRateBps: v.overdraftRateBps });
+        toast('Conta atualizada.');
+        ctx.refresh();
+      } catch {
+        save.disabled = false;
+        toast('Não consegui salvar agora.');
+      }
+    });
+    return el('details', { class: 'lis-edit' }, el('summary', {}, 'Ajustar saldo e cheque especial (LIS)'), f.node, save);
+  }
+  const fields2 = (f) => f.read();
+
   const items = [
-    ...w.wallets.map((x) => row(x.name, `${WALLET_KIND_LABEL[x.kind] ?? x.kind} · ${x.entries} lançamentos`, x.balanceCents, x.id)),
-    w.unassigned.entries > 0 ? row('Sem carteira', `${w.unassigned.entries} lançamentos`, w.unassigned.balanceCents, null) : null,
+    ...w.wallets.map((x) => row(x)),
+    w.unassigned.entries > 0 ? row({ id: null, name: 'Sem carteira', entries: w.unassigned.entries, balanceCents: w.unassigned.balanceCents }) : null,
   ].filter(Boolean);
   return el(
     'div', { class: 'acc-stack' },
-    card(el('h2', {}, 'Nova carteira'), el('p', { class: 'muted' }, 'Separe onde o dinheiro está: conta, dinheiro vivo, cartão. O saldo de cada uma é a soma dos lançamentos ligados a ela.'), form),
+    card(el('h2', {}, 'Nova carteira'), el('p', { class: 'muted' }, 'Separe onde o dinheiro está: conta, dinheiro vivo, cartão. Em conta bancária você também registra o limite do cheque especial (LIS) para acompanhar quanto está usando e quanto isso custa. O saldo é o saldo de partida mais os lançamentos ligados à carteira.'), form),
     card(el('h2', {}, 'Saldo por carteira'), items.length ? el('ul', { class: 'entries' }, ...items) : el('p', { class: 'muted' }, 'Nenhuma carteira ainda. Crie a primeira acima e escolha-a ao lançar um gasto.')),
   );
 }

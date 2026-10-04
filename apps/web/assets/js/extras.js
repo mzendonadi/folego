@@ -28,7 +28,7 @@ export function accessSection(makeLink, expiresAt, sendEmail = null) {
       copy.addEventListener('click', async () => toast((await copyText(url)) ? 'Link copiado. Guarde em um lugar seguro.' : 'Não consegui copiar. Selecione o link e copie manualmente.'));
       out.replaceChildren(
         el('div', { class: 'pix-code-row' }, input, copy),
-        el('p', { class: 'note note-amber' }, icon('alert'), el('span', {}, 'Quem tiver este link abre o seu Mapa. Não compartilhe. Se gerar outro, este deixa de funcionar.')),
+        el('p', { class: 'note note-amber' }, icon('alert'), el('span', {}, 'Quem tiver este link abre o seu Mapa. Não compartilhe. Se gerar outro, este deixa de funcionar para novos aparelhos (os que já abriram continuam).')),
       );
       btn.textContent = 'Gerar um novo link';
     } catch {
@@ -39,7 +39,7 @@ export function accessSection(makeLink, expiresAt, sendEmail = null) {
   return card(
     'acesso', 'Guarde seu link de acesso',
     el('p', { class: 'section-sub' }, `Você não precisa criar conta nem senha. Este aparelho já reconhece você, mas se trocar de celular, limpar o navegador ou quiser abrir em outro computador, o link abre o seu Mapa${until ? ` até ${until}` : ''}.`),
-    el('p', { class: 'fine' }, 'Quem tiver o link abre o seu Mapa: não compartilhe. Ao abrir o link em outro aparelho, o Mapa passa a abrir só lá; para voltar a abrir neste, gere um link novo (o anterior deixa de valer).'),
+    el('p', { class: 'fine' }, 'Quem tiver o link abre o seu Mapa: não compartilhe. O link funciona em até 5 aparelhos ao mesmo tempo, e este continua abrindo normalmente.'),
     el('div', { class: 'no-print' }, btn, out),
     sendEmail ? emailForm(sendEmail) : null,
   );

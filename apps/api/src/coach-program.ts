@@ -27,7 +27,7 @@ export async function loadCoachFacts(ctx: Ctx, subscriberId: string): Promise<{ 
     q.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.wallets WHERE subscriber_id = $1`, [subscriberId]),
     q.query<{ n: string; saved: string }>(`SELECT count(*)::text AS n, coalesce(sum(g.saved_cents + coalesce((SELECT sum(c.amount_cents) FROM app.goal_contributions c WHERE c.goal_id = g.id), 0)), 0)::text AS saved FROM app.goals g WHERE g.subscriber_id = $1`, [subscriberId]),
     q.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.goal_contributions WHERE subscriber_id = $1`, [subscriberId]),
-    q.query<{ b: string }>(`SELECT coalesce(sum(l.amount_cents), 0)::text AS b FROM app.ledger_entries l JOIN app.wallets w ON w.id = l.wallet_id WHERE l.subscriber_id = $1 AND w.kind = 'poupanca'`, [subscriberId]),
+    q.query<{ b: string }>(`SELECT (coalesce(sum(l.amount_cents), 0) + (SELECT coalesce(sum(opening_balance_cents), 0) FROM app.wallets WHERE subscriber_id = $1 AND kind = 'poupanca'))::text AS b FROM app.ledger_entries l JOIN app.wallets w ON w.id = l.wallet_id WHERE l.subscriber_id = $1 AND w.kind = 'poupanca'`, [subscriberId]),
     q.query<{ d: Date | string }>(`SELECT DISTINCT occurred_on AS d FROM app.ledger_entries WHERE subscriber_id = $1 AND occurred_on > ($2::date - 60) AND occurred_on <= $2::date ORDER BY d DESC`, [subscriberId, today]),
     q.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.account_debt_payments WHERE subscriber_id = $1 AND paid_on > ($2::date - 7)`, [subscriberId, today]),
     q.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.goal_contributions WHERE subscriber_id = $1 AND occurred_on > ($2::date - 7)`, [subscriberId, today]),

@@ -375,7 +375,7 @@ test('sem login: o mesmo navegador volta pelo cookie e outro aparelho volta pelo
   const d = await phone('GET', `/api/orders/${ok.json.orderId}/delivery`);
   assert.equal(d.status, 200);
   assert.equal(d.json.items[0], 'recovery_map');
-  assert.equal((await laptop('GET', `/api/orders/${order.json.orderId}/delivery`)).status, 404); // o aparelho antigo perde o acesso
+  assert.equal((await laptop('GET', `/api/orders/${order.json.orderId}/delivery`)).status, 200); // vários aparelhos: o original continua com o acesso dele
 
   const again = await phone('POST', `/api/orders/${order.json.orderId}/access-link`, { body: {} });
   const old = await client()('POST', '/api/access', { body: { token: link.json.token } });

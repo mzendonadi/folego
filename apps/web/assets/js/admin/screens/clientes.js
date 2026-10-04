@@ -62,7 +62,7 @@ export async function clientesScreen(ctx) {
             { label: 'Código', render: (c) => el('code', {}, shortId(c.id)) },
             { label: 'Criado', render: (c) => dt(c.createdAt) },
             { label: 'Estado', render: (c) => c.uf ?? '—' },
-            { label: 'Vínculo', render: (c) => EMPLOYMENT[c.employment] ?? '—' },
+            { label: 'Vínculo', render: (c) => (EMPLOYMENT[c.employment] ?? '—') + (c.employmentNote ? ` (${c.employmentNote})` : '') },
             { label: 'Dívida', align: 'right', render: (c) => (c.debtTotalCents === null ? '—' : brl(c.debtTotalCents)) },
             { label: 'Atraso', render: (c) => (c.hasOverdue ? badge('sim', 'warn') : '—') },
             { label: 'Comprou', render: (c) => (c.products.length ? c.products.map((p) => PRODUCT[p] ?? p).join(', ') : badge('nada', 'muted')) },

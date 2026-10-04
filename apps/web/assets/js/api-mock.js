@@ -135,6 +135,7 @@ export async function deleteCase(caseId) {
 }
 export const getWallets = notAvailable;
 export const createWallet = notAvailable;
+export const updateWallet = notAvailable;
 export const deleteWallet = notAvailable;
 export const setEntryWallet = notAvailable;
 export const getReminders = notAvailable;

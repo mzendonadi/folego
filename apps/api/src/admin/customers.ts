@@ -229,10 +229,10 @@ export async function listCases(ctx: Ctx, opts: { filter?: string; q?: string; p
 
 export async function caseDetail(ctx: Ctx, id: string) {
   const c = await ctx.db.query<{
-    id: string; session_id: string; created_at: Date; status: string; product_kind: string; uf: string | null; employment_type: string | null; age_band: string | null;
+    id: string; session_id: string; created_at: Date; status: string; product_kind: string; uf: string | null; employment_type: string | null; employment_note: string | null; age_band: string | null;
     net_income_cents: string | null; fixed_expenses_cents: string | null; debt_total_cents: string | null; debt_count: number | null; has_overdue: boolean | null; debt_kinds: string[]; purge_after: Date;
   }>(
-    `SELECT id, session_id, created_at, status, product_kind, uf::text AS uf, employment_type, age_band, net_income_cents, fixed_expenses_cents, debt_total_cents, debt_count, has_overdue, debt_kinds, purge_after
+    `SELECT id, session_id, created_at, status, product_kind, uf::text AS uf, employment_type, inputs->>'employmentNote' AS employment_note, age_band, net_income_cents, fixed_expenses_cents, debt_total_cents, debt_count, has_overdue, debt_kinds, purge_after
        FROM app.cases WHERE id = $1`,
     [id],
   );
@@ -262,6 +262,7 @@ export async function caseDetail(ctx: Ctx, id: string) {
     kind: row.product_kind,
     uf: row.uf,
     employment: row.employment_type,
+    employmentNote: row.employment_note,
     ageBand: row.age_band,
     netIncomeCents: row.net_income_cents === null ? null : num(row.net_income_cents),
     fixedExpensesCents: row.fixed_expenses_cents === null ? null : num(row.fixed_expenses_cents),

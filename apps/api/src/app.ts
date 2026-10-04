@@ -31,7 +31,7 @@ import { deepHealth } from './health.ts';
 import { eventSchema, recordEvent } from './admin/events.ts';
 import { publicCatalog } from './admin/manage.ts';
 import { refreshRuntime } from './runtime.ts';
-import { accessSchema, addEntriesSchema, cancelSchema, contributionSchema, createCaseSchema, entryWalletSchema, accountDebtSchema, accountDebtPatchSchema, debtPaymentSchema, monthLimitSchema, plannerSchema, objectiveSchema, inviteSchema, checkoutSchema, profileSchema, referralLeadSchema, referralInviteSchema, recurringDecisionSchema, reminderPatchSchema, reminderSchema, walletSchema, createOrderSchema, emailLinkSchema, emailOnlySchema, goalSchema, incomeInterviewSchema, leadSchema, loginCodeSchema, newPartnerSchema, partnerLoginSchema, partnerStatusSchema, setCategorySchema, setLimitSchema, simulateSchema, subscriptionOrderSchema, toggleIncomeTaskSchema, translationSchema, uuidParam, monthParam } from './schemas.ts';
+import { accessSchema, addEntriesSchema, cancelSchema, contributionSchema, createCaseSchema, entryWalletSchema, accountDebtSchema, accountDebtPatchSchema, debtPaymentSchema, monthLimitSchema, plannerSchema, objectiveSchema, inviteSchema, checkoutSchema, profileSchema, referralLeadSchema, referralInviteSchema, recurringDecisionSchema, reminderPatchSchema, reminderSchema, walletSchema, walletPatchSchema, createOrderSchema, emailLinkSchema, emailOnlySchema, goalSchema, incomeInterviewSchema, leadSchema, loginCodeSchema, newPartnerSchema, partnerLoginSchema, partnerStatusSchema, setCategorySchema, setLimitSchema, simulateSchema, subscriptionOrderSchema, toggleIncomeTaskSchema, translationSchema, uuidParam, monthParam } from './schemas.ts';
 import { EngineInputError } from './engine.ts';
 import { CSP } from './security.ts';
 import * as svc from './services.ts';
@@ -492,6 +492,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.get('/api/account/wallets', async (req) => extras.listWallets(ctx, await requireSubscriber(req)));
   app.post('/api/account/wallets', async (req, reply) => {
     return reply.status(201).send({ id: await extras.createWallet(ctx, await requireSubscriber(req), walletSchema.parse(req.body)) });
+  });
+  app.put('/api/account/wallets/:id', async (req) => {
+    await extras.updateWallet(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id), walletPatchSchema.parse(req.body));
+    return { ok: true };
   });
   app.delete('/api/account/wallets/:id', async (req, reply) => {
     await extras.deleteWallet(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id));
