@@ -162,7 +162,7 @@ export function viewCenarios(ctx) {
     render();
   };
   const presets = el('div', { class: 'button-row no-print' }, ...SCENARIO_PRESETS.map((p) => {
-    const b = el('button', { class: 'btn btn-quiet btn-sm', type: 'button', title: p.hint }, p.title);
+    const b = el('button', { class: 'btn btn-secondary btn-sm', type: 'button', title: p.hint }, p.title);
     b.addEventListener('click', () => apply(p.build(base)));
     return b;
   }));

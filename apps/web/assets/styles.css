@@ -311,8 +311,8 @@ ul, ol { margin: 0; padding: 0; }
 .back-link { margin-left: -12px; margin-bottom: var(--s3); }
 
 /* campos */
-.field { display: grid; gap: 6px; }
-.field + .field { margin-top: var(--s4); }
+.field { display: grid; gap: 6px; align-content: start; }
+.field + .field { margin-top: 0; } /* o espaço entre campos vem do gap do contêiner (grid); margem extra desalinhava colunas */
 .field-row { display: grid; gap: var(--s4); }
 .field-row .field + .field { margin-top: 0; }
 @media (min-width: 560px) { .field-row { grid-template-columns: 1fr 1fr; } }
@@ -584,7 +584,10 @@ ul, ol { margin: 0; padding: 0; }
 .offer > div { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px 12px; display: grid; gap: 2px; }
 .offer dt { color: var(--muted); font-size: 0.8125rem; }
 .offer dd { margin: 0; font-family: var(--font-display); font-size: 1.25rem; font-weight: 560; font-variant-numeric: tabular-nums; }
-.button-row { display: flex; gap: var(--s2); flex-wrap: wrap; }
+.button-row { display: flex; gap: var(--s2); flex-wrap: wrap; align-items: flex-end; }
+.button-row:has(.input) .btn { min-height: 52px; } /* botão ao lado de campo tem a mesma altura do campo */
+.button-row:has(.input) > .input { flex: 1 1 160px; min-width: 0; }
+.button-row > .field { flex: 1 1 200px; min-width: 0; }
 @media print { .script { break-inside: avoid; } .no-print { display: none !important; } }
 
 /* ---------- cartão "tem mais no seu diagnóstico" ---------- */
@@ -624,7 +627,7 @@ ul, ol { margin: 0; padding: 0; }
 .tools-layout { display: grid; gap: var(--s5); padding-bottom: var(--s7); }
 .tool-form { display: grid; gap: var(--s4); justify-items: start; }
 .tool-form .field, .tool-form .fieldset { justify-self: stretch; }
-.tool-form .check { margin: 6px 0; }
+.tool-form .check { margin: 0; }
 .tool-out { display: grid; gap: var(--s3); margin-top: var(--s3); }
 .fieldset { border: 0; padding: 0; margin: 0; }
 .resume-banner { background: var(--mint); color: var(--mint-ink); }
@@ -971,9 +974,9 @@ ul, ol { margin: 0; padding: 0; }
 :root[data-theme="dark"] .brand-puff { fill: #F2B24A; }
 
 /* Guias sob medida */
-.form-grid { display: grid; gap: var(--s3) var(--s4); grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }
+.form-grid { display: grid; gap: var(--s3) var(--s4); align-items: start; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }
 .form-grid .field { min-width: 0; }
-.offers { display: grid; gap: var(--s4); margin: var(--s3) 0; }
+.offers { display: grid; gap: var(--s4); margin: 0; }
 .offer-box { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: var(--s4); margin: 0; display: grid; gap: var(--s3); min-width: 0; }
 .offer-box legend { font-weight: 800; padding: 0 var(--s2); }
 .objection { border-left: 3px solid var(--primary); padding: 4px 0 4px var(--s3); margin: var(--s3) 0; }
