@@ -4,6 +4,7 @@ import { api } from '../api.js';
 import { el, icon, toast, brl, int, dt, shortId, card, kpi, kpis, grid, table, badge, tabs, pager, periodSelect, EMPLOYMENT, CATEGORY } from '../ui.js';
 import { caseDrawer } from './shared.js';
 import { confirmDialog } from '../../confirm.js';
+import { partnersManager } from './parceiros-gestao.js';
 
 const STATUS = {
   queued: ['Na fila', 'warn'], delivered: ['Enviado', 'ok'], failed: ['Falhou', 'bad'], contacted: ['Parceiro contatou', 'ok'], converted: ['Contratou', 'ok'], rejected: ['Recusado', 'muted'],
@@ -12,7 +13,8 @@ const statusBadge = (s) => badge(...(STATUS[s] ?? [s, 'muted']));
 
 export async function parceriasScreen(ctx) {
   const days = ctx.state.days;
-  const [p, targets] = await Promise.all([api.parcerias(days), api.destinosParceiros().catch(() => ({ partners: [] }))]);
+  const [p, targetsInit] = await Promise.all([api.parcerias(days), api.destinosParceiros().catch(() => ({ partners: [] }))]);
+  let targets = targetsInit;
   const pot = p.potential;
   const pctOf = (n) => (pot.cases ? `${Math.round((n / pot.cases) * 100)}% dos diagnósticos` : '');
 
@@ -69,9 +71,10 @@ export async function parceriasScreen(ctx) {
     };
     return [
       el('p', { class: 'muted' }, 'A lista mostra só o perfil. O envio entrega nome e telefone ao parceiro por canal seguro e registra tudo. O mesmo contato nunca é enviado duas vezes ao mesmo parceiro.'),
-      el('div', { class: 'bo-toolbar' }, filtro, cat, par),
-      el('div', { class: 'bo-toolbar' }, partnerSel, send, count, selectUnsent),
-      targets.partners.length === 0 ? el('p', { class: 'note note-amber' }, icon('alert'), el('span', {}, 'Nenhum parceiro com campanha ativa. Cadastre o parceiro e a campanha (token de administrador) para poder enviar.')) : null,
+      el('div', { class: 'bo-filters' }, filtro, cat, par),
+      el('hr', { class: 'bo-filters-sep' }),
+      el('div', { class: 'bo-filters' }, partnerSel, send, selectUnsent, el('span', { class: 'bo-count' }, count)),
+      targets.partners.length === 0 ? el('p', { class: 'note note-amber' }, icon('alert'), el('span', {}, 'Nenhum parceiro com campanha ativa. Abra a aba "Parceiros" e cadastre o parceiro e a campanha para poder enviar.')) : null,
       table(
         [
           { label: '', render: check },
@@ -107,7 +110,7 @@ export async function parceriasScreen(ctx) {
     return [
       el('p', { class: 'muted' }, 'Tudo que já foi enviado, por parceiro, com a situação. "Na fila" e "Falhou" ainda não chegaram ao parceiro: dá para cancelar (o contato fica livre) ou reenviar.'),
       kpis(...r.summary.map((s) => kpi((STATUS[s.status] ?? [s.status])[0], int(s.count), brl(s.cents)))),
-      el('div', { class: 'bo-toolbar' }, par, sit),
+      el('div', { class: 'bo-filters' }, par, sit),
       table(
         [
           { label: 'Enviado em', render: (x) => dt(x.createdAt) },
@@ -133,12 +136,20 @@ export async function parceriasScreen(ctx) {
     ];
   }
 
+  const manager = partnersManager(ctx, { onChange: async () => { targets = await api.destinosParceiros().catch(() => targets); manager.draw(); } });
+
   async function draw() {
-    const tabBar = tabs([['contatos', 'Contatos autorizados'], ['envios', 'Envios aos parceiros']], st.tab, (id) => { st.tab = id; st.page = 0; draw(); });
+    if (st.tab !== 'parceiros') targets = await api.destinosParceiros().catch(() => targets);
+    const tabBar = tabs([['contatos', 'Contatos autorizados'], ['envios', 'Envios aos parceiros'], ['parceiros', 'Parceiros']], st.tab, (id) => { st.tab = id; st.page = 0; draw(); });
     host.replaceChildren(tabBar, el('p', { class: 'muted bo-loading', role: 'status' }, 'Carregando…'));
     try {
+      if (st.tab === 'parceiros') {
+        host.replaceChildren(tabBar, manager.node);
+        await manager.draw();
+        return;
+      }
       const body = st.tab === 'contatos' ? await drawContacts() : await drawDeliveries();
-      host.replaceChildren(tabBar, ...body);
+      host.replaceChildren(tabBar, ...body.filter(Boolean));
     } catch (e) {
       host.replaceChildren(tabBar, el('p', { class: 'note note-amber' }, icon('alert'), el('span', {}, e?.message ?? 'Não consegui carregar.')));
     }

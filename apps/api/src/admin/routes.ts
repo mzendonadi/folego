@@ -18,6 +18,7 @@ import * as customers from './customers.ts';
 import * as manage from './manage.ts';
 import * as marketing from './marketing.ts';
 import * as metrics from './metrics.ts';
+import * as partners from './partners.ts';
 import { ROLE_LABEL, ROLE_PRESETS, ROLES, SECTIONS, SECTION_LABEL } from './permissions.ts';
 import type { Section } from './permissions.ts';
 
@@ -293,6 +294,45 @@ export function registerGestao(app: FastifyInstance, deps: AdminRouteDeps): void
     const { action } = z.strictObject({ action: z.enum(['retry', 'cancel']) }).parse(req.body);
     await dispatch.deliveryAction(ctx, a.id, idParam((req.params as { id: string }).id), action);
     return { ok: true };
+  });
+
+  // gestão dos parceiros e das campanhas (destinos do envio)
+  const who = (a: AdminUser) => `admin:${a.id}`;
+  app.get(`${P}/parcerias/parceiros`, async (req) => {
+    await admin(req, 'parcerias');
+    return partners.listPartners(ctx);
+  });
+  app.post(`${P}/parcerias/parceiros`, { config: { rateLimit: { max: 20 * scale, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const a = await admin(req, 'parcerias');
+    return reply.status(201).send(await partners.create(ctx, who(a), partners.partnerCreateSchema.parse(req.body)));
+  });
+  app.patch(`${P}/parcerias/parceiros/:id`, async (req) => {
+    const a = await admin(req, 'parcerias');
+    return partners.update(ctx, who(a), idParam((req.params as { id: string }).id), partners.partnerPatchSchema.parse(req.body));
+  });
+  app.delete(`${P}/parcerias/parceiros/:id`, async (req) => {
+    const a = await admin(req, 'parcerias');
+    return partners.remove(ctx, who(a), idParam((req.params as { id: string }).id));
+  });
+  app.post(`${P}/parcerias/parceiros/:id/senha`, async (req) => {
+    const a = await admin(req, 'parcerias');
+    return partners.resetPassword(ctx, who(a), idParam((req.params as { id: string }).id));
+  });
+  app.post(`${P}/parcerias/parceiros/:id/campanhas`, async (req, reply) => {
+    const a = await admin(req, 'parcerias');
+    return reply.status(201).send(await partners.createCampaign(ctx, who(a), idParam((req.params as { id: string }).id), partners.campaignCreateSchema.parse(req.body)));
+  });
+  app.patch(`${P}/parcerias/campanhas/:id`, async (req) => {
+    const a = await admin(req, 'parcerias');
+    return partners.updateCampaign(ctx, who(a), idParam((req.params as { id: string }).id), partners.campaignPatchSchema.parse(req.body));
+  });
+  app.post(`${P}/parcerias/campanhas/:id/segredo`, async (req) => {
+    const a = await admin(req, 'parcerias');
+    return partners.rotateWebhookSecret(ctx, who(a), idParam((req.params as { id: string }).id));
+  });
+  app.delete(`${P}/parcerias/campanhas/:id`, async (req) => {
+    const a = await admin(req, 'parcerias');
+    return partners.removeCampaign(ctx, who(a), idParam((req.params as { id: string }).id));
   });
 
   // ---------- produtos e preços ----------

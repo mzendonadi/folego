@@ -307,17 +307,14 @@ export function renderDelivery(root, { input, diagnosis: d, items, generated, ex
   const roteiros = scriptsSection(generated);
   const cartas = items.includes('defense_letters') ? lettersSection(generated) : null;
 
-  // Guia gratuito
+  // Dinheiro esquecido: o roteiro completo é um guia sob medida (pago); aqui fica só o convite e o alerta de golpe.
+  const forgotten = CATALOG.guide_forgotten;
   const dinheiro = section(
-    'dinheiro', 'Guia grátis: dinheiro esquecido',
-    el('p', { class: 'section-sub' }, 'Antes de quitar dívida, vale conferir se existe dinheiro seu parado. Tudo abaixo é gratuito e oficial.'),
-    el(
-      'ol', { class: 'guide' },
-      el('li', {}, el('strong', {}, 'Valores a Receber (Banco Central). '), 'Consulta gratuita de dinheiro esquecido em bancos e consórcios, com login gov.br. ', el('a', { href: 'https://valoresareceber.bcb.gov.br', rel: 'noopener noreferrer', target: '_blank' }, 'valoresareceber.bcb.gov.br')),
-      el('li', {}, el('strong', {}, 'FGTS. '), 'Confira contas de empregos antigos no aplicativo oficial do FGTS.'),
-      el('li', {}, el('strong', {}, 'PIS/PASEP. '), 'Consulte abono e saldo no aplicativo Carteira de Trabalho Digital ou na Caixa/Banco do Brasil.'),
-      el('li', {}, el('strong', {}, 'Restituição do Imposto de Renda. '), 'Veja no site oficial da Receita Federal se há restituição pendente.'),
-    ),
+    'dinheiro', 'Dinheiro esquecido',
+    el('p', { class: 'section-sub' }, 'Antes de quitar dívida, vale conferir se existe dinheiro seu parado em bancos, FGTS, PIS/Pasep ou imposto. O guia monta o roteiro de onde procurar para o seu caso, com o passo a passo de cada fonte oficial.'),
+    forgotten?.active
+      ? el('div', { class: 'd-actions no-print' }, el('a', { class: 'btn btn-primary', href: '#/guia/forgotten' }, 'Ver o guia (prévia grátis)', icon('arrow-right')), el('span', { class: 'fine' }, `${priceLabel('guide_forgotten')} por Pix, só se você gostar da prévia.`))
+      : null,
     el('p', { class: 'note note-amber' }, icon('alert'), el('span', {}, 'Ninguém pode cobrar para “liberar” seu dinheiro. Use só sites e aplicativos oficiais (.gov.br) e desconfie de mensagens que pedem pagamento.')),
   );
 

@@ -7,7 +7,7 @@ Complementa o `INPI-DOSSIE.md` (o que registrar e por quê). Aqui está **o que 
 ## Etapa 0 — Pré-requisitos (resolva antes de tudo)
 
 - [ ] **MEI/CNPJ ativo**. O titular da marca deve ser a empresa que vai usá-la. Se hoje fosse pessoa física, depois seria preciso ceder a marca ao CNPJ (mais custo e trabalho).
-- [ ] Decidir a **ordem de depósito**: 1º **FÔLEGO** (palavra), 2º **logotipo do Fôlego**, 3º **PRUMO** só se a busca estiver limpa (ver Etapa 3).
+- [ ] Decidir a **ordem de depósito**: 1º **FÔLEGO** (palavra), 2º **logotipo do Fôlego**, 3º **PRUMO** só se a busca estiver limpa (ver Etapa 2).
 - [ ] Ter os arquivos: `marca/svg/folego-horizontal.svg` (converter o texto em curvas num editor, ou usar o PNG de alta resolução) e `marca/png/avatar-folego-1024.png`.
 
 ## Etapa 1 — Cadastro no INPI (15 minutos)

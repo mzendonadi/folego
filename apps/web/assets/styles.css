@@ -1027,3 +1027,22 @@ fieldset.offer-box { min-inline-size: 0; }
 .pm-shine { stroke: #8FE0BE; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pm-shine { stroke: #D9EFE5; } }
 :root[data-theme="dark"] .pm-shine { stroke: #D9EFE5; }
+
+/* Conta bancária: os 3 campos usam as mesmas linhas (rótulo, campo, ajuda), então ficam alinhados qualquer que seja o texto. */
+.lis-fields { align-items: stretch; }
+.lis-fields .field, .lis-fields .field + .field { margin-top: 0; }
+.lis-fields .field { display: grid; grid-template-rows: auto auto auto; align-content: start; gap: 6px; }
+.lis-fields .label { min-height: 0; display: block; align-self: end; }
+.lis-fields .fine { margin: 0; }
+@supports (grid-template-rows: subgrid) {
+  @media (min-width: 641px) {
+    .lis-fields .field { grid-row: span 3; grid-template-rows: subgrid; row-gap: 6px; }
+  }
+}
+.lis-fields .input { width: 100%; }
+
+.guide-card .guide-price { font-style: normal; font-size: .875rem; color: var(--ink-2); margin-top: 4px; }
+.guide-card .guide-price b { color: var(--primary); font-size: 1rem; }
+
+.lis-fields { grid-template-columns: repeat(auto-fit, minmax(min(100%, 175px), 1fr)); }
+.lis-fields .label { align-self: start; }

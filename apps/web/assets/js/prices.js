@@ -33,13 +33,14 @@ export const site = { salesPaused: false };
 /** Busca preços e avisos. Espera no máximo 1,5 s (o site nunca fica travado por isso). */
 export async function loadCatalog() {
   try {
-    const c = await Promise.race([api.getCatalog(), new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1500))]);
+    const c = await Promise.race([api.getCatalog(), new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 4000))]);
     applyCatalog(c);
     site.salesPaused = Boolean(c.salesPaused);
     bindStaticPrices();
     // A vitrine de guias só aparece na página inicial quando o dono liga ao menos um guia.
     const open = (c.products ?? []).filter((p) => p.code.startsWith('guide_') && p.active).map((p) => p.code);
     const box = document.getElementById('guias');
+    document.querySelectorAll('[data-guides-link]').forEach((a) => { a.hidden = open.length === 0; });
     if (box) {
       box.hidden = open.length === 0;
       box.querySelectorAll('[data-guide]').forEach((a) => {
