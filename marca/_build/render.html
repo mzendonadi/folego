@@ -1,0 +1,220 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Gerador da marca Fôlego</title>
+<body style="font:16px system-ui;padding:24px"><p id="log">gerando…</p>
+<script>
+const C = { verde: '#0E5B49', fundo: '#0A3D31', menta: '#8FE0BE', mentaClara: '#D9EFE5', papel: '#F6F3EC', tinta: '#13231D', tinta2: '#3F514A', ambar: '#A55F00', ambarClaro: '#F2B24A', branco: '#FFFFFF' };
+const rad = (d) => (d * Math.PI) / 180;
+
+/** Marca do Fôlego: anel aberto (a respiração) + ponto de ar saindo pela abertura + centro. Desenhada em uma grade de 32. */
+function folegoMark(ctx, x, y, size, { ring = C.verde, dot = C.menta, puff = C.ambar } = {}) {
+  const s = size / 32;
+  ctx.save();
+  ctx.translate(x - size / 2, y - size / 2);
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = ring;
+  ctx.lineWidth = 2.8 * s;
+  ctx.beginPath();
+  ctx.arc(16 * s, 16 * s, 11.5 * s, rad(-62), rad(217), false);
+  ctx.stroke();
+  ctx.fillStyle = puff;
+  const a = rad(257.5);
+  ctx.beginPath();
+  ctx.arc((16 + 11.5 * Math.cos(a)) * s, (16 + 11.5 * Math.sin(a)) * s, 1.9 * s, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = dot;
+  ctx.beginPath();
+  ctx.arc(16 * s, 16 * s, 4.6 * s, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+/** Marca do Prumo: fio de prumo com o peso em gota (estar no prumo = em ordem, de pé, na direção certa). */
+function prumoMark(ctx, x, y, size, { line = C.verde, weight = C.verde, spark = C.menta, hook = C.ambar } = {}) {
+  const s = size / 32;
+  ctx.save();
+  ctx.translate(x - size / 2, y - size / 2);
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = line;
+  ctx.lineWidth = 2.6 * s;
+  ctx.beginPath();
+  ctx.moveTo(16 * s, 6 * s);
+  ctx.lineTo(16 * s, 17 * s);
+  ctx.stroke();
+  ctx.fillStyle = hook;
+  ctx.beginPath();
+  ctx.arc(16 * s, 4 * s, 2.2 * s, 0, Math.PI * 2);
+  ctx.fill();
+  // peso do prumo: topo reto (onde o fio prende), corpo que afina até a ponta
+  ctx.fillStyle = weight;
+  ctx.strokeStyle = weight;
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 1.6 * s;
+  ctx.beginPath();
+  ctx.moveTo(11.4 * s, 17.2 * s);
+  ctx.lineTo(20.6 * s, 17.2 * s);
+  ctx.lineTo(20.6 * s, 22.6 * s);
+  ctx.lineTo(16 * s, 30 * s);
+  ctx.lineTo(11.4 * s, 22.6 * s);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.strokeStyle = spark;
+  ctx.lineWidth = 1.3 * s;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(12.8 * s, 21.6 * s);
+  ctx.lineTo(19.2 * s, 21.6 * s);
+  ctx.stroke();
+  ctx.restore();
+}
+
+const font = (w, px, fam = 'Fraunces') => `${w} ${px}px ${fam}, Georgia, serif`;
+function text(ctx, str, x, y, { size = 40, weight = 560, fam = 'Fraunces', color = C.tinta, align = 'left', maxWidth } = {}) {
+  ctx.font = font(weight, size, fam);
+  ctx.fillStyle = color;
+  ctx.textAlign = align;
+  ctx.textBaseline = 'alphabetic';
+  maxWidth ? ctx.fillText(str, x, y, maxWidth) : ctx.fillText(str, x, y);
+}
+function wrap(ctx, str, x, y, maxW, lineH, o) {
+  ctx.font = font(o.weight ?? 400, o.size, o.fam ?? 'Figtree');
+  const words = str.split(' ');
+  let line = '';
+  for (const w of words) {
+    const test = line ? `${line} ${w}` : w;
+    if (ctx.measureText(test).width > maxW && line) {
+      text(ctx, line, x, y, o);
+      line = w;
+      y += lineH;
+    } else line = test;
+  }
+  if (line) text(ctx, line, x, y, o);
+  return y;
+}
+function lockup(ctx, x, y, h, { mark = folegoMark, markOpts, word = 'fôlego', color = C.verde } = {}) {
+  mark(ctx, x + h / 2, y, h, markOpts);
+  text(ctx, word, x + h * 1.18, y + h * 0.28, { size: h * 0.92, weight: 560, color });
+}
+const canvas = (w, h, bg) => {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const ctx = c.getContext('2d');
+  if (bg) { ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h); }
+  return [c, ctx];
+};
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+function rings(ctx, w, h, color, alpha = 0.1) {
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.globalAlpha = alpha;
+  ctx.lineWidth = 2;
+  for (const r of [120, 220, 330, 450, 580]) { ctx.beginPath(); ctx.arc(w * 0.86, h * 0.1, r * (h / 630), 0, Math.PI * 2); ctx.stroke(); }
+  ctx.restore();
+}
+
+const jobs = {};
+// ---- ícones do app (fundo verde, marca clara) ----
+const icon = (size, { safe = 0.58, radius = 0.22 } = {}) => () => {
+  const [c, ctx] = canvas(size, size);
+  roundRect(ctx, 0, 0, size, size, size * radius);
+  ctx.fillStyle = C.verde; ctx.fill();
+  folegoMark(ctx, size / 2, size / 2, size * safe, { ring: C.papel, dot: C.menta, puff: C.ambarClaro });
+  return c;
+};
+jobs['favicon-32.png'] = icon(32, { safe: 0.78, radius: 0.25 });
+jobs['favicon-48.png'] = icon(48, { safe: 0.78, radius: 0.25 });
+jobs['apple-touch-icon.png'] = () => { const [c, ctx] = canvas(180, 180, C.verde); folegoMark(ctx, 90, 90, 112, { ring: C.papel, dot: C.menta, puff: C.ambarClaro }); return c; };
+jobs['icon-192.png'] = icon(192);
+jobs['icon-512.png'] = icon(512);
+jobs['icon-maskable-512.png'] = () => { const [c, ctx] = canvas(512, 512, C.verde); folegoMark(ctx, 256, 256, 260, { ring: C.papel, dot: C.menta, puff: C.ambarClaro }); return c; };
+
+// ---- avatares ----
+jobs['avatar-folego-1024.png'] = () => { const [c, ctx] = canvas(1024, 1024, C.verde); folegoMark(ctx, 512, 512, 560, { ring: C.papel, dot: C.menta, puff: C.ambarClaro }); return c; };
+jobs['avatar-prumo-1024.png'] = () => { const [c, ctx] = canvas(1024, 1024, C.fundo); prumoMark(ctx, 512, 512, 600, { line: C.papel, weight: C.menta, spark: C.fundo, hook: C.ambarClaro }); return c; };
+
+// ---- imagem de compartilhamento do site ----
+jobs['og-image.png'] = () => {
+  const [c, ctx] = canvas(1200, 630, C.papel);
+  rings(ctx, 1200, 630, C.verde, 0.12);
+  ctx.fillStyle = C.verde; ctx.fillRect(0, 0, 18, 630);
+  lockup(ctx, 78, 130, 96);
+  text(ctx, 'Organize suas dívidas', 78, 330, { size: 62, weight: 560, color: C.tinta });
+  text(ctx, 'e só pague se gostar.', 78, 404, { size: 62, weight: 560, color: C.verde });
+  text(ctx, 'Diagnóstico na hora, sem cadastro. Pix só se você gostar.', 78, 478, { size: 30, weight: 500, fam: 'Figtree', color: C.tinta2 });
+  text(ctx, 'folego.online', 78, 560, { size: 30, weight: 700, fam: 'Figtree', color: C.tinta });
+  return c;
+};
+
+// ---- capas de redes ----
+const banner = (w, h, withPrumo = false) => () => {
+  const [c, ctx] = canvas(w, h, C.verde);
+  ctx.save(); ctx.globalAlpha = 0.14; ctx.strokeStyle = C.papel; ctx.lineWidth = 2;
+  for (const r of [0.5, 0.8, 1.1, 1.45]) { ctx.beginPath(); ctx.arc(w * 0.9, h * 0.15, h * r, 0, Math.PI * 2); ctx.stroke(); }
+  ctx.restore();
+  const m = h * 0.34;
+  folegoMark(ctx, w * 0.07 + m / 2, h / 2, m, { ring: C.papel, dot: C.menta, puff: C.ambarClaro });
+  text(ctx, 'fôlego', w * 0.07 + m * 1.2, h / 2 + m * 0.14, { size: m * 0.95, weight: 560, color: C.papel });
+  text(ctx, 'Respira. A gente organiza suas dívidas com você.', w * 0.07 + m * 1.2, h / 2 + m * 0.62, { size: Math.round(h * 0.075), weight: 500, fam: 'Figtree', color: C.mentaClara });
+  return c;
+};
+jobs['capa-x-1500x500.png'] = banner(1500, 500);
+jobs['capa-linkedin-1584x396.png'] = banner(1584, 396);
+jobs['capa-facebook-1640x624.png'] = banner(1640, 624);
+
+// ---- modelos de publicação ----
+jobs['post-dica-1080.png'] = () => {
+  const [c, ctx] = canvas(1080, 1080, C.papel);
+  rings(ctx, 1080, 1080, C.verde, 0.1);
+  text(ctx, 'DICA DO FÔLEGO', 90, 150, { size: 30, weight: 800, fam: 'Figtree', color: C.ambar });
+  const y = wrap(ctx, 'Dívida com juro de cartão cresce mais rápido do que qualquer parcela que você paga. Comece por ela.', 90, 300, 880, 92, { size: 78, weight: 560, fam: 'Fraunces', color: C.tinta });
+  text(ctx, 'Veja a ordem certa no diagnóstico grátis', 90, y + 130, { size: 36, weight: 600, fam: 'Figtree', color: C.verde });
+  lockup(ctx, 90, 965, 64);
+  text(ctx, 'folego.online', 990, 990, { size: 30, weight: 700, fam: 'Figtree', color: C.tinta2, align: 'right' });
+  return c;
+};
+jobs['post-numero-1080.png'] = () => {
+  const [c, ctx] = canvas(1080, 1080, C.verde);
+  ctx.save(); ctx.globalAlpha = 0.14; ctx.strokeStyle = C.papel; ctx.lineWidth = 2;
+  for (const r of [160, 300, 460, 640]) { ctx.beginPath(); ctx.arc(1000, 90, r, 0, Math.PI * 2); ctx.stroke(); }
+  ctx.restore();
+  text(ctx, 'VOCÊ SABIA?', 90, 150, { size: 30, weight: 800, fam: 'Figtree', color: C.ambarClaro });
+  text(ctx, '8% ao mês', 90, 470, { size: 190, weight: 600, color: C.papel });
+  wrap(ctx, 'é o teto de juros do cheque especial. Se está no negativo, o Prumo mostra quanto isso custa por mês.', 90, 590, 880, 60, { size: 46, weight: 500, fam: 'Figtree', color: C.mentaClara });
+  lockup(ctx, 90, 965, 64, { markOpts: { ring: C.papel, dot: C.menta, puff: C.ambarClaro }, color: C.papel });
+  return c;
+};
+jobs['story-1080x1920.png'] = () => {
+  const [c, ctx] = canvas(1080, 1920, C.papel);
+  rings(ctx, 1080, 1920, C.verde, 0.1);
+  folegoMark(ctx, 540, 640, 300);
+  text(ctx, 'fôlego', 540, 900, { size: 170, weight: 560, color: C.verde, align: 'center' });
+  wrap(ctx, 'Respira. A gente organiza suas dívidas com você.', 130, 1090, 820, 78, { size: 62, weight: 500, fam: 'Fraunces', color: C.tinta });
+  text(ctx, 'Diagnóstico grátis, sem cadastro', 540, 1500, { size: 44, weight: 700, fam: 'Figtree', color: C.verde, align: 'center' });
+  text(ctx, 'folego.online', 540, 1580, { size: 44, weight: 500, fam: 'Figtree', color: C.tinta2, align: 'center' });
+  return c;
+};
+
+(async () => {
+  const log = document.getElementById('log');
+  await new FontFace('Fraunces', 'url(/fraunces-latin-wght-normal.woff2)', { weight: '100 900' }).load().then((f) => document.fonts.add(f));
+  await new FontFace('Figtree', 'url(/figtree-latin-wght-normal.woff2)', { weight: '100 900' }).load().then((f) => document.fonts.add(f));
+  await document.fonts.ready;
+  let n = 0;
+  for (const [name, make] of Object.entries(jobs)) {
+    const c = make();
+    await fetch('/salvar/' + encodeURIComponent(name), { method: 'POST', body: c.toDataURL('image/png') });
+    n += 1;
+    log.textContent = `gerado ${n}/${Object.keys(jobs).length}: ${name}`;
+  }
+  log.textContent = `feito: ${n} imagens`;
+})();
+</script>

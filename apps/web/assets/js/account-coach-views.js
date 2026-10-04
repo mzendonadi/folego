@@ -54,7 +54,7 @@ export function viewCoach(ctx) {
   const focus = card(
     el('h2', {}, 'Seu foco de hoje'),
     el('p', {}, el('strong', {}, f.text)),
-    f.journey ? el('p', { class: 'fine muted' }, `Da jornada "${f.journey}".`) : el('p', { class: 'fine muted' }, 'Esta é a parte da sua nota que mais pode melhorar. Escolha uma jornada abaixo para ter um passo a passo.'),
+    f.journey ? el('p', { class: 'fine muted' }, `Da jornada "${f.journey}".`) : f.kind === 'alerta' ? el('p', { class: 'fine muted' }, 'Aviso do seu cheque especial (LIS). Veja o plano de quitação na aba Dívidas.') : el('p', { class: 'fine muted' }, 'Esta é a parte da sua nota que mais pode melhorar. Escolha uma jornada abaixo para ter um passo a passo.'),
     o.upcoming.length ? el('p', { class: 'fine' }, `Vence nos próximos dias: ${o.upcoming.map((u) => `${u.title} (${new Date(`${u.dueOn}T12:00:00`).toLocaleDateString('pt-BR')})`).join(', ')}.`) : null,
     doIt ? el('div', { class: 'button-row no-print' }, doIt) : null,
   );

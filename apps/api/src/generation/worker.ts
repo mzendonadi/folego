@@ -3,6 +3,7 @@ import { deliverPendingLeads } from '../leads.ts';
 import { maintenance } from '../subscriptions.ts';
 import { refreshRuntime } from '../runtime.ts';
 import { workerBeat } from '../health.ts';
+import { syncDueConnections } from '../openfinance.ts';
 import { dispatchCampaigns } from '../admin/campaigns.ts';
 import { sendDueReminders } from '../account-extras.ts';
 import { sendWeeklyDigests } from '../account-debts.ts';
@@ -255,6 +256,7 @@ export async function runWorker(ctx: Ctx, opts: WorkerOptions, control: { stoppe
       ['boas_vindas', () => sendWelcomes(ctx, log)],
       ['indicadores_mercado', () => refreshMarket(ctx, log)],
       ['manutencao', () => maintenance(ctx, log)],
+      ['open_finance', () => syncDueConnections(ctx, log)],
     ];
     for (const [name, job] of jobs) {
       try {

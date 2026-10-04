@@ -299,3 +299,26 @@ export async function setRecurringDecision(key, status) {
 export async function getScenarioBase() {
   return request('GET', '/account/scenario-base');
 }
+
+export async function createGuided(kind, input) {
+  return request('POST', `/guided/${kind}`, { body: { input, acceptTerms: true } });
+}
+export async function getGuided(orderId) {
+  return request('GET', `/orders/${orderId}/guided`);
+}
+
+export async function getOpenFinance() {
+  return request('GET', '/account/openfinance');
+}
+export async function ofConnectToken() {
+  return request('POST', '/account/openfinance/connect-token', { body: {} });
+}
+export async function ofAddConnection(itemId) {
+  return request('POST', '/account/openfinance/connections', { body: { itemId, acceptConsent: true } });
+}
+export async function ofSync(id) {
+  return request('POST', `/account/openfinance/connections/${id}/sync`, { body: {} });
+}
+export async function ofRevoke(id) {
+  return request('DELETE', `/account/openfinance/connections/${id}`);
+}

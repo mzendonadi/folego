@@ -17,6 +17,11 @@ export const CATALOG = {
     active: true,
     blurb: 'As ações dos 30 dias, as estratégias do seu caso e os marcos dos próximos meses (dia de pagar, dívida quitada), com lembretes. Funciona no Google Agenda, no iPhone e no Outlook.',
   },
+  // Guias sob medida: nascem desligados; o preço e a liberação vêm do backoffice.
+  guide_financing: { name: 'Comparador honesto de financiamento', cents: 1900, active: false },
+  guide_housebills: { name: 'Renegociador de contas de casa', cents: 1500, active: false },
+  guide_forgotten: { name: 'Guia do dinheiro esquecido', cents: 1500, active: false },
+  guide_resume: { name: 'Currículo por vaga', cents: 1900, active: false },
   sub_controle: { name: 'Controle', cents: 1999, active: true },
   sub_ousado: { name: 'Ousado', cents: 3999, active: true },
   sub_desbravador: { name: 'Desbravador', cents: 5999, active: true },

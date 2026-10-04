@@ -24,6 +24,8 @@ interface DebtRow {
 }
 
 const toDebt = (r: DebtRow) => ({
+  virtual: false,
+  walletId: null as string | null,
   id: r.id,
   name: r.name,
   initialCents: num(r.initial_cents),
@@ -45,7 +47,17 @@ export interface DebtInput {
 export async function listDebts(ctx: Ctx, subscriberId: string, extraCents = 0) {
   await requireFeature(ctx, subscriberId, 'ledger');
   const r = await ctx.db.query<DebtRow>(`SELECT id, name, initial_cents, balance_cents, monthly_rate_bps, min_payment_cents, due_day, paid_off_at FROM app.account_debts WHERE subscriber_id = $1 ORDER BY (paid_off_at IS NOT NULL), balance_cents DESC, created_at`, [subscriberId]);
-  const debts = r.rows.map(toDebt);
+  // Cheque especial (LIS) em uso nas contas bancárias entra como dívida "virtual": mesma lista, mesmo plano de quitação.
+  // Não se edita nem se paga aqui (o saldo vem da carteira): para quitar, lance uma entrada na conta.
+  const lis = await ctx.db.query<{ id: string; name: string; rate: number; balance: string }>(
+    `SELECT w.id, w.name, w.overdraft_rate_bps AS rate, (w.opening_balance_cents + coalesce(sum(l.amount_cents), 0))::text AS balance
+       FROM app.wallets w LEFT JOIN app.ledger_entries l ON l.wallet_id = w.id WHERE w.subscriber_id = $1 AND w.kind = 'conta' GROUP BY w.id ORDER BY w.created_at`,
+    [subscriberId],
+  );
+  const lisDebts = lis.rows
+    .filter((w) => num(w.balance) < 0)
+    .map((w) => ({ virtual: true, walletId: w.id, id: `lis-${w.id}`, name: `Cheque especial: ${w.name}`, initialCents: -num(w.balance), balanceCents: -num(w.balance), monthlyRateBps: w.rate, minPaymentCents: 0, dueDay: null as number | null, paidOff: false }));
+  const debts = [...r.rows.map(toDebt), ...lisDebts];
   const open = debts.filter((d) => !d.paidOff && d.balanceCents > 0);
   const accountDebts: AccountDebt[] = open.map((d) => ({ id: d.id, name: d.name, balanceCents: d.balanceCents, monthlyRateBps: d.monthlyRateBps, minPaymentCents: d.minPaymentCents }));
   const owed = open.reduce((s, d) => s + d.balanceCents, 0);

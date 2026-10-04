@@ -276,6 +276,16 @@ export function viewDividas(ctx) {
         toast('Não consegui registrar agora.');
       }
     });
+    // Cheque especial (LIS): vem da carteira (conta bancária); não se paga nem se remove aqui.
+    if (x.virtual) {
+      const share = el('li', { class: 'debt-row' },
+        el('div', { class: 'debt-top' }, el('strong', {}, x.name), d.plan?.focusId === x.id ? el('span', { class: 'pill tone-ok' }, 'Foco agora') : null, el('span', { class: 'pill tone-attention' }, 'Cheque especial (LIS)')),
+        el('p', { class: 'muted fine' }, `Usando ${brl(x.balanceCents)} · juros ${(x.monthlyRateBps / 100).toLocaleString('pt-BR')}% ao mês (cerca de ${brl(Math.round((x.balanceCents * x.monthlyRateBps) / 10_000))} por mês).`),
+        el('p', { class: 'fine' }, 'Este valor vem da sua conta bancária na aba Carteiras. Para pagar, lance uma entrada nessa conta: o saldo volta ao positivo e a dívida some daqui.'),
+        el('div', { class: 'button-row no-print' }, (() => { const go = el('button', { class: 'btn btn-secondary btn-sm', type: 'button' }, 'Ir para Carteiras'); go.addEventListener('click', () => ctx.goTab('carteiras')); return go; })()),
+      );
+      return share;
+    }
     const del = el('button', { class: 'btn btn-quiet btn-sm icon-btn', type: 'button', 'aria-label': `Remover ${x.name}` }, icon('trash'));
     del.addEventListener('click', async () => {
       if (!(await confirmDialog({ title: `Remover "${x.name}"?`, text: 'O histórico de pagamentos dela também sai.', confirmLabel: 'Remover' }))) return;

@@ -6,6 +6,7 @@ import { renderCheckout } from './checkout.js';
 import { isPending, renderGenerated } from './generated.js';
 import { renderTools } from './tools.js';
 import { renderTranslator } from './translator.js';
+import { renderGuided, renderGuideList, GUIDES } from './guided.js';
 import { renderPartner } from './partner.js';
 import { renderAccount } from './account.js';
 import { renderUnsubscribe } from './unsubscribe.js';
@@ -34,6 +35,7 @@ const ROUTES = {
   addon: '#/complemento',
   tools: '#/ferramentas',
   translator: '#/tradutor',
+  guided: '#/guia',
   partner: '#/parceiros',
   account: '#/conta',
   unsubscribe: '#/descadastrar',
@@ -48,11 +50,12 @@ const TITLES = {
   addon: 'Adicionar ao Mapa — Fôlego',
   tools: 'Ferramentas grátis — Fôlego',
   translator: 'Tradutor de cobrança — Fôlego',
+  guided: 'Guias sob medida — Fôlego',
   partner: 'Portal do parceiro — Fôlego',
   account: 'Prumo, o app de finanças — Fôlego',
   unsubscribe: 'Cancelar e-mails — Fôlego',
 };
-const HEADINGS = { intake: '#intake-title', processing: '#processing-title', preview: '#preview-title', checkout: '#checkout-title', addon: '#checkout-title', translator: '#translator-title', delivery: '#delivery-title', tools: '#tools-title' };
+const HEADINGS = { intake: '#intake-title', processing: '#processing-title', preview: '#preview-title', checkout: '#checkout-title', addon: '#checkout-title', translator: '#translator-title', guided: '#guided-title', delivery: '#delivery-title', tools: '#tools-title' };
 
 let current = 'landing';
 let lastTrackedView = '';
@@ -65,6 +68,7 @@ let generatedTimer = 0;
 function viewFromHash(hash) {
   if (hash === ROUTES.account || hash.startsWith(`${ROUTES.account}/`)) return 'account'; // #/conta e #/conta/<aba>
   if (hash.startsWith(`${ROUTES.unsubscribe}/`)) return 'unsubscribe'; // #/descadastrar/<assinatura>
+  if (hash === ROUTES.guided || hash.startsWith(`${ROUTES.guided}/`)) return 'guided'; // #/guia e #/guia/<tipo>
   const found = Object.entries(ROUTES).find(([, h]) => h === hash);
   return found ? found[0] : null;
 }
@@ -113,8 +117,9 @@ function restoreAccess() {
   if (!accessChecked) {
     accessChecked = api
       .getMe()
-      .then(({ access, translator }) => {
+      .then(({ access, translator, guided }) => {
         if (translator) state.translatorOrderId = translator.orderId;
+        state.guidedMine = guided ?? [];
         if (!access) return false;
         state.caseId = access.caseId;
         state.orderId = access.orderId;
@@ -133,6 +138,13 @@ async function redeemLink(token) {
     if (access.kind === 'translator') {
       state.translatorOrderId = access.orderId;
       history.replaceState({ view: 'translator' }, '', ROUTES.translator);
+      return true;
+    }
+    if (access.kind === 'guided') {
+      accessChecked = null; // o /api/me passa a listar o guia deste aparelho
+      await restoreAccess();
+      const mine = (state.guidedMine ?? []).find((g) => g.orderId === access.orderId);
+      history.replaceState({ view: 'guided' }, '', mine ? `${ROUTES.guided}/${mine.kind}` : ROUTES.guided);
       return true;
     }
     state.caseId = access.caseId;
@@ -188,8 +200,12 @@ async function route() {
   }
   let view = viewFromHash(location.hash) ?? 'landing';
   if ((view === 'delivery' || view === 'addon' || view === 'translator') && !state.paid) await restoreAccess();
+  if (view === 'guided') {
+    await restoreAccess();
+    await renderGuidedView();
+  }
   if (view === 'addon' && !state.addonCodes) return replaceWith(state.paid ? 'delivery' : 'landing');
-  if (view === 'addon' && !state.paid && state.addonCodes[0] !== 'collection_translator') return replaceWith('landing');
+  if (view === 'addon' && !state.paid && state.addonCodes[0] !== 'collection_translator' && !state.addonCodes[0].startsWith('guide_')) return replaceWith('landing');
   if (view === 'translator') await renderTranslatorView();
   if (view === 'partner') renderPartner($('#partner-root'));
   if (view === 'unsubscribe') renderUnsubscribe($('#unsubscribe-root'), location.hash.split('/')[2] ?? '');
@@ -305,6 +321,47 @@ async function renderTranslatorView() {
   ui.drawInput();
 }
 
+// Guias sob medida (#/guia e #/guia/<tipo>): formulário → prévia grátis → Pix → guia completo.
+async function renderGuidedView() {
+  const kind = location.hash.split('/')[2] ?? '';
+  const mine = state.guidedMine ?? [];
+  const root = $('#guided-root');
+  if (!GUIDES[kind]) {
+    $('#guided-title').textContent = 'Guias sob medida';
+    $('#guided-eyebrow').textContent = 'Sem cadastro';
+    renderGuideList(root, {
+      mine,
+      onOpen: (k) => {
+        history.pushState({ view: 'guided' }, '', `${ROUTES.guided}/${k}`);
+        route();
+      },
+    });
+    return;
+  }
+  $('#guided-title').textContent = GUIDES[kind].title;
+  $('#guided-eyebrow').textContent = GUIDES[kind].eyebrow;
+  const ui = renderGuided(root, kind, {
+    api,
+    state,
+    onBuy: (caseId, code) => {
+      state.guidedCaseId = caseId;
+      state.guidedKind = kind;
+      state.addonCodes = [code];
+      go('addon');
+    },
+  });
+  const owned = mine.find((g) => g.kind === kind);
+  if (owned) {
+    try {
+      ui.drawFull(await api.getGuided(owned.orderId), owned.orderId);
+      return;
+    } catch {
+      /* acesso venceu: volta ao formulário */
+    }
+  }
+  ui.drawForm();
+}
+
 function setBack(target, label) {
   const back = $('#view-checkout .back-link');
   back.dataset.nav = target;
@@ -334,13 +391,20 @@ function renderAddonView() {
   if (disposeCheckout) disposeCheckout();
   const codes = state.addonCodes;
   const forTranslator = codes[0] === 'collection_translator';
-  setBack(forTranslator ? 'translator' : 'delivery', forTranslator ? 'Voltar ao tradutor' : 'Voltar ao meu Mapa');
+  const forGuided = codes[0].startsWith('guide_');
+  setBack(forGuided ? 'guided' : forTranslator ? 'translator' : 'delivery', forGuided ? 'Voltar ao guia' : forTranslator ? 'Voltar ao tradutor' : 'Voltar ao meu Mapa');
   disposeCheckout = renderCheckout($('#checkout-root'), {
     addon: { codes },
-    caseId: forTranslator ? state.translatorCaseId : state.caseId,
+    caseId: forGuided ? state.guidedCaseId : forTranslator ? state.translatorCaseId : state.caseId,
     api,
     onPaid: async (orderId) => {
       state.addonCodes = null;
+      if (forGuided) {
+        accessChecked = null;
+        await restoreAccess();
+        history.pushState({ view: 'guided' }, '', `${ROUTES.guided}/${state.guidedKind}`);
+        return route();
+      }
       if (forTranslator) {
         state.translatorOrderId = orderId;
         history.pushState({ view: 'translator' }, '', ROUTES.translator);

@@ -9,7 +9,7 @@
     "area": "infra",
     "nome": "GET /api/health/deep responde JSON com checks",
     "ok": true,
-    "detalhe": "{\"ok\":true,\"at\":\"2026-10-04T01:17:42.070Z\",\"checks\":{\"banco\":{\"ok\":true,\"detail\":\"responde\"},\"worker\":{\"ok\":true,\"detail\":\"ignorado fora de produção\"},\"fila\":{\"ok\":true,\"detail\":\"0 entrega(s) parada(s) há mais de 15 min\"},\"webhooks\":{\"ok\":true,\"detail\":\"0 evento(s) de pagamento sem processar há mais de 10 min\"},\"ebook\":{\"ok\":true,\"detail\":\"e-mail não configurado\"},\"backup\":{\"ok\":true,\"detail\":\"ign"
+    "detalhe": "{\"ok\":true,\"at\":\"2026-10-04T01:59:01.174Z\",\"checks\":{\"banco\":{\"ok\":true,\"detail\":\"responde\"},\"worker\":{\"ok\":true,\"detail\":\"ignorado fora de produção\"},\"fila\":{\"ok\":true,\"detail\":\"0 entrega(s) parada(s) há mais de 15 min\"},\"webhooks\":{\"ok\":true,\"detail\":\"0 evento(s) de pagamento sem processar há mais de 10 min\"},\"ebook\":{\"ok\":true,\"detail\":\"e-mail não configurado\"},\"backup\":{\"ok\":true,\"detail\":\"ign"
   },
   {
     "area": "infra",
@@ -81,7 +81,7 @@
     "area": "seguranca",
     "nome": "cookie de sessão HttpOnly + SameSite",
     "ok": true,
-    "detalhe": "folego_sid=sAgyPl8S-KX0inITtzFNtKZ0nuBd5Umot_iHiRv7wig; Max-Age=2592000; Path=/; HttpOnly; SameSite=Lax"
+    "detalhe": "folego_sid=8DOe3NSzwtyJ02iQPq5l0mL83_icebfUgYXU5m10iZY; Max-Age=2592000; Path=/; HttpOnly; SameSite=Lax"
   },
   {
     "area": "seguranca",
@@ -141,7 +141,7 @@
     "area": "caso",
     "nome": "resposta traz id do caso",
     "ok": true,
-    "detalhe": "{\"caseId\":\"22c2c225-0c11-409d-aa89-7d3a8876f5f6\",\"preview\":{\"engineVersion\":\"0.1.0\",\"debtCount\":3,\"totalBalanceCents\":660000,\"health\":{\"score\":55,\"band\":\"attention\"},\"headline\":{\"kind\":\"debt_free_in\","
+    "detalhe": "{\"caseId\":\"c1790bc4-e4b5-4615-b11b-ce62cc6ee5b4\",\"preview\":{\"engineVersion\":\"0.1.0\",\"debtCount\":3,\"totalBalanceCents\":660000,\"health\":{\"score\":55,\"band\":\"attention\"},\"headline\":{\"kind\":\"debt_free_in\","
   },
   {
     "area": "caso",
@@ -249,7 +249,7 @@
     "area": "validacao",
     "nome": "caso: campo extra desconhecido",
     "ok": true,
-    "detalhe": "status 201 {\"caseId\":\"d787dfe2-02f0-4755-b578-929d229eb677\",\"preview\":{\"engineVersion\":\"0.1.0\",\"debtCount\":3,\"totalBalanceCents\":66"
+    "detalhe": "status 201 {\"caseId\":\"57db24c0-4e87-487e-80ee-04d809957ecc\",\"preview\":{\"engineVersion\":\"0.1.0\",\"debtCount\":3,\"totalBalanceCents\":66"
   },
   {
     "area": "validacao",
@@ -279,19 +279,19 @@
     "area": "seguranca",
     "nome": "nome de credor com SQLi não gera 500",
     "ok": true,
-    "detalhe": "201 {\"caseId\":\"bda47b89-ca14-401f-9f57-5fade340f221\",\"preview\":{\"engineVersion\":\"0.1.0\",\"debtCount\":3,\"t"
+    "detalhe": "201 {\"caseId\":\"242d2623-3e7a-4531-a175-ad9ad772f314\",\"preview\":{\"engineVersion\":\"0.1.0\",\"debtCount\":3,\"t"
   },
   {
     "area": "seguranca",
     "nome": "nome de credor com XSS não gera 500",
     "ok": true,
-    "detalhe": "201 {\"caseId\":\"ae548b79-824a-4dde-8a97-0a48b2cce4c9\",\"preview\":{\"engineVersion\":\"0.1.0\",\"debtCount\":3,\"t"
+    "detalhe": "201 {\"caseId\":\"dc173656-c7d1-43d8-8bd7-0e2b706d92d1\",\"preview\":{\"engineVersion\":\"0.1.0\",\"debtCount\":3,\"t"
   },
   {
     "area": "seguranca",
     "nome": "nome de credor com unicode/emoji não gera 500",
     "ok": true,
-    "detalhe": "201 {\"caseId\":\"4168e7d6-5ba8-40e7-bac2-9fd1a0a28de0\",\"preview\":{\"engineVersion\":\"0.1.0\",\"debtCount\":3,\"t"
+    "detalhe": "201 {\"caseId\":\"75f0318c-e41c-464d-962c-47c34257eec5\",\"preview\":{\"engineVersion\":\"0.1.0\",\"debtCount\":3,\"t"
   },
   {
     "area": "seguranca",
@@ -309,13 +309,13 @@
     "area": "pedido",
     "nome": "criar pedido do Mapa",
     "ok": true,
-    "detalhe": "{\"orderId\":\"6ebd77db-897f-4bfd-87f0-4deb16ae088d\",\"totalCents\":2900,\"items\":[\"recovery_map\"],\"expiresAt\":1791078462765,\"pixCode\":\"DEMO-FOLEGO-FAKE_A7848483CCAA83A1-002900-NAO-E-UM-PIX-REAL\",\"status\":\""
+    "detalhe": "{\"orderId\":\"b166c544-5585-4349-ae14-34f4cf3afca4\",\"totalCents\":2900,\"items\":[\"recovery_map\"],\"expiresAt\":1791080941643,\"pixCode\":\"DEMO-FOLEGO-FAKE_1E5E9718C602E546-002900-NAO-E-UM-PIX-REAL\",\"status\":\""
   },
   {
     "area": "pedido",
     "nome": "mesma Idempotency-Key devolve o mesmo pedido",
-    "ok": "4c4c9312-189b-44b4-aedb-b33369ec3876",
-    "detalhe": "{\"orderId\":\"4c4c9312-189b-44b4-aedb-b33369ec3876\",\"totalCents\":2900,\"items\":[\"re | {\"orderId\":\"4c4c9312-189b-44b4-aedb-b33369ec3876\",\"totalCents\":2900,\"items\":[\"re"
+    "ok": "56ec40b8-0da8-4a77-82c6-4ad57c2887c6",
+    "detalhe": "{\"orderId\":\"56ec40b8-0da8-4a77-82c6-4ad57c2887c6\",\"totalCents\":2900,\"items\":[\"re | {\"orderId\":\"56ec40b8-0da8-4a77-82c6-4ad57c2887c6\",\"totalCents\":2900,\"items\":[\"re"
   },
   {
     "area": "validacao",
@@ -351,7 +351,7 @@
     "area": "negocio",
     "nome": "entrega DEPOIS de pagar é liberada",
     "ok": true,
-    "detalhe": "200 {\"generated\":{\"scripts\":{\"status\":\"ready\",\"source\":\"template\",\"content\":{\"held\":[{\"id\":\"d3\",\"aviso\":\"Esta dívida pode estar prescrita. Não pague nem n"
+    "detalhe": "200 {\"generated\":{\"scripts\":{\"status\":\"pending\",\"source\":null,\"content\":null}},\"input\":{\"asOf\":\"2026-10-03\",\"profile\":{\"netIncomeCents\":320000,\"fixedExpen"
   },
   {
     "area": "seguranca",
@@ -363,13 +363,13 @@
     "area": "pedido",
     "nome": "gera link de acesso em outro aparelho",
     "ok": true,
-    "detalhe": "200 {\"token\":\"XwMNH_apeKaeA73qQhLuZzip320CqHSVnbf7Hd0mEuw\",\"expiresAt\":1793668662882}"
+    "detalhe": "200 {\"token\":\"IjQ3aoOMbmecDjXQp26u0huGUOgqc2L6ixV4YmDErLo\",\"expiresAt\":1793671141719}"
   },
   {
     "area": "pedido",
     "nome": "link de acesso reabre o Mapa em outro navegador",
     "ok": true,
-    "detalhe": "200 {\"caseId\":\"22c2c225-0c11-409d-aa89-7d3a8876f5f6\",\"orderId\":\"6ebd77db-897f-4bfd-87f0-4deb16ae088d\",\"kind\":\"map\",\"expiresA"
+    "detalhe": "200 {\"caseId\":\"c1790bc4-e4b5-4615-b11b-ce62cc6ee5b4\",\"orderId\":\"b166c544-5585-4349-ae14-34f4cf3afca4\",\"kind\":\"map\",\"expiresA"
   },
   {
     "area": "seguranca",
@@ -477,7 +477,7 @@
     "area": "prumo",
     "nome": "pede código de acesso",
     "ok": true,
-    "detalhe": "200 {\"sent\":true,\"devCode\":\"512510\"}"
+    "detalhe": "200 {\"sent\":true,\"devCode\":\"812226\"}"
   },
   {
     "area": "prumo",
@@ -495,7 +495,7 @@
     "area": "prumo",
     "nome": "login com o código certo",
     "ok": true,
-    "detalhe": "200 {\"email\":\"qa1791076663620@exemplo.com\",\"subscription\":null,\"billing\":null,\"profile\":{\"displayName\":n"
+    "detalhe": "200 {\"email\":\"qa1791079142430@exemplo.com\",\"subscription\":null,\"billing\":null,\"profile\":{\"displayName\":n"
   },
   {
     "area": "seguranca",
@@ -513,13 +513,13 @@
     "area": "prumo",
     "nome": "conta sem assinatura ainda (sem plano)",
     "ok": true,
-    "detalhe": "{\"email\":\"qa1791076663620@exemplo.com\",\"subscription\":null,\"billing\":null,\"profile\":{\"displayName\":null,\"notifyDigest\":true,\"notifyReminders\":true,\"marketing\":true},\"role\":\"owner\",\"ownerEmail\":null}"
+    "detalhe": "{\"email\":\"qa1791079142430@exemplo.com\",\"subscription\":null,\"billing\":null,\"profile\":{\"displayName\":null,\"notifyDigest\":true,\"notifyReminders\":true,\"marketing\":true},\"role\":\"owner\",\"ownerEmail\":null}"
   },
   {
     "area": "prumo",
     "nome": "cria pedido de assinatura Ousado",
     "ok": true,
-    "detalhe": "201 {\"orderId\":\"3c9d689d-8d1d-448c-bbab-982440486e11\",\"totalCents\":3999,\"items\":[\"sub_ousado\"],\"expiresAt\":1791078464441,\"pixCode\":\"DEMO-FOLEGO-FAKE_6ADB4722414CF220-003999-NAO-E-UM-PIX-REAL\",\"status\":\"pe"
+    "detalhe": "201 {\"orderId\":\"07bd0a1a-c863-466f-a856-bab749107961\",\"totalCents\":3999,\"items\":[\"sub_ousado\"],\"expiresAt\":1791080943225,\"pixCode\":\"DEMO-FOLEGO-FAKE_F913E43D618CB1F4-003999-NAO-E-UM-PIX-REAL\",\"status\":\"pe"
   },
   {
     "area": "validacao",
@@ -537,7 +537,7 @@
     "area": "prumo",
     "nome": "assinatura ativa no plano Ousado",
     "ok": true,
-    "detalhe": "{\"plan\":\"ousado\",\"active\":true,\"periodEnd\":1793668664490,\"cancelAtPeriodEnd\":false}"
+    "detalhe": "{\"plan\":\"ousado\",\"active\":true,\"periodEnd\":1793671143265,\"cancelAtPeriodEnd\":false}"
   },
   {
     "area": "prumo",
@@ -579,13 +579,13 @@
     "area": "prumo",
     "nome": "cria dívida na conta",
     "ok": true,
-    "detalhe": "201 {\"id\":\"d3bfbd6c-db07-4ad3-8b3d-c632773af6f1\"}"
+    "detalhe": "201 {\"id\":\"22e89605-2d38-4668-95db-f6fa404d0af7\"}"
   },
   {
     "area": "prumo",
     "nome": "lista dívidas com plano de quitação",
     "ok": true,
-    "detalhe": "{\"debts\":[{\"id\":\"d3bfbd6c-db07-4ad3-8b3d-c632773af6f1\",\"name\":\"Banco QA\",\"initialCents\":1000000,\"balanceCents\":1000000,\"monthlyRateBps\":450,\"minPaymentCents\":50000,\"dueDay\":null,\"paidOff\":false}],\"tot"
+    "detalhe": "{\"debts\":[{\"virtual\":false,\"walletId\":null,\"id\":\"22e89605-2d38-4668-95db-f6fa404d0af7\",\"name\":\"Banco QA\",\"initialCents\":1000000,\"balanceCents\":1000000,\"monthlyRateBps\":450,\"minPaymentCents\":50000,\"due"
   },
   {
     "area": "prumo",
@@ -603,13 +603,13 @@
     "area": "prumo",
     "nome": "cria carteira",
     "ok": true,
-    "detalhe": "201 {\"id\":\"b05db101-2010-41a2-911f-5825c5bcdf42\"}"
+    "detalhe": "201 {\"id\":\"6f55939a-334c-4c5d-8c80-517840d3970b\"}"
   },
   {
     "area": "prumo",
     "nome": "cria lembrete",
     "ok": true,
-    "detalhe": "201 {\"id\":\"1b854bbb-e0fd-4bc4-b14f-15d3da40d764\"}"
+    "detalhe": "201 {\"id\":\"8a14cf41-ec9a-4b02-9c14-057bddc20655\"}"
   },
   {
     "area": "prumo",
@@ -675,7 +675,7 @@
     "area": "prumo",
     "nome": "indicações: código/link",
     "ok": true,
-    "detalhe": "{\"enabled\":true,\"percent\":10,\"code\":\"7q6w2vg7\",\"link\":\"https://folego.online/?ind=7q6w2vg7#/conta\",\"invited\":0,\"converted\":0,\"credits\":{\"available\":0,\"applied\":0},\"next\":null,\"recent\":[]}"
+    "detalhe": "{\"enabled\":true,\"percent\":10,\"code\":\"gmm37c4s\",\"link\":\"https://folego.online/?ind=gmm37c4s#/conta\",\"invited\":0,\"converted\":0,\"credits\":{\"available\":0,\"applied\":0},\"next\":null,\"recent\":[]}"
   },
   {
     "area": "prumo",
@@ -687,7 +687,7 @@
     "area": "negocio",
     "nome": "cancelamento: continua ativo até o fim do período",
     "ok": true,
-    "detalhe": "{\"plan\":\"ousado\",\"active\":true,\"periodEnd\":1793668664490,\"cancelAtPeriodEnd\":true}"
+    "detalhe": "{\"plan\":\"ousado\",\"active\":true,\"periodEnd\":1793671143265,\"cancelAtPeriodEnd\":true}"
   },
   {
     "area": "prumo",

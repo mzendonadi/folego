@@ -9,6 +9,7 @@ import { viewCoach, viewMercado } from './account-coach-views.js';
 import { viewPlano as viewPlanoBilling, viewPerfil } from './account-billing.js';
 import { viewIndicar } from './referral.js';
 import { viewCobrancas, viewCenarios } from './account-insight-views.js';
+import { viewContas } from './account-openfinance-views.js';
 import { PLANS, CATEGORIES, CATEGORY_LABEL, categorize, parseExtract } from '../vendor/engine.js';
 
 export const FEATURE_LABEL = { health: 'Nota de saúde financeira', debts: 'Dívidas com plano de quitação', reminders: 'Lembretes de contas por e-mail', ledger: 'Controle de gastos', import: 'Importar extrato', alerts: 'Alertas de limite', coach_limited: 'Treinador (3 dicas)', goals: 'Metas com aportes', coach: 'Treinador completo', simulator: 'Simulador de investimento', planner: 'Planejador com IA', household: 'Conta compartilhada com uma pessoa', recurring: 'Detector de assinaturas e cobranças recorrentes', scenarios: 'Simulador "e se...?" de cenários', ebook: 'eBook de presente no seu e-mail (50+ páginas)', journeys: 'Todas as jornadas do coach', market: 'Cenário econômico (Selic, inflação, CDI)', market_pro: 'Dólar e histórico de 12 meses' };
@@ -21,6 +22,7 @@ export const TABS = [
   { id: 'orcamento', label: 'Orçamento', group: 'Dinheiro' },
   { id: 'cobrancas', label: 'Cobranças', group: 'Dinheiro' },
   { id: 'carteiras', label: 'Carteiras', group: 'Dinheiro' },
+  { id: 'contas', label: 'Contas conectadas', needs: 'market_pro', group: 'Dinheiro' },
   { id: 'lembretes', label: 'Lembretes', group: 'Dinheiro' },
   { id: 'dividas', label: 'Dívidas', group: 'Dívidas e metas' },
   { id: 'metas', label: 'Metas', needs: 'goals', group: 'Dívidas e metas' },
@@ -548,6 +550,13 @@ export function viewCenariosTab(ctx) {
   return viewCenarios(ctx);
 }
 
-export const VIEWS = { cobrancas: viewCobrancas, cenarios: viewCenariosTab, indicar: viewIndicar, perfil: viewPerfil, familia: viewCompartilhar, coach: viewCoach, mercado: viewMercado, geral: viewGeral, lancamentos: viewLancamentos, orcamento: viewOrcamento, dividas: viewDividas, carteiras: viewCarteiras, lembretes: viewLembretes, metas: viewMetas, treinador: viewTreinador, simulador: viewSimulador, planejador: viewPlanejador, plano: viewPlano };
+export function viewContasTab(ctx) {
+  if (!ctx.has('market_pro')) {
+    return locked(ctx, { title: 'Contas conectadas (Open Finance)', feature: 'market_pro', blurb: 'Traga saldo e extrato das suas contas bancárias sem digitar nada, só para leitura, com o cheque especial acompanhado automaticamente.', bullets: ['Saldo e extrato de contas correntes e poupanças', 'Cada conta vira uma carteira, com o cheque especial (LIS) acompanhado', 'Você desconecta quando quiser'] });
+  }
+  return viewContas(ctx);
+}
+
+export const VIEWS = { contas: viewContasTab, cobrancas: viewCobrancas, cenarios: viewCenariosTab, indicar: viewIndicar, perfil: viewPerfil, familia: viewCompartilhar, coach: viewCoach, mercado: viewMercado, geral: viewGeral, lancamentos: viewLancamentos, orcamento: viewOrcamento, dividas: viewDividas, carteiras: viewCarteiras, lembretes: viewLembretes, metas: viewMetas, treinador: viewTreinador, simulador: viewSimulador, planejador: viewPlanejador, plano: viewPlano };
 export const NEEDS_MONTH = new Set(['geral', 'lancamentos', 'orcamento', 'metas']);
 export { monthNow };

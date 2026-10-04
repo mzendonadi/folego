@@ -6,13 +6,13 @@
  */
 export const CSP = [
   "default-src 'self'",
-  "script-src 'self' 'wasm-unsafe-eval' https://challenges.cloudflare.com",
+  "script-src 'self' 'wasm-unsafe-eval' https://challenges.cloudflare.com https://cdn.pluggy.ai",
   "style-src 'self'",
   "style-src-attr 'unsafe-inline'",
   "img-src 'self' data:",
   "font-src 'self'",
-  "connect-src 'self'",
-  "frame-src https://challenges.cloudflare.com",
+  "connect-src 'self' https://api.pluggy.ai",
+  "frame-src https://challenges.cloudflare.com https://connect.pluggy.ai",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",

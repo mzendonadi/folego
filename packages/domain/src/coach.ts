@@ -32,6 +32,10 @@ export interface CoachFacts {
   goalContribs7: number; // aportes em metas nos últimos 7 dias
   streakDays: number; // dias seguidos com lançamento (termina hoje ou ontem)
   recurringFlags?: number; // cobranças recorrentes que a pessoa já revisou (manter/cancelar)
+  /** Cheque especial (LIS) das contas bancárias: quanto está em uso, quanto custa por mês e se a pessoa acompanha algum. */
+  overdraftUsedCents?: number;
+  overdraftCostCents?: number;
+  overdraftTracked?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -87,6 +91,8 @@ export interface Mission {
   text: string;
   why: string;
   done: (f: CoachFacts) => boolean;
+  /** Missão que só faz sentido para quem tem a coisa (ex.: cheque especial). Sem isso ela some, em vez de travar o progresso. */
+  applies?: (f: CoachFacts) => boolean;
   tab?: string; // aba da conta onde se faz
 }
 export interface Program {
@@ -116,6 +122,7 @@ export const PROGRAMS: Program[] = [
       { id: 'd3', text: 'Registre 3 pagamentos de dívida', why: 'Constância vence valor: três meses seguidos viram rotina.', done: (f) => f.debtPaymentsCount >= 3, tab: 'dividas' },
       { id: 'd4', text: 'Reduza 10% do total que você devia', why: 'Os primeiros 10% são os mais difíceis; depois o plano ganha embalo.', done: (f) => f.debtInitialCents > 0 && (f.debtInitialCents - f.debtOwedCents) / f.debtInitialCents >= 0.1, tab: 'dividas' },
       { id: 'd5', text: 'Quite a primeira dívida', why: 'Libera a parcela dela para atacar a próxima (efeito bola de neve).', done: (f) => f.paidOffCount >= 1, tab: 'dividas' },
+      { id: 'd7', text: 'Zere o cheque especial da sua conta', why: 'É a dívida mais cara que existe (até 8% ao mês) e a única que você usa sem perceber. Sair dele economiza todo mês.', done: (f) => (f.overdraftUsedCents ?? 0) === 0, applies: (f) => Boolean(f.overdraftTracked), tab: 'carteiras' },
       { id: 'd6', text: 'Chegue a 50% do total quitado', why: 'Metade do caminho: os juros pesam cada vez menos.', done: (f) => f.debtInitialCents > 0 && (f.debtInitialCents - f.debtOwedCents) / f.debtInitialCents >= 0.5, tab: 'dividas' },
     ],
   },
@@ -155,7 +162,7 @@ export interface ProgramProgress {
 /** `manualDone` guarda missões que não dá para confirmar pelos dados (ex.: ter usado o simulador). */
 export function evaluatePrograms(f: CoachFacts, plan: CoachPlan, manualDone: ReadonlySet<string> = new Set()): ProgramProgress[] {
   return PROGRAMS.map((p) => {
-    const missions = p.missions.map((m) => ({ id: m.id, text: m.text, why: m.why, done: manualDone.has(m.id) || m.done(f), tab: m.tab ?? null }));
+    const missions = p.missions.filter((m) => !m.applies || m.applies(f) || manualDone.has(m.id)).map((m) => ({ id: m.id, text: m.text, why: m.why, done: manualDone.has(m.id) || m.done(f), tab: m.tab ?? null }));
     const doneCount = missions.filter((m) => m.done).length;
     return { id: p.id, title: p.title, promise: p.promise, minPlan: p.minPlan, locked: !planAtLeast(plan, p.minPlan), missions, doneCount, progressPct: Math.round((doneCount / missions.length) * 100), nextMission: missions.find((m) => !m.done)?.text ?? null };
   });

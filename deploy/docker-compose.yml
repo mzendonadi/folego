@@ -32,6 +32,9 @@ x-api-env: &api-env
   # Anti-robô (Cloudflare Turnstile). Sem as duas chaves, fica desligado.
   TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
   TURNSTILE_SECRET: ${TURNSTILE_SECRET:-}
+  # Contas conectadas (Open Finance) via Pluggy. Sem as duas chaves, ficam desligadas.
+  PLUGGY_CLIENT_ID: ${PLUGGY_CLIENT_ID:-}
+  PLUGGY_CLIENT_SECRET: ${PLUGGY_CLIENT_SECRET:-}
 
 services:
   postgres:

@@ -21,7 +21,7 @@ export const duration = (s) => {
 
 // ---------- rótulos ----------
 export const EMPLOYMENT = { clt: 'CLT', public_servant: 'Servidor público', inss_retiree: 'Aposentado/pensionista INSS', self_employed: 'Autônomo', other: 'Outro' };
-export const PRODUCT = { recovery_map: 'Mapa da Virada', defense_letters: 'Kit de Cartas', calendar_30d: 'Calendário 30 dias', extra_income_plan: 'Renda Extra', collection_translator: 'Tradutor de Cobrança', negotiation_scripts: 'Roteiros de negociação', sub_controle: 'Assinatura Controle', sub_ousado: 'Assinatura Ousado', sub_desbravador: 'Assinatura Desbravador' };
+export const PRODUCT = { recovery_map: 'Mapa da Virada', defense_letters: 'Kit de Cartas', calendar_30d: 'Calendário 30 dias', extra_income_plan: 'Renda Extra', collection_translator: 'Tradutor de Cobrança', guide_financing: 'Comparador de financiamento', guide_housebills: 'Renegociador de contas de casa', guide_forgotten: 'Dinheiro esquecido (guia)', guide_resume: 'Currículo por vaga', negotiation_scripts: 'Roteiros de negociação', sub_controle: 'Assinatura Controle', sub_ousado: 'Assinatura Ousado', sub_desbravador: 'Assinatura Desbravador' };
 export const SUB_STATUS = { em_dia: ['Em dia', 'ok'], vencendo: ['Vencendo', 'warn'], cancelando: ['Não renova', 'warn'], em_debito: ['Em débito', 'bad'], sem_plano: ['Sem plano', 'muted'] };
 export const PLAN = { controle: 'Controle', ousado: 'Ousado', desbravador: 'Desbravador' };
 export const VIEW = { landing: 'Página inicial', intake: 'Formulário', processing: 'Cálculo', preview: 'Resultado grátis', checkout: 'Pagamento', addon: 'Compra de complemento', delivery: 'Mapa completo', tools: 'Ferramentas grátis', translator: 'Tradutor', account: 'Assinatura', partner: 'Portal do parceiro' };

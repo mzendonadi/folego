@@ -37,6 +37,15 @@ export async function loadCatalog() {
     applyCatalog(c);
     site.salesPaused = Boolean(c.salesPaused);
     bindStaticPrices();
+    // A vitrine de guias só aparece na página inicial quando o dono liga ao menos um guia.
+    const open = (c.products ?? []).filter((p) => p.code.startsWith('guide_') && p.active).map((p) => p.code);
+    const box = document.getElementById('guias');
+    if (box) {
+      box.hidden = open.length === 0;
+      box.querySelectorAll('[data-guide]').forEach((a) => {
+        a.hidden = !open.includes(a.dataset.guide);
+      });
+    }
     showAnnouncement(c.announcement);
   } catch {
     /* segue com os valores padrão */

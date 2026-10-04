@@ -1,3 +1,5 @@
+import { GUIDED_CODES, GUIDED_PRODUCT, buildGuided, guidedKindOfCode } from './guided.ts';
+import type { GuidedKind } from './guided.ts';
 import { onSubscriptionPaid } from './referrals.ts';
 import { handleBillingEvent, registerRenewal } from './billing.ts';
 import type { Config } from './config.ts';
@@ -20,6 +22,8 @@ export interface Ctx {
   gateway: PaymentGateway;
   /** Ausente = e-mail desligado. */
   email?: EmailSender;
+  /** Ausente = contas conectadas (Open Finance) desligadas. */
+  openFinance?: import('./openfinance.ts').OpenFinanceProvider;
 }
 
 export const TERMS_VERSION = 'minuta-2026-09-26';
@@ -167,7 +171,7 @@ export async function orderView(q: Queryable, orderId: string): Promise<OrderVie
   };
 }
 
-export const OFFERABLE = ['recovery_map', 'defense_letters', 'calendar_30d', 'extra_income_plan', 'collection_translator'] as const;
+export const OFFERABLE = ['recovery_map', 'defense_letters', 'calendar_30d', 'extra_income_plan', 'collection_translator', ...GUIDED_CODES] as const;
 /** Preço fechado do Kit Completo (Mapa + Cartas + Calendário comprados juntos). O desconto é calculado aqui, nunca no navegador. */
 export const BUNDLE_PRICE_CENTS = 5990;
 
@@ -180,8 +184,12 @@ export async function createOrder(ctx: Ctx, args: { sessionId: string; caseId: s
   const codes = [...new Set(args.products)];
   if (codes.length === 0 || codes.some((c) => !(OFFERABLE as readonly string[]).includes(c))) throw new AppError(422, 'invalid_products', 'Produto inválido');
   const kindRow = await ctx.db.query<{ kind: string | null }>(`SELECT inputs->>'kind' AS kind FROM app.cases WHERE id = $1`, [args.caseId]);
-  const isTranslator = kindRow.rows[0]?.kind === 'translator';
-  if (isTranslator !== (codes.length === 1 && codes[0] === 'collection_translator')) throw new AppError(422, 'invalid_products', 'Este produto não se aplica a este atendimento');
+  // Atendimentos próprios (tradutor e guias): o caso só vende o produto dele; os outros casos não vendem esses produtos.
+  const caseKind = kindRow.rows[0]?.kind ?? null;
+  const standaloneCode = caseKind === 'translator' ? 'collection_translator' : caseKind?.startsWith('guided:') ? (GUIDED_PRODUCT[caseKind.slice(7) as GuidedKind] ?? null) : null;
+  const isTranslator = standaloneCode !== null;
+  const isStandaloneCode = (c: string) => c === 'collection_translator' || GUIDED_CODES.includes(c);
+  if (standaloneCode !== null ? !(codes.length === 1 && codes[0] === standaloneCode) : codes.some(isStandaloneCode)) throw new AppError(422, 'invalid_products', 'Este produto não se aplica a este atendimento');
   const ownedRows = await ctx.db.query<{ product_code: string }>(`SELECT product_code FROM app.entitlements WHERE case_id = $1 AND expires_at > now()`, [args.caseId]);
   const owned = new Set(ownedRows.rows.map((r) => r.product_code));
   if (codes.includes('recovery_map') && owned.has('recovery_map')) throw new AppError(409, 'already_paid', 'O Mapa deste diagnóstico já foi pago');
@@ -334,7 +342,7 @@ async function confirmPayment(ctx: Ctx, providerPaymentId: string): Promise<Webh
        ON CONFLICT (case_id, product_code) DO NOTHING`,
       [pay.case_id, pay.order_id],
     );
-    await q.query(`UPDATE app.deliverables SET status = 'ready', generated_at = now() WHERE case_id = $1 AND product_code IN ('recovery_map', 'collection_translator')`, [pay.case_id]);
+    await q.query(`UPDATE app.deliverables SET status = 'ready', generated_at = now() WHERE case_id = $1 AND (product_code IN ('recovery_map', 'collection_translator') OR product_code LIKE 'guide\\_%')`, [pay.case_id]);
     // Os roteiros de negociação fazem parte do Mapa (D-017): entram na fila do worker assim que o pagamento do Mapa é confirmado.
     await q.query(
       `INSERT INTO app.deliverables(case_id, product_code, status) SELECT $1, 'negotiation_scripts', 'pending' WHERE EXISTS (SELECT 1 FROM app.order_items WHERE order_id = $2 AND product_code = 'recovery_map') ON CONFLICT (case_id, product_code) DO NOTHING`,
@@ -529,14 +537,14 @@ export async function purgeExpired(ctx: Ctx, limit = 500): Promise<number> {
 //  - Outro aparelho ou cookie apagado: LINK DE ACESSO (token aleatório de 256 bits; só o hash fica no banco).
 // O caso é a "conta". Abrir o link dá acesso ao aparelho de quem abriu SEM tirar o dos outros (até 5 aparelhos).
 // ---------------------------------------------------------------------------
-export type AccessKind = 'map' | 'translator';
+export type AccessKind = 'map' | 'translator' | 'guided';
 export interface AccessInfo {
   caseId: string;
   orderId: string;
   kind: AccessKind;
   expiresAt: number;
 }
-const BASE_PRODUCT: Record<AccessKind, string> = { map: 'recovery_map', translator: 'collection_translator' };
+const BASE_PRODUCT: Record<AccessKind, string> = { map: 'recovery_map', translator: 'collection_translator', guided: 'guide\\_%' };
 
 interface AccessRow {
   order_id: string;
@@ -552,8 +560,8 @@ export async function meAccess(ctx: Ctx, sessionId: string, kind: AccessKind = '
     `SELECT o.id AS order_id, o.case_id, e.expires_at
        FROM app.orders o
        JOIN app.cases c ON c.id = o.case_id AND c.status <> 'purged'
-       JOIN app.entitlements e ON e.case_id = o.case_id AND e.product_code = $2 AND e.expires_at > now()
-       JOIN app.order_items oi ON oi.order_id = o.id AND oi.product_code = $2
+       JOIN app.entitlements e ON e.case_id = o.case_id AND e.product_code LIKE $2 AND e.expires_at > now()
+       JOIN app.order_items oi ON oi.order_id = o.id AND oi.product_code LIKE $2
       WHERE ${orderOf('o', '$1')} AND o.status = 'paid'
       ORDER BY o.paid_at DESC LIMIT 1`,
     [sessionId, base],
@@ -564,12 +572,12 @@ export async function meAccess(ctx: Ctx, sessionId: string, kind: AccessKind = '
 
 /** Acesso de um caso específico (usado ao abrir o link de acesso). */
 async function accessForCase(ctx: Ctx, caseId: string): Promise<AccessInfo | null> {
-  for (const kind of ['map', 'translator'] as const) {
+  for (const kind of ['map', 'translator', 'guided'] as const) {
     const r = await ctx.db.query<AccessRow>(
       `SELECT o.id AS order_id, o.case_id, e.expires_at
          FROM app.orders o
-         JOIN app.entitlements e ON e.case_id = o.case_id AND e.product_code = $2 AND e.expires_at > now()
-         JOIN app.order_items oi ON oi.order_id = o.id AND oi.product_code = $2
+         JOIN app.entitlements e ON e.case_id = o.case_id AND e.product_code LIKE $2 AND e.expires_at > now()
+         JOIN app.order_items oi ON oi.order_id = o.id AND oi.product_code LIKE $2
         WHERE o.case_id = $1 AND o.status = 'paid'
         ORDER BY o.paid_at DESC LIMIT 1`,
       [caseId, BASE_PRODUCT[kind]],
@@ -635,6 +643,65 @@ export async function createTranslation(ctx: Ctx, args: { sessionId: string; ipH
     return id;
   });
   return { caseId, preview };
+}
+
+// ---------------------------------------------------------------------------
+// Guias pagos sob medida (comparador de financiamento, contas de casa, dinheiro esquecido, currículo por vaga).
+// Mesmo desenho do tradutor: o que a pessoa digitou NÃO é guardado, só o resultado (prévia grátis e conteúdo completo).
+// ---------------------------------------------------------------------------
+export async function createGuided(ctx: Ctx, args: { sessionId: string; ipHash: Buffer | null; kind: GuidedKind; input: unknown; userAgent: string | null }): Promise<{ caseId: string; preview: unknown }> {
+  const { full, preview } = buildGuided(args.kind, args.input);
+  const code = GUIDED_PRODUCT[args.kind];
+  const caseId = await ctx.db.tx(async (q) => {
+    const created = await q.query<{ id: string }>(
+      `INSERT INTO app.cases(session_id, status, inputs, purge_after, product_kind) VALUES ($1, 'previewed', $2::jsonb, now() + interval '7 days', 'guided') RETURNING id`,
+      [args.sessionId, JSON.stringify({ kind: `guided:${args.kind}` })],
+    );
+    const id = created.rows[0]?.id;
+    if (!id) throw new Error('falha ao criar caso');
+    await q.query(`INSERT INTO app.diagnoses(case_id, engine_version, preview) VALUES ($1, $2, $3::jsonb)`, [id, `guided-${args.kind}-1`, JSON.stringify(preview)]);
+    await q.query(`INSERT INTO app.deliverables(case_id, product_code, status, content) VALUES ($1, $2, 'pending', $3::jsonb)`, [id, code, JSON.stringify(full)]);
+    const docId = await termsDocumentId(q);
+    await q.query(`INSERT INTO app.consents(case_id, legal_document_id, purpose, action, ip_hash, user_agent) VALUES ($1, $2, 'terms_of_service', 'grant', $3, $4)`, [id, docId, args.ipHash, args.userAgent ? args.userAgent.slice(0, 300) : null]);
+    await audit(q, `session:${args.sessionId}`, 'guided_created', 'case', id, { kind: args.kind });
+    return id;
+  });
+  return { caseId, preview };
+}
+
+export async function getGuided(ctx: Ctx, sessionId: string, orderId: string): Promise<{ kind: GuidedKind; content: unknown; accessUntil: number }> {
+  const o = await ctx.db.query<{ status: string; case_id: string }>(`SELECT status, case_id FROM app.orders o WHERE o.id = $1 AND ${orderOf('o', '$2')}`, [orderId, sessionId]);
+  const order = o.rows[0];
+  if (!order) throw notFound();
+  if (order.status !== 'paid') throw new AppError(402, 'payment_required', 'Pagamento ainda não confirmado');
+  const d = await ctx.db.query<{ product_code: string; content: unknown; expires_at: Date | string | null }>(
+    `SELECT d.product_code, d.content, e.expires_at FROM app.deliverables d
+       LEFT JOIN app.entitlements e ON e.case_id = d.case_id AND e.product_code = d.product_code AND e.expires_at > now()
+      WHERE d.case_id = $1 AND d.product_code LIKE 'guide\\_%' AND d.status = 'ready'`,
+    [order.case_id],
+  );
+  const row = d.rows[0];
+  const kind = row ? guidedKindOfCode(row.product_code) : null;
+  if (!row || !kind) throw new AppError(409, 'not_ready', 'O guia ainda está sendo preparado');
+  if (!row.expires_at) throw new AppError(403, 'access_expired', 'O acesso a este guia expirou');
+  return { kind, content: row.content, accessUntil: new Date(row.expires_at).getTime() };
+}
+
+/** Todos os guias que a sessão comprou e ainda valem (para "voltar ao que comprei"). */
+export async function listGuidedAccess(ctx: Ctx, sessionId: string): Promise<{ kind: GuidedKind; orderId: string; caseId: string; expiresAt: number }[]> {
+  const r = await ctx.db.query<{ order_id: string; case_id: string; expires_at: Date | string; product_code: string }>(
+    `SELECT o.id AS order_id, o.case_id, e.expires_at, e.product_code
+       FROM app.orders o
+       JOIN app.cases c ON c.id = o.case_id AND c.status <> 'purged'
+       JOIN app.entitlements e ON e.case_id = o.case_id AND e.product_code LIKE 'guide\\_%' AND e.expires_at > now()
+      WHERE ${orderOf('o', '$1')} AND o.status = 'paid'
+      ORDER BY o.paid_at DESC LIMIT 20`,
+    [sessionId],
+  );
+  return r.rows.flatMap((x) => {
+    const kind = guidedKindOfCode(x.product_code);
+    return kind ? [{ kind, orderId: x.order_id, caseId: x.case_id, expiresAt: new Date(x.expires_at).getTime() }] : [];
+  });
 }
 
 export async function getTranslation(ctx: Ctx, sessionId: string, orderId: string): Promise<{ analysis: TranslatorAnalysis; accessUntil: number }> {

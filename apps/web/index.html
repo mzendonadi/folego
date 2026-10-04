@@ -24,6 +24,9 @@
   <meta name="twitter:description" content="Diagnóstico na hora, sem cadastro. Você só paga se gostar do que viu.">
   <meta name="twitter:image" content="https://folego.online/assets/og-image.png">
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+  <link rel="manifest" href="site.webmanifest">
   <link rel="preload" href="assets/fonts/fraunces-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="assets/fonts/figtree-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="assets/styles.css">
@@ -58,8 +61,8 @@
     <div class="wrap header-inner">
       <a class="brand" href="#/" aria-label="Fôlego, início" data-nav="landing">
         <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
-          <circle cx="16" cy="16" r="12.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="63 16" transform="rotate(-62 16 16)"/>
-          <circle cx="16" cy="16" r="5.2" class="brand-dot"/>
+          <circle cx="16" cy="16" r="11.5" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-dasharray="56.05 16.2" transform="rotate(-62 16 16)"/><circle cx="13.51" cy="4.77" r="1.9" class="brand-puff"/>
+          <circle cx="16" cy="16" r="4.6" class="brand-dot"/>
         </svg>
         <span class="brand-word">fôlego</span>
       </a>
@@ -301,6 +304,20 @@
         </div>
       </section>
 
+      <section class="section" id="guias" aria-labelledby="guias-title" hidden>
+        <div class="wrap">
+          <p class="eyebrow">Mais soluções, sem assinatura</p>
+          <h2 id="guias-title">Guias sob medida</h2>
+          <p class="section-sub">Cada um começa com uma prévia grátis. Você só paga, por Pix e uma vez, se gostar do que viu.</p>
+          <div class="guide-cards">
+            <a class="guide-card" href="#/guia/financing" data-guide="guide_financing"><strong>Comparador de financiamento</strong><span>Compare propostas pelo custo de verdade (CET), não pela parcela.</span></a>
+            <a class="guide-card" href="#/guia/housebills" data-guide="guide_housebills"><strong>Renegociador de contas de casa</strong><span>Luz, água, gás, internet atrasados: plano de acordo, roteiro e carta.</span></a>
+            <a class="guide-card" href="#/guia/forgotten" data-guide="guide_forgotten"><strong>Dinheiro esquecido</strong><span>Onde procurar o que pode estar parado em seu nome, sem cair em golpe.</span></a>
+            <a class="guide-card" href="#/guia/resume" data-guide="guide_resume"><strong>Currículo por vaga</strong><span>Cole a vaga: o currículo sai ajustado ao que ela pede, sem inventar nada.</span></a>
+          </div>
+        </div>
+      </section>
+
       <section class="section section-tint" id="duvidas" aria-labelledby="faq-title">
         <div class="wrap faq-wrap">
           <header class="section-head">
@@ -406,13 +423,25 @@
       </div>
     </section>
 
+    <!-- ============================ GUIAS SOB MEDIDA ============================ -->
+    <section id="view-guided" data-view="guided" hidden aria-labelledby="guided-title">
+      <div class="wrap tools-wrap">
+        <header class="view-head">
+          <button class="btn btn-quiet btn-sm back-link" type="button" data-nav="landing"><svg class="icon" aria-hidden="true"><use href="#i-arrow-left"/></svg>Início</button>
+          <p class="eyebrow" id="guided-eyebrow">Sem cadastro</p>
+          <h1 id="guided-title" tabindex="-1">Guias sob medida</h1>
+        </header>
+        <div class="tools-layout" id="guided-root"></div>
+      </div>
+    </section>
+
     <!-- ============================ CONTA / ASSINATURA ============================ -->
     <section id="view-account" data-view="account" hidden aria-labelledby="account-title">
       <div class="wrap tools-wrap">
         <header class="view-head">
           <button class="btn btn-quiet btn-sm back-link" type="button" data-nav="landing"><svg class="icon" aria-hidden="true"><use href="#i-arrow-left"/></svg>Início</button>
           <p class="eyebrow">Fôlego · app de finanças</p>
-          <h1 id="account-title" tabindex="-1">Prumo</h1>
+          <h1 id="account-title" tabindex="-1"><svg class="prumo-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><line x1="16" y1="6" x2="16" y2="17" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><circle cx="16" cy="4" r="2.2" class="brand-puff"/><path d="M11.4 17.2h9.2v5.4L16 30l-4.6-7.4z" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><line x1="12.8" y1="21.6" x2="19.2" y2="21.6" class="prumo-groove" stroke-width="1.3" stroke-linecap="round"/></svg>Prumo</h1>
         </header>
         <div class="tools-layout" id="account-root"></div>
       </div>
@@ -446,7 +475,7 @@
     <div class="wrap footer-inner">
       <div class="footer-brand">
         <a class="brand" href="#/" data-nav="landing" aria-label="Fôlego, início">
-          <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><circle cx="16" cy="16" r="12.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="63 16" transform="rotate(-62 16 16)"/><circle cx="16" cy="16" r="5.2" class="brand-dot"/></svg>
+          <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><circle cx="16" cy="16" r="11.5" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-dasharray="56.05 16.2" transform="rotate(-62 16 16)"/><circle cx="13.51" cy="4.77" r="1.9" class="brand-puff"/><circle cx="16" cy="16" r="4.6" class="brand-dot"/></svg>
           <span class="brand-word">fôlego</span>
         </a>
         <p class="muted">folego.online</p>

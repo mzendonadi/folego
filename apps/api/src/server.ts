@@ -8,6 +8,7 @@ import type { Db } from './db.ts';
 import { AsaasGateway, FakeGateway } from './gateway.ts';
 import { ConsoleSender, ResendSender } from './email.ts';
 import type { PaymentGateway } from './gateway.ts';
+import { PluggyProvider } from './openfinance.ts';
 import { purgeExpired } from './services.ts';
 import { runWorker } from './generation/worker.ts';
 import { workerOptions } from './generation/setup.ts';
@@ -29,13 +30,14 @@ await ensureDefaultEbook(db).catch(() => false); // primeira subida: importa o e
 const gateway: PaymentGateway = config.asaas ? new AsaasGateway(config.asaas) : new FakeGateway(config.webhookSecret);
 const email = config.email ? new ResendSender(config.email) : (config.env !== 'production' && (config.leadsEnabled || config.subscriptionsEnabled) ? new ConsoleSender() : undefined);
 // RATE_LIMITS=relaxed só vale fora de produção (popular dados de exemplo sem esbarrar nos limites por IP).
-const app = await buildApp({ config, db, gateway, email, rateLimits: config.env !== 'production' && process.env.RATE_LIMITS === 'relaxed' ? 'relaxed' : 'strict' });
+const openFinance = config.openFinance ? new PluggyProvider(config.openFinance) : undefined;
+const app = await buildApp({ config, db, gateway, email, ...(openFinance ? { openFinance } : {}), rateLimits: config.env !== 'production' && process.env.RATE_LIMITS === 'relaxed' ? 'relaxed' : 'strict' });
 
 // Worker dentro do processo só em desenvolvimento (em produção é um container próprio: src/worker.ts).
 const workerControl = { stopped: false };
 if (config.workerInline) {
   const opts = workerOptions(config, (event) => app.log.info({ servico: 'worker', ...event }));
-  void runWorker({ db, config, gateway }, opts, workerControl, 1500);
+  void runWorker({ db, config, gateway, ...(openFinance ? { openFinance } : {}) }, opts, workerControl, 1500);
   app.log.info(`Worker embutido ativo. IA: ${opts.generator ? config.aiModel : 'desligada (modelos determinísticos)'}`);
 }
 

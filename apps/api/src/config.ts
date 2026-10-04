@@ -55,6 +55,10 @@ export interface Config {
   canceledPurgeDays: number;
   /** Programa de indicações (convites por e-mail e desconto para assinantes). */
   referralEnabled: boolean;
+  /** Agregador de Open Finance (Pluggy). Sem as duas chaves, as contas conectadas ficam desligadas. */
+  openFinance: { clientId: string; clientSecret: string; baseUrl: string } | null;
+  /** Endereço do widget de conexão do agregador (deve estar liberado na CSP). */
+  openFinanceWidgetUrl: string;
   /** Devolve o código de login no corpo da resposta (só para desenvolver). Exige EXPOSE_DEV_CODES=1 E ambiente de desenvolvimento: um NODE_ENV esquecido não basta. */
   exposeDevCodes: boolean;
   /** Cloudflare Turnstile (anti-robô). Sem as duas chaves fica desligado. */
@@ -96,6 +100,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
 
   return {
     env: mode,
+    openFinanceWidgetUrl: env.PLUGGY_CONNECT_URL ?? 'https://cdn.pluggy.ai/pluggy-connect/v2.8.0/pluggy-connect.js',
+    openFinance: env.PLUGGY_CLIENT_ID && env.PLUGGY_CLIENT_SECRET ? { clientId: env.PLUGGY_CLIENT_ID, clientSecret: env.PLUGGY_CLIENT_SECRET, baseUrl: env.PLUGGY_BASE_URL ?? 'https://api.pluggy.ai' } : null,
     exposeDevCodes: mode === 'development' && env.EXPOSE_DEV_CODES === '1',
     port: Number(env.PORT ?? 3000),
     host: env.HOST ?? '127.0.0.1',

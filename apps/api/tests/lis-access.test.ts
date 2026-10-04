@@ -150,3 +150,29 @@ test('link de acesso: no máximo 5 aparelhos por caso', async () => {
   const n = await db.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.case_access WHERE case_id = $1`, [created.json.caseId]);
   assert.equal(n.rows[0]!.n, '5');
 });
+
+test('LIS entra nas dívidas (plano de quitação) e no coach', async () => {
+  const c = client();
+  await subscribe(c, 'lis-coach@exemplo.com');
+  const w = await c('POST', '/api/account/wallets', { body: { name: 'Banco', kind: 'conta', openingBalanceCents: -40_000, overdraftLimitCents: 100_000, overdraftRateBps: 800 } });
+  assert.equal(w.status, 201);
+  const debts = await c('GET', '/api/account/debts');
+  const lis = debts.json.debts.find((d: any) => d.virtual);
+  assert.ok(lis, 'cheque especial aparece na lista de dívidas');
+  assert.equal(lis.balanceCents, 40_000);
+  assert.equal(lis.monthlyRateBps, 800);
+  assert.equal(debts.json.plan.focusId, lis.id, 'é a dívida mais cara: foco do plano');
+  assert.equal(debts.json.totals.owedCents, 40_000);
+  // virtual não se paga nem se remove pela lista de dívidas
+  assert.equal((await c('POST', `/api/account/debts/${lis.id}/payments`, { body: { amountCents: 1000 } })).status, 400);
+  const overview = await c('GET', '/api/account/coach/overview');
+  assert.equal(overview.json.focus.kind, 'alerta');
+  assert.match(overview.json.focus.text, /cheque especial/i);
+  const insights = await c('GET', '/api/account/coach');
+  assert.match(insights.json.insights[0].title, /cheque especial/i);
+  // quitou: sai das dívidas e o foco volta ao normal
+  await c('PUT', `/api/account/wallets/${w.json.id}`, { body: { openingBalanceCents: 10_000 } });
+  const after = await c('GET', '/api/account/debts');
+  assert.ok(!after.json.debts.some((d: any) => d.virtual));
+  assert.notEqual((await c('GET', '/api/account/coach/overview')).json.focus.kind, 'alerta');
+});

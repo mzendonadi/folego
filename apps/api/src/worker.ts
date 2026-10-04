@@ -8,6 +8,7 @@ import { AsaasGateway, FakeGateway } from './gateway.ts';
 import type { PaymentGateway } from './gateway.ts';
 import { ConsoleSender, ResendSender } from './email.ts';
 import { runWorker } from './generation/worker.ts';
+import { PluggyProvider } from './openfinance.ts';
 import { workerOptions } from './generation/setup.ts';
 
 const config = loadConfig();
@@ -33,7 +34,8 @@ const email = config.email ? new ResendSender(config.email) : config.env !== 'pr
 const opts = workerOptions(config, log);
 log({ evento: 'worker_iniciado', ia: opts.generator ? config.aiModel : 'desligada (modelos determinísticos)', tetoDiarioIA: config.aiMaxCallsPerDay, email: email ? email.name : 'NÃO configurado', pagamento: gateway.name });
 
-await runWorker({ db, config, gateway, email }, opts, control);
+const openFinance = config.openFinance ? new PluggyProvider(config.openFinance) : undefined;
+await runWorker({ db, config, gateway, email, ...(openFinance ? { openFinance } : {}) }, opts, control);
 await db.close();
 log({ evento: 'worker_encerrado' });
 process.exit(0);

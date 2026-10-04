@@ -3,7 +3,7 @@
 import { AppError } from './errors.ts';
 import type { Ctx } from './services.ts';
 import { num, todaySaoPaulo } from './services.ts';
-import { OBJECTIVES, goalTemplates, PROGRAMS, applyMethods, compareMonths, evaluatePrograms, healthScore, marketInsights, monthOf, planAtLeast, weekIndexOf, weeklyChallenges } from './engine.ts';
+import { formatBrl, OBJECTIVES, goalTemplates, PROGRAMS, applyMethods, compareMonths, evaluatePrograms, healthScore, marketInsights, monthOf, planAtLeast, weekIndexOf, weeklyChallenges } from './engine.ts';
 import type { CoachFacts, CoachPlan } from './engine.ts';
 import { requireFeature } from './subscriptions.ts';
 import { listDebts, monthLimits } from './account-debts.ts';
@@ -40,7 +40,12 @@ export async function loadCoachFacts(ctx: Ctx, subscriberId: string): Promise<{ 
   const spentBy = Object.fromEntries(cat.rows.map((r) => [r.category, num(r.total)]));
   const overLimitCount = Object.entries(limits).filter(([c, lim]) => (spentBy[c] ?? 0) > lim).length;
   const d = await listDebts(ctx, subscriberId);
+  const real = d.debts.filter((x) => !x.virtual);
   const open = d.debts.filter((x) => !x.paidOff && x.balanceCents > 0);
+  const lisOpen = open.filter((x) => x.virtual);
+  const lisUsed = lisOpen.reduce((s, x) => s + x.balanceCents, 0);
+  const lisCost = lisOpen.reduce((s, x) => s + Math.round((x.balanceCents * x.monthlyRateBps) / 10_000), 0);
+  const lisTracked = num((await q.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.wallets WHERE subscriber_id = $1 AND kind = 'conta' AND overdraft_limit_cents > 0`, [subscriberId])).rows[0]?.n ?? 0) > 0 || lisOpen.length > 0;
   const payments = await q.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.account_debt_payments WHERE subscriber_id = $1`, [subscriberId]);
   const facts: CoachFacts = {
     incomeCents: num(sums.rows[0]?.income ?? 0),
@@ -55,13 +60,16 @@ export async function loadCoachFacts(ctx: Ctx, subscriberId: string): Promise<{ 
     goalsCount: num(goals.rows[0]?.n ?? 0),
     goalContributions: num(contribs.rows[0]?.n ?? 0),
     savedCents: num(goals.rows[0]?.saved ?? 0) + Math.max(0, num(poup.rows[0]?.b ?? 0)),
-    debtsCount: d.debts.length,
+    debtsCount: real.length,
     openDebtsCount: open.length,
-    paidOffCount: d.debts.filter((x) => x.paidOff).length,
+    paidOffCount: real.filter((x) => x.paidOff).length,
     debtPaymentsCount: num(payments.rows[0]?.n ?? 0),
     debtOwedCents: d.debts.reduce((s, x) => s + x.balanceCents, 0),
     debtInitialCents: d.totals.initialCents,
-    debtMinPaymentsCents: d.totals.minPaymentsCents,
+    debtMinPaymentsCents: d.totals.minPaymentsCents + lisCost, // o juro mensal do cheque especial pesa como parcela
+    overdraftUsedCents: lisUsed,
+    overdraftCostCents: lisCost,
+    overdraftTracked: lisTracked,
     expensiveDebtsOpen: open.filter((x) => x.monthlyRateBps >= 300).length,
     debtPayments7: num(pay7.rows[0]?.n ?? 0),
     goalContribs7: num(gc7.rows[0]?.n ?? 0),
@@ -90,9 +98,13 @@ export async function coachOverview(ctx: Ctx, subscriberId: string) {
   // O foco do dia: a próxima missão da jornada em andamento; sem jornada, a parte mais fraca da nota.
   const running = journeys.find((j) => j.started && !j.complete && !j.locked);
   const weakest = [...health.parts].sort((a, b) => a.score / a.max - b.score / b.max)[0]!;
-  const focus = running?.nextMission
+  // Cheque especial em uso é a dívida mais cara e passa na frente de qualquer jornada.
+  const lisFocus = (facts.overdraftUsedCents ?? 0) > 0
+    ? { kind: 'alerta' as const, text: `Você está usando ${formatBrl(facts.overdraftUsedCents ?? 0)} do cheque especial, o que custa cerca de ${formatBrl(facts.overdraftCostCents ?? 0)} por mês de juros. Zerar isso é a primeira prioridade.`, tab: 'dividas', journey: null }
+    : null;
+  const focus = lisFocus ?? (running?.nextMission
     ? { kind: 'missao' as const, text: running.nextMission, tab: running.missions.find((m) => !m.done)?.tab ?? null, journey: running.title }
-    : { kind: 'nota' as const, text: weakest.tip, tab: null, journey: null };
+    : { kind: 'nota' as const, text: weakest.tip, tab: null, journey: null });
   const cmp = await ctx.db.query<{ m: string; category: string; total: string }>(
     `SELECT CASE WHEN to_char(occurred_on, 'YYYY-MM') = $2 THEN 'cur' ELSE 'prev' END AS m, category, (-sum(amount_cents))::text AS total
        FROM app.ledger_entries

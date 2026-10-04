@@ -392,7 +392,9 @@ export async function coach(ctx: Ctx, subscriberId: string) {
   if (!planHas(plan, 'coach') && !planHas(plan, 'coach_limited')) throw new AppError(403, 'plan_upgrade', 'Este recurso é de um plano acima do seu.');
   const today = todaySaoPaulo();
   const from = `${monthOf(new Date(Date.parse(`${today}T00:00:00Z`) - 200 * 86_400_000).toISOString().slice(0, 10))}-01`;
-  const insights = coachInsights(await loadLedger(ctx, subscriberId, from), await loadLimits(ctx, subscriberId), today);
+  // Cheque especial (LIS) em uso vem primeiro: é o que mais custa.
+  const lis = (await walletOverdraftAlerts(ctx, subscriberId)).map((a, i) => ({ id: `lis-${i}`, title: a.title, detail: a.detail }));
+  const insights = [...lis, ...coachInsights(await loadLedger(ctx, subscriberId, from), await loadLimits(ctx, subscriberId), today)];
   const full = planHas(plan, 'coach');
   return { insights: full ? insights : insights.slice(0, 3), limited: !full && insights.length > 3 };
 }

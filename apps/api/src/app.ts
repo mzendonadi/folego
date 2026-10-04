@@ -5,7 +5,7 @@ import rateLimit from '@fastify/rate-limit';
 import staticPlugin from '@fastify/static';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { ZodError } from 'zod';
+import { ZodError, z } from 'zod';
 import type { Config } from './config.ts';
 import type { Db } from './db.ts';
 import { FakeGateway } from './gateway.ts';
@@ -31,8 +31,10 @@ import { deepHealth } from './health.ts';
 import { eventSchema, recordEvent } from './admin/events.ts';
 import { publicCatalog } from './admin/manage.ts';
 import { refreshRuntime } from './runtime.ts';
-import { accessSchema, addEntriesSchema, cancelSchema, contributionSchema, createCaseSchema, entryWalletSchema, accountDebtSchema, accountDebtPatchSchema, debtPaymentSchema, monthLimitSchema, plannerSchema, objectiveSchema, inviteSchema, checkoutSchema, profileSchema, referralLeadSchema, referralInviteSchema, recurringDecisionSchema, reminderPatchSchema, reminderSchema, walletSchema, walletPatchSchema, createOrderSchema, emailLinkSchema, emailOnlySchema, goalSchema, incomeInterviewSchema, leadSchema, loginCodeSchema, newPartnerSchema, partnerLoginSchema, partnerStatusSchema, setCategorySchema, setLimitSchema, simulateSchema, subscriptionOrderSchema, toggleIncomeTaskSchema, translationSchema, uuidParam, monthParam } from './schemas.ts';
+import { accessSchema, addEntriesSchema, cancelSchema, contributionSchema, createCaseSchema, entryWalletSchema, accountDebtSchema, accountDebtPatchSchema, debtPaymentSchema, monthLimitSchema, plannerSchema, objectiveSchema, inviteSchema, checkoutSchema, profileSchema, referralLeadSchema, referralInviteSchema, recurringDecisionSchema, reminderPatchSchema, reminderSchema, walletSchema, walletPatchSchema, createOrderSchema, emailLinkSchema, emailOnlySchema, goalSchema, incomeInterviewSchema, leadSchema, loginCodeSchema, newPartnerSchema, partnerLoginSchema, partnerStatusSchema, setCategorySchema, setLimitSchema, simulateSchema, subscriptionOrderSchema, toggleIncomeTaskSchema, translationSchema, guidedSchema, uuidParam, monthParam } from './schemas.ts';
 import { EngineInputError } from './engine.ts';
+import { GUIDED_KINDS } from './guided.ts';
+import * as openFinance from './openfinance.ts';
 import { CSP } from './security.ts';
 import * as svc from './services.ts';
 import type { Ctx } from './services.ts';
@@ -46,6 +48,8 @@ export interface AppDeps {
   gateway: PaymentGateway;
   /** Sem isto, o envio de e-mail fica desligado. */
   email?: EmailSender;
+  /** Ausente = contas conectadas (Open Finance) desligadas. */
+  openFinance?: import('./openfinance.ts').OpenFinanceProvider;
   /** 'relaxed' só para testes que criam muitas requisições do mesmo IP. */
   rateLimits?: 'strict' | 'relaxed';
 }
@@ -144,6 +148,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     return id;
   };
   const idParam = (value: unknown): string => uuidParam.parse(value);
+  const guidedKindParam = z.enum(GUIDED_KINDS);
 
   // ---------- rotas ----------
   // Saúde "profunda" para o monitoramento externo: banco, worker, fila, webhooks, backup e disco. 503 = algo precisa de atenção.
@@ -201,6 +206,19 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     return reply.status(201).send(created);
   });
 
+  // Guias pagos sob medida: prévia grátis (POST) e conteúdo completo depois do pagamento (GET).
+  app.post('/api/guided/:kind', { config: { rateLimit: { max: 12 * scale, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const kind = guidedKindParam.parse((req.params as { kind: string }).kind);
+    const body = guidedSchema.parse(req.body);
+    const sessionId = await createSession(req, reply);
+    const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null;
+    return reply.status(201).send(await svc.createGuided(ctx, { sessionId, ipHash: ipHash(req), kind, input: body.input, userAgent }));
+  });
+  app.get('/api/orders/:id/guided', async (req) => {
+    const sessionId = await requireSession(req);
+    return svc.getGuided(ctx, sessionId, idParam((req.params as { id: string }).id));
+  });
+
   app.get('/api/orders/:id/translation', async (req) => {
     const sessionId = await requireSession(req);
     return svc.getTranslation(ctx, sessionId, idParam((req.params as { id: string }).id));
@@ -237,7 +255,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     return reply.status(204).send();
   });
 
-  app.get('/api/features', async () => ({ email: Boolean(deps.email), leads: config.leadsEnabled, subscriptions: config.subscriptionsEnabled && Boolean(deps.email), referrals: config.referralEnabled && Boolean(deps.email), turnstileSiteKey: turnstileEnabled(config) ? config.turnstileSiteKey : null }));
+  app.get('/api/features', async () => ({ email: Boolean(deps.email), leads: config.leadsEnabled, subscriptions: config.subscriptionsEnabled && Boolean(deps.email), referrals: config.referralEnabled && Boolean(deps.email), openFinance: Boolean(deps.openFinance), turnstileSiteKey: turnstileEnabled(config) ? config.turnstileSiteKey : null }));
 
 
   // Manda o link de acesso por e-mail. O endereço é usado para enviar e descartado (não é gravado).
@@ -487,6 +505,19 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
   app.post('/api/account/coach/objective', async (req) => program.setObjective(ctx, await requireSubscriber(req), objectiveSchema.parse(req.body).objective));
   app.get('/api/account/goal-templates', async (req) => program.goalTemplatesFor(ctx, await requireSubscriber(req)));
+  // Contas conectadas (Open Finance): só leitura, plano Desbravador, só com o serviço ligado no servidor.
+  app.get('/api/account/openfinance', async (req) => openFinance.listConnections(ctx, await requireSubscriber(req)));
+  app.post('/api/account/openfinance/connect-token', { config: { rateLimit: { max: 10 * scale, timeWindow: '10 minutes' } } }, async (req) => openFinance.connectToken(ctx, await requireSubscriber(req)));
+  app.post('/api/account/openfinance/connections', { config: { rateLimit: { max: 10 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => {
+    const { itemId, acceptConsent } = z.strictObject({ itemId: z.string().min(8).max(100).regex(/^[A-Za-z0-9-]+$/), acceptConsent: z.literal(true) }).parse(req.body);
+    void acceptConsent;
+    return reply.status(201).send(await openFinance.addConnection(ctx, await requireSubscriber(req), itemId));
+  });
+  app.post('/api/account/openfinance/connections/:id/sync', { config: { rateLimit: { max: 6 * scale, timeWindow: '10 minutes' } } }, async (req) => openFinance.syncNow(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id)));
+  app.delete('/api/account/openfinance/connections/:id', async (req, reply) => {
+    await openFinance.revokeConnection(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id));
+    return reply.status(204).send();
+  });
   app.get('/api/account/market', async (req) => program.marketView(ctx, await requireSubscriber(req)));
   // Carteiras e lembretes
   app.get('/api/account/wallets', async (req) => extras.listWallets(ctx, await requireSubscriber(req)));
@@ -523,7 +554,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // Voltar ao Mapa: pelo cookie (mesmo navegador) ou pelo link de acesso (outro aparelho). Sem cadastro, sem senha.
   app.get('/api/me', async (req) => {
     const id = await svc.findSession(ctx, req.cookies[SESSION_COOKIE]);
-    return { access: id ? await svc.meAccess(ctx, id) : null, translator: id ? await svc.meAccess(ctx, id, 'translator') : null };
+    return { access: id ? await svc.meAccess(ctx, id) : null, translator: id ? await svc.meAccess(ctx, id, 'translator') : null, guided: id ? await svc.listGuidedAccess(ctx, id) : [] };
   });
 
   app.post('/api/orders/:id/access-link', { config: { rateLimit: { max: 10 * scale, timeWindow: '1 minute' } } }, async (req) => {

@@ -111,6 +111,9 @@ await copyFile(rel('robots.txt'), path.join(dist, 'robots.txt'));
 await copyFile(rel('robots-open.txt'), path.join(dist, 'robots-open.txt'));
 await copyFile(rel('sitemap.xml'), path.join(dist, 'sitemap.xml'));
 await copyFile(rel('assets/og-image.png'), path.join(dist, 'assets/og-image.png'));
+// Identidade: ícones do app, favicon em PNG e manifesto (instalar na tela inicial)
+for (const n of ['apple-touch-icon.png', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'favicon-32.png']) await copyFile(rel(`assets/${n}`), path.join(dist, `assets/${n}`));
+await copyFile(rel('site.webmanifest'), path.join(dist, 'site.webmanifest'));
 
 const css = await readFile(rel('assets/styles.css'));
 const cssHash = createHash('sha256').update(css).digest('hex').slice(0, 10);

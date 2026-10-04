@@ -212,6 +212,7 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
         if (id === 'coach') ctx.overview = await api.getCoachOverview();
         if (id === 'mercado') ctx.market = await api.getMarket();
         if (id === 'cobrancas') ctx.recurring = await api.getRecurring();
+        if (id === 'contas' && ctx.has('market_pro')) ctx.of = await api.getOpenFinance().catch(() => ({ enabled: false, connections: [] }));
         if (id === 'cenarios' && ctx.has('scenarios')) ctx.scenarioBase = await api.getScenarioBase();
         if (id === 'indicar') ctx.referrals = await api.getReferrals();
         if (id === 'familia') ctx.household = await api.getHousehold();

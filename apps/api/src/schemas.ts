@@ -50,9 +50,10 @@ export const createCaseSchema = z.object({
 export const createOrderSchema = z.object({
   caseId: z.string().uuid(),
   withLetters: z.boolean().default(false),
-  products: z.array(z.enum(['recovery_map', 'defense_letters', 'calendar_30d', 'extra_income_plan', 'collection_translator'])).min(1).max(4).optional(),
+  products: z.array(z.enum(['recovery_map', 'defense_letters', 'calendar_30d', 'extra_income_plan', 'collection_translator', 'guide_financing', 'guide_housebills', 'guide_forgotten', 'guide_resume'])).min(1).max(4).optional(),
 });
 
+export const guidedSchema = z.strictObject({ input: z.unknown(), acceptTerms: z.literal(true) });
 export const translationSchema = z.object({ text: z.string().trim().min(8).max(4000), acceptTerms: z.literal(true) });
 
 export const emailLinkSchema = z.object({ email: z.string().trim().toLowerCase().email().max(200) });
