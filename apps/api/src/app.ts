@@ -30,6 +30,7 @@ import { verifyTurnstile, turnstileEnabled } from './turnstile.ts';
 import { deepHealth } from './health.ts';
 import { eventSchema, recordEvent } from './admin/events.ts';
 import { publicCatalog } from './admin/manage.ts';
+import * as redo from './redo.ts';
 import { refreshRuntime } from './runtime.ts';
 import { accessSchema, addEntriesSchema, cancelSchema, contributionSchema, createCaseSchema, entryWalletSchema, accountDebtSchema, accountDebtPatchSchema, debtPaymentSchema, monthLimitSchema, plannerSchema, objectiveSchema, inviteSchema, checkoutSchema, profileSchema, referralLeadSchema, referralInviteSchema, recurringDecisionSchema, reminderPatchSchema, reminderSchema, walletSchema, walletPatchSchema, createOrderSchema, emailLinkSchema, emailOnlySchema, goalSchema, incomeInterviewSchema, leadSchema, loginCodeSchema, newPartnerSchema, partnerLoginSchema, partnerStatusSchema, setCategorySchema, setLimitSchema, simulateSchema, subscriptionOrderSchema, toggleIncomeTaskSchema, translationSchema, guidedSchema, uuidParam, monthParam } from './schemas.ts';
 import { EngineInputError } from './engine.ts';
@@ -218,6 +219,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     const sessionId = await requireSession(req);
     return svc.getGuided(ctx, sessionId, idParam((req.params as { id: string }).id));
   });
+
+  // Refazer com novos dados dentro do prazo de acesso (30 dias por padrão): não cobra de novo e não muda a data final.
+  const redoLimit = { config: { rateLimit: { max: 10 * scale, timeWindow: '1 minute' } } };
+  app.post('/api/orders/:id/redo/map', redoLimit, async (req) => redo.redoMap(ctx, await requireSession(req), idParam((req.params as { id: string }).id), req.body));
+  app.post('/api/orders/:id/redo/translation', redoLimit, async (req) => redo.redoTranslator(ctx, await requireSession(req), idParam((req.params as { id: string }).id), req.body));
+  app.post('/api/orders/:id/redo/guided', redoLimit, async (req) => redo.redoGuided(ctx, await requireSession(req), idParam((req.params as { id: string }).id), req.body));
 
   app.get('/api/orders/:id/translation', async (req) => {
     const sessionId = await requireSession(req);

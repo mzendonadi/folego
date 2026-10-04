@@ -13,6 +13,7 @@ import { audit } from '../services.ts';
 import { adminLogout, adminOf, can, changePassword, completeSetup, releasePasswordReset, requestSetupCode, passwordLogin, requirePermission } from './auth.ts';
 import type { AdminUser } from './auth.ts';
 import * as campaigns from './campaigns.ts';
+import * as access from './access.ts';
 import * as dispatch from './dispatch.ts';
 import * as customers from './customers.ts';
 import * as manage from './manage.ts';
@@ -333,6 +334,23 @@ export function registerGestao(app: FastifyInstance, deps: AdminRouteDeps): void
   app.delete(`${P}/parcerias/campanhas/:id`, async (req) => {
     const a = await admin(req, 'parcerias');
     return partners.removeCampaign(ctx, who(a), idParam((req.params as { id: string }).id));
+  });
+
+  // ---------- acessos (prazo de 30 dias e refazer) ----------
+  app.get(`${P}/acessos`, async (req) => {
+    await admin(req, 'assinaturas');
+    const q = req.query as { filtro?: string; produto?: string };
+    const filter = q.filtro === 'vencendo' || q.filtro === 'vencidos' || q.filtro === 'todos' ? q.filtro : 'ativos';
+    return access.overview(ctx, { filter, product: q.produto && /^[a-z_0-9]{3,40}$/.test(q.produto) ? q.produto : undefined, page: pageQuery(req.query) });
+  });
+  app.post(`${P}/acessos/:id/prorrogar`, async (req) => {
+    const a = await admin(req, 'assinaturas');
+    const { days } = z.strictObject({ days: z.number().int().min(1).max(365) }).parse(req.body);
+    return access.extend(ctx, a.id, idParam((req.params as { id: string }).id), days);
+  });
+  app.post(`${P}/acessos/:id/encerrar`, async (req) => {
+    const a = await admin(req, 'assinaturas');
+    return access.endNow(ctx, a.id, idParam((req.params as { id: string }).id));
   });
 
   // ---------- produtos e preços ----------

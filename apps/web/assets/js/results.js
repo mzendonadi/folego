@@ -11,7 +11,8 @@ import { strategiesSection } from './strategies.js';
 import { kindText } from './copy.js';
 import { leadsSection } from './leads.js';
 import { referralCard } from './referral.js';
-import { CATALOG, priceLabel } from './catalog.js';
+import { CATALOG, priceLabel, daysOf } from './catalog.js';
+import { accessBanner } from './access-banner.js';
 
 // ---------- componentes ----------
 export function gauge(score, band, { small = false } = {}) {
@@ -155,7 +156,7 @@ export function renderPreview(root, preview, { onBuy, onWipe }) {
     el('h2', { id: 'decision-title' }, 'Mapa da Virada'),
     el('p', { class: 'price price-sm' }, el('span', { class: 'price-cur' }, 'R$'), ` ${Math.floor(CATALOG.recovery_map.cents / 100)}`, el('span', { class: 'price-cents' }, `,${String(CATALOG.recovery_map.cents % 100).padStart(2, '0')}`)),
     el('p', { class: 'muted' }, 'no Pix, uma vez só. Você só paga porque viu o que está acima.'),
-    tickList(['Ordem completa de pagamento', 'Orçamento do mês e linha do tempo', 'Roteiros de negociação por credor', 'PDF para guardar · acesso por 30 dias']),
+    tickList(['Ordem completa de pagamento', 'Orçamento do mês e linha do tempo', 'Roteiros de negociação por credor', `PDF para guardar · ${daysOf('recovery_map')} dias de acesso e direito de refazer com dados novos`]),
     buy(),
     el('p', { class: 'fine' }, 'Não gostou? Sem problema: é só fechar a página. Nada é cobrado.'),
     el('button', { class: 'btn btn-quiet btn-sm', type: 'button', 'data-wipe': '' }, icon('trash'), 'Apagar meus dados agora'),
@@ -192,7 +193,7 @@ function section(id, title, ...children) {
   return el('section', { class: 'card d-section', id, 'aria-labelledby': `${id}-t` }, el('h2', { id: `${id}-t` }, title), ...children);
 }
 
-export function renderDelivery(root, { input, diagnosis: d, items, generated, extras = {}, strategies = null, accessUntil, lettersEligible = 0, leads = null }, { onLead = async () => {}, onLeadRevoke = async () => {}, onInviteFriend = null, onWipe, onAddon = () => {}, makeLink = async () => '', sendEmail = null, onIncomeInterview = async () => {}, onIncomeTask = async () => {} }) {
+export function renderDelivery(root, { input, diagnosis: d, items, generated, extras = {}, strategies = null, accessUntil, lettersEligible = 0, leads = null }, { onLead = async () => {}, onLeadRevoke = async () => {}, onInviteFriend = null, onWipe, onAddon = () => {}, makeLink = async () => '', sendEmail = null, onIncomeInterview = async () => {}, onIncomeTask = async () => {}, onRedo = null }) {
   const debtById = new Map(input.debts.map((x) => [x.id, x]));
   const diagById = new Map(d.debts.map((x) => [x.debtId, x]));
   const band = d.health.band;
@@ -202,7 +203,7 @@ export function renderDelivery(root, { input, diagnosis: d, items, generated, ex
   const header = el(
     'header',
     { class: 'd-head' },
-    el('div', {}, el('p', { class: 'eyebrow' }, 'Seu Mapa da Virada'), el('h1', { id: 'delivery-title', tabindex: '-1' }, 'Aqui está o seu roteiro'), el('p', { class: 'section-sub' }, 'Feito com os números que você contou. Acesso liberado por 30 dias.')),
+    el('div', {}, el('p', { class: 'eyebrow' }, 'Seu Mapa da Virada'), el('h1', { id: 'delivery-title', tabindex: '-1' }, 'Aqui está o seu roteiro'), el('p', { class: 'section-sub' }, 'Feito com os números que você contou. Mudou alguma coisa? Refaça com os dados novos quando quiser, dentro do prazo.')),
     el(
       'div',
       { class: 'd-actions no-print' },
@@ -329,7 +330,7 @@ export function renderDelivery(root, { input, diagnosis: d, items, generated, ex
   // replaceChildren() é API nativa: diferente do nosso el(), ela NÃO ignora null/undefined — transforma em texto "null" na tela. Por isso filtramos aqui.
   root.replaceChildren(
     ...[
-      header, acesso, nav, resumo, ordem, orcamento, linha, estrategias, roteiros, cartas, calendario, renda, complementos, propostas, indicar, dinheiro,
+      header, accessBanner({ accessUntil, what: 'Mapa', onRedo }), acesso, nav, resumo, ordem, orcamento, linha, estrategias, roteiros, cartas, calendario, renda, complementos, propostas, indicar, dinheiro,
       el('p', { class: 'fine' }, 'Estimativas educativas, calculadas com o que você informou. O Fôlego não é escritório de advocacia, banco ou consultoria de investimentos, e não negocia por você.'),
     ].filter(Boolean),
   );

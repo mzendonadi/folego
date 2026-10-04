@@ -1066,3 +1066,24 @@ fieldset.offer-box { min-inline-size: 0; }
 .tool-form h3 { margin: var(--s2) 0 0; }
 .tool-form { grid-template-columns: minmax(0, 1fr); }
 .tool-form > .tool-form { justify-self: stretch; }
+
+/* Contagem regressiva do acesso de 30 dias (Mapa, tradutor e guias). */
+.access-banner { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--s3) var(--s5); align-items: center; padding: var(--s4) var(--s5); border: 1px solid var(--line); border-left-width: 6px; border-radius: var(--radius); background: var(--surface); margin: 0 0 var(--s4); }
+.access-banner.tone-ok { border-left-color: var(--primary); }
+.access-banner.tone-attention { border-left-color: var(--amber, #a55f00); background: var(--amber-bg); }
+.access-banner.tone-critical { border-left-color: var(--danger-ink); background: var(--danger-bg); }
+.ab-count { display: grid; justify-items: center; line-height: 1; min-width: 5.5rem; }
+.ab-count strong { font-family: var(--font-display); font-size: 2.75rem; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--primary); }
+.tone-attention .ab-count strong { color: var(--amber-ink); }
+.tone-critical .ab-count strong { color: var(--danger-ink); }
+.ab-count span { font-size: .8125rem; color: var(--muted); margin-top: 6px; text-align: center; }
+.ab-body { display: grid; gap: 6px; min-width: 0; }
+.ab-title { margin: 0; font-weight: 700; }
+.ab-body .fine { margin: 0; }
+.ab-meter { height: 8px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.ab-meter > span { display: block; height: 100%; border-radius: 999px; background: var(--primary); transition: width .6s var(--ease); }
+.tone-attention .ab-meter > span { background: var(--amber, #a55f00); }
+.tone-critical .ab-meter > span { background: var(--danger-ink); }
+.access-banner > .btn { grid-column: 1 / -1; justify-self: start; }
+@media (min-width: 720px) { .access-banner > .btn { grid-column: auto; grid-row: 1; grid-column: 3; } .access-banner { grid-template-columns: auto minmax(0, 1fr) auto; } }
+@media (prefers-reduced-motion: reduce) { .ab-meter > span { transition: none; } }

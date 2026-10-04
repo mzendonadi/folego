@@ -70,9 +70,9 @@ export async function findSession(ctx: Ctx, token: string | undefined): Promise<
 }
 
 /** Quem pode abrir o caso: a sessão que o criou OU uma que abriu o link de acesso (vários aparelhos ao mesmo tempo). */
-const caseOf = (c: string, p: string) => `(${c}.session_id = ${p} OR EXISTS (SELECT 1 FROM app.case_access ca WHERE ca.case_id = ${c}.id AND ca.session_id = ${p}))`;
+export const caseOf = (c: string, p: string) => `(${c}.session_id = ${p} OR EXISTS (SELECT 1 FROM app.case_access ca WHERE ca.case_id = ${c}.id AND ca.session_id = ${p}))`;
 /** O mesmo para um pedido (o pedido é do caso). */
-const orderOf = (o: string, p: string) => `(${o}.session_id = ${p} OR EXISTS (SELECT 1 FROM app.case_access ca WHERE ca.case_id = ${o}.case_id AND ca.session_id = ${p}))`;
+export const orderOf = (o: string, p: string) => `(${o}.session_id = ${p} OR EXISTS (SELECT 1 FROM app.case_access ca WHERE ca.case_id = ${o}.case_id AND ca.session_id = ${p}))`;
 
 export async function ownedCase(q: Queryable, sessionId: string, caseId: string): Promise<void> {
   const r = await q.query(`SELECT 1 FROM app.cases c WHERE c.id = $1 AND ${caseOf('c', '$2')} AND c.status <> 'purged'`, [caseId, sessionId]);

@@ -221,3 +221,7 @@
 .bo-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .bo-chips .check { margin: 0; }
 .bo-filters > .input, .bo-filters > select { flex: 1 1 170px; max-width: 260px; min-width: 150px; }
+
+.bo-table td.nowrap { white-space: nowrap; }
+.bo-table .bo-badge { white-space: nowrap; }
+@media (min-width: 1100px) { .bo-table td .bo-actions { flex-wrap: nowrap; justify-content: flex-end; } }

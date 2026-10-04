@@ -33,6 +33,9 @@ export const CATALOG = {
   },
 };
 
+/** Dias de acesso depois de pagar (o dono define em "Produtos e preços"; 30 é o padrão). */
+export const daysOf = (code) => CATALOG[code]?.days ?? 30;
+
 /** Preço fechado do Kit Completo (Mapa + Cartas + Calendário). Só exibição: o servidor calcula o que vale. */
 export const BUNDLE = { cents: 5990 };
 
@@ -48,6 +51,7 @@ export function applyCatalog(server) {
     if (plan) plan.priceCents = p.priceCents;
     item.cents = p.priceCents;
     item.active = p.active;
+    if (Number.isInteger(p.accessDays)) item.days = p.accessDays;
     if (p.name) item.name = p.name;
   }
   if (Number.isInteger(server?.bundlePriceCents)) BUNDLE.cents = server.bundlePriceCents;

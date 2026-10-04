@@ -1,7 +1,8 @@
 // Tradutor de cobrança: cole a mensagem, veja a leitura rápida (grátis) e libere a explicação completa por Pix.
 import { el, icon, toast, copyText } from './dom.js';
 import { brl } from './format.js';
-import { CATALOG } from './catalog.js';
+import { CATALOG, daysOf } from './catalog.js';
+import { accessBanner } from './access-banner.js';
 
 const RISK = {
   high: { tone: 'critical', label: 'Risco alto' },
@@ -17,10 +18,14 @@ const fmtDate = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString('pt-BR')
 export function renderTranslator(root, ctx) {
   const { api, state } = ctx;
 
-  function drawInput(prefill = '') {
+  /** redo = { orderId, result }: refazendo uma tradução já paga (mesmo prazo, sem pagar de novo). */
+  function drawInput(prefill = '', redo = null) {
     const area = el('textarea', { class: 'input', id: 'tr-text', rows: '8', maxlength: '4000', placeholder: 'Cole aqui a mensagem, o e-mail ou o texto da cobrança…', 'aria-describedby': 'tr-help' });
     area.value = prefill;
-    const btn = el('button', { class: 'btn btn-primary', type: 'submit' }, 'Traduzir esta cobrança', icon('arrow-right'));
+    const idle = redo ? 'Refazer com este texto' : 'Traduzir esta cobrança';
+    const btn = el('button', { class: 'btn btn-primary', type: 'submit' }, idle, icon('arrow-right'));
+    const back = redo ? el('button', { class: 'btn btn-quiet', type: 'button' }, 'Voltar à minha tradução') : null;
+    back?.addEventListener('click', () => drawResult(redo.result, redo.orderId));
 
     // Importar de um PDF: o arquivo é lido no navegador (pdf.js) e nunca sai dele; só o texto extraído fica no campo.
     const pdfInput = el('input', { type: 'file', accept: 'application/pdf', id: 'tr-pdf', hidden: true });
@@ -96,13 +101,26 @@ export function renderTranslator(root, ctx) {
         photoHint,
         el('p', { class: 'fine', id: 'tr-help' }, 'Não guardamos o texto que você cola: só o resultado da leitura. Evite colar CPF, senhas ou números de cartão.'),
       ),
-      btn,
+      el('div', { class: 'button-row' }, btn, back),
     );
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       if (area.value.trim().length < 8) return toast('Cole um texto um pouco maior para eu conseguir ler.');
       btn.disabled = true;
-      btn.textContent = 'Lendo…';
+      btn.textContent = redo ? 'Refazendo…' : 'Lendo…';
+      if (redo) {
+        try {
+          await api.redoTranslation(redo.orderId, area.value);
+          drawResult(await api.getTranslation(redo.orderId), redo.orderId);
+          window.scrollTo({ top: 0 });
+          toast('Pronto: a tradução foi refeita com o texto novo.');
+        } catch (error) {
+          btn.disabled = false;
+          btn.textContent = idle;
+          toast(error?.status === 403 || error?.status === 429 ? error.message : 'Não consegui refazer agora. Tente de novo.');
+        }
+        return;
+      }
       try {
         const { caseId, preview } = await api.createTranslation(area.value);
         state.translatorCaseId = caseId;
@@ -110,12 +128,17 @@ export function renderTranslator(root, ctx) {
       } catch (error) {
         console.error(error);
         btn.disabled = false;
-        btn.textContent = 'Traduzir esta cobrança';
+        btn.textContent = idle;
         toast(error?.status === 429 ? 'Muitas tentativas seguidas. Espere um minutinho.' : 'Não consegui ler agora. Tente de novo.');
       }
     });
     root.replaceChildren(
-      card(el('h2', {}, 'O que essa cobrança quer dizer?'), el('p', { class: 'section-sub' }, 'Cole a mensagem que você recebeu. A leitura rápida é grátis; a explicação completa, com o que fazer e uma resposta pronta, custa pouco.'), form),
+      card(
+        ...(redo
+          ? [accessBanner({ accessUntil: redo.result.accessUntil, what: 'tradutor' }), el('h2', {}, 'Refazer com outro texto'), el('p', { class: 'section-sub' }, 'Cole a nova cobrança. A tradução anterior é substituída pelo novo resultado; o prazo continua o mesmo.')]
+          : [el('h2', {}, 'O que essa cobrança quer dizer?'), el('p', { class: 'section-sub' }, `Cole a mensagem que você recebeu. A leitura rápida é grátis; a explicação completa, com o que fazer e uma resposta pronta, custa pouco. Depois de pagar, você tem ${daysOf('collection_translator')} dias para ler quantas cobranças quiser.`)]),
+        form,
+      ),
     );
   }
 
@@ -168,6 +191,7 @@ export function renderTranslator(root, ctx) {
     });
     root.replaceChildren(
       ...[
+      accessBanner({ accessUntil, what: 'tradutor', onRedo: () => { drawInput('', { orderId, result: { analysis: a, accessUntil } }); window.scrollTo({ top: 0 }); }, redoLabel: 'Traduzir outra cobrança' }),
       card(
         el('p', { class: 'eyebrow' }, 'Sua tradução'),
         el('h2', {}, a.title),

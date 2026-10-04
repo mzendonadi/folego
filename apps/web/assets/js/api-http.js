@@ -307,6 +307,19 @@ export async function getGuided(orderId) {
   return request('GET', `/orders/${orderId}/guided`);
 }
 
+// Refazer com novos dados dentro do prazo de acesso (não cobra de novo e não muda a data final).
+export async function redoMap(orderId, input) {
+  // Como no createCase: o servidor define "hoje" e os ids; o cliente manda só o que a pessoa informou.
+  const debts = input.debts.map(({ id, ...debt }) => debt);
+  return request('POST', `/orders/${orderId}/redo/map`, { body: { profile: input.profile, debts } });
+}
+export async function redoTranslation(orderId, text) {
+  return request('POST', `/orders/${orderId}/redo/translation`, { body: { text } });
+}
+export async function redoGuided(orderId, input) {
+  return request('POST', `/orders/${orderId}/redo/guided`, { body: { input } });
+}
+
 export async function getOpenFinance() {
   return request('GET', '/account/openfinance');
 }

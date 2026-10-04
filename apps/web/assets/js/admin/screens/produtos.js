@@ -36,7 +36,7 @@ function productCard(p, reload) {
     el('div', { class: 'bo-product-grid' },
       field('Nome exibido', name),
       field('Preço (R$)', price.input, p.kind === 'subscription' ? 'Por mês, no cartão de crédito.' : 'Pix único.'),
-      p.kind === 'subscription' ? field('Cobrança', el('p', { class: 'muted bo-static' }, 'Mensal, no cartão')) : field('Dias de acesso ao conteúdo', days),
+      p.kind === 'subscription' ? field('Cobrança', el('p', { class: 'muted bo-static' }, 'Mensal, no cartão')) : field('Dias de acesso ao conteúdo', days, 'Também é o prazo para a pessoa refazer com dados novos. Contado do pagamento.'),
     ),
     field('Descrição (uso interno)', desc),
     el('div', { class: 'bo-checks' },

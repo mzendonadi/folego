@@ -4,7 +4,7 @@ import { el, icon, announce, toast, copyText } from './dom.js';
 import { brl, mmss } from './format.js';
 import { qrSvg } from '../vendor/qr.js';
 import { DEV } from '../config.js';
-import { CATALOG, BUNDLE } from './catalog.js';
+import { CATALOG, BUNDLE, daysOf } from './catalog.js';
 
 /**
  * @param root elemento onde desenhar
@@ -75,6 +75,7 @@ export function renderCheckout(root, ctx) {
       ...bumps,
       ...(!addon && !isBundle() && ctx.offerLetters ? [el('p', { class: 'fine' }, `Mapa + Cartas + Calendário juntos saem por ${brl(BUNDLE_CENTS())} (Kit Completo).`)] : []),
       el('div', { class: 'co-total' }, el('span', {}, 'Total'), el('strong', { 'aria-live': 'polite' }, brl(total()))),
+      el('p', { class: 'note' }, icon('info'), el('span', {}, `Depois de pagar, você tem ${daysOf(addon ? addon[0] : 'recovery_map')} dias de acesso e pode refazer com dados novos quantas vezes quiser, sem pagar de novo. Uma contagem regressiva mostra quantos dias faltam.`)),
       el('p', { class: 'fine' }, 'Pagamento único por Pix. Sem assinatura e sem renovação automática.'),
     );
   }

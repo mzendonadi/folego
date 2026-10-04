@@ -1,6 +1,6 @@
 import { $, $$, el, icon, announce, toast, scrollToTop, focusSoon, prefersReducedMotion } from './dom.js';
-import { state, loadDraft, wipeAll, saveDraft } from './state.js';
-import { initIntake, rebuildIntake, goTo, buildInput, isComplete } from './intake.js';
+import { state, loadDraft, wipeAll, saveDraft, emptyAnswers } from './state.js';
+import { initIntake, rebuildIntake, goTo, buildInput, isComplete, answersFromInput } from './intake.js';
 import { renderPreview, renderDelivery } from './results.js';
 import { renderCheckout } from './checkout.js';
 import { isPending, renderGenerated } from './generated.js';
@@ -187,6 +187,7 @@ async function openDelivery({ scrollTo = null } = {}) {
       await openDelivery({ scrollTo: 'renda' });
     },
     onIncomeTask: (key, done) => api.setIncomeProgress(state.caseId, key, done),
+    onRedo: () => startRedo(delivery),
   });
   watchGenerated(state.orderId, delivery);
   if (scrollTo) window.setTimeout(() => document.getElementById(scrollTo)?.scrollIntoView({ block: 'start' }), 60);
@@ -265,7 +266,64 @@ async function runDiagnosis({ silent = false } = {}) {
 
 const PROCESSING_MESSAGES = ['Somando o que entra e o que sai', 'Vendo o que cada dívida custa', 'Montando a ordem de pagamento'];
 
+// Refazer o Mapa pago com dados novos: o formulário volta preenchido, o prazo de acesso não muda e não há novo pagamento.
+const INTAKE_TEXT = { eyebrow: 'Diagnóstico grátis', title: 'Vamos olhar isso com calma', sub: 'Leva cerca de 3 minutos. Pode ser aproximado. Nada aqui é enviado para ninguém.' };
+function setIntakeMode(redo) {
+  const head = $('#view-intake .view-head');
+  head.querySelector('.redo-cancel')?.remove();
+  $('.eyebrow', head).textContent = redo ? 'Refazer o Mapa' : INTAKE_TEXT.eyebrow;
+  $('#intake-title').textContent = redo ? 'Atualize os seus dados' : INTAKE_TEXT.title;
+  const sub = $('.section-sub', head);
+  sub.textContent = redo ? `Os campos já vêm com o que você informou. Corrija o que mudou: o Mapa é refeito sem novo pagamento e o seu acesso continua até ${new Date(redo.until).toLocaleDateString('pt-BR')}.` : INTAKE_TEXT.sub;
+  if (redo) {
+    const cancel = el('button', { class: 'btn btn-quiet btn-sm redo-cancel', type: 'button' }, 'Cancelar e voltar ao meu Mapa');
+    cancel.addEventListener('click', () => {
+      state.redo = null;
+      setIntakeMode(null);
+      go('delivery');
+    });
+    head.append(cancel);
+  }
+}
+
+function startRedo(delivery) {
+  state.redo = { orderId: state.orderId, until: delivery.accessUntil };
+  state.answers = answersFromInput(delivery.input);
+  state.step = 0;
+  state.doneSteps = [];
+  setIntakeMode(state.redo);
+  rebuildIntake();
+  go('intake');
+  window.setTimeout(() => goTo(0), 30);
+}
+
+async function completeRedo() {
+  const { orderId } = state.redo;
+  show('processing');
+  history.pushState({ view: 'processing' }, '', ROUTES.processing);
+  $('#processing-msg').textContent = 'Refazendo o seu Mapa com os dados novos';
+  try {
+    await Promise.all([api.redoMap(orderId, buildInput()), new Promise((r) => window.setTimeout(r, prefersReducedMotion() ? 300 : 1500))]);
+    state.redo = null;
+    setIntakeMode(null);
+    state.answers = emptyAnswers();
+    state.step = 0;
+    state.doneSteps = [];
+    saveDraft();
+    await openDelivery();
+    history.replaceState({ view: 'delivery' }, '', ROUTES.delivery);
+    show('delivery');
+    toast('Pronto: o Mapa foi refeito com os dados novos.');
+  } catch (error) {
+    console.error(error);
+    toast(error?.status === 403 || error?.status === 429 ? error.message : diagnosisErrorMessage(error));
+    history.replaceState({ view: 'intake' }, '', ROUTES.intake);
+    show('intake');
+  }
+}
+
 async function onIntakeComplete() {
+  if (state.redo) return completeRedo();
   saveDraft();
   show('processing');
   history.pushState({ view: 'processing' }, '', ROUTES.processing);
@@ -492,6 +550,10 @@ function askWipe() {
 let heroGone = false;
 
 function startFlow() {
+  if (state.redo) {
+    state.redo = null;
+    setIntakeMode(null);
+  }
   if (state.step > 0 || state.doneSteps.length > 0) goTo(state.step, { focus: false });
   go('intake');
   window.setTimeout(() => goTo(state.step), 30);

@@ -487,6 +487,34 @@ export function buildInput() {
   };
 }
 
+/** Inverso de buildInput: devolve ao formulário os dados do Mapa já pago, para a pessoa corrigir e refazer. */
+export function answersFromInput(input) {
+  const p = input.profile;
+  const nearestBand = (days) => OVERDUE_BANDS.map(([v]) => Number(v)).reduce((a, b) => (Math.abs(b - days) < Math.abs(a - days) ? b : a));
+  return {
+    employmentType: p.employmentType ?? '',
+    employmentNote: p.employmentNote ?? '',
+    netIncomeCents: p.netIncomeCents ?? null,
+    ageBand: p.ageBand ?? '',
+    uf: p.uf ?? '',
+    fixedExpensesCents: p.fixedExpensesCents ?? null,
+    consent: true, // os termos já foram aceitos na compra
+    debts: input.debts.map((d) => ({
+      ...newDebt(),
+      creditor: d.creditorName ?? '',
+      kind: d.kind ?? '',
+      kindNote: d.kindNote ?? '',
+      balanceCents: d.balanceCents ?? null,
+      paymentCents: d.monthlyPaymentCents ?? null,
+      overdue: d.daysOverdue > 0 ? 'yes' : 'no',
+      overdueBand: d.daysOverdue > 0 && !d.firstDefaultOn ? String(nearestBand(d.daysOverdue)) : '',
+      installments: d.remainingInstallments === undefined || d.remainingInstallments === null ? '' : String(d.remainingInstallments),
+      ratePct: d.monthlyRateBps === undefined || d.monthlyRateBps === null ? '' : String(d.monthlyRateBps / 100).replace('.', ','),
+      firstDefaultMonth: d.firstDefaultOn ? String(d.firstDefaultOn).slice(0, 7) : '',
+    })),
+  };
+}
+
 // ---------- eventos ----------
 function debtOf(target) {
   const uidValue = target.dataset.debt;

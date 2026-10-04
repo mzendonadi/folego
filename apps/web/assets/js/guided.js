@@ -3,8 +3,9 @@
 // guardado no servidor; no currículo, nome e contatos ficam só neste navegador.
 import { el, icon, toast, copyText } from './dom.js';
 import { brl, percentToBps } from './format.js';
-import { CATALOG } from './catalog.js';
+import { CATALOG, daysOf } from './catalog.js';
 import { moneyInput } from './money.js';
+import { accessBanner } from './access-banner.js';
 
 export const GUIDES = {
   financing: {
@@ -460,10 +461,14 @@ export function renderGuided(root, kind, ctx) {
   const personal = (ctx.state.guidedPersonal ??= {});
   const price = () => CATALOG[spec.code];
 
-  function drawForm() {
+  /** redo = { orderId, full }: refazendo um guia já pago (mesmo prazo, sem pagar de novo). */
+  function drawForm(redo = null) {
     const form = FORMS[kind]({ personal });
-    const btn = el('button', { class: 'btn btn-primary', type: 'submit' }, 'Ver a prévia grátis', icon('arrow-right'));
-    const live = el('div', { class: 'tool-form' }, form.node, btn);
+    const idle = redo ? 'Refazer com estes dados' : 'Ver a prévia grátis';
+    const btn = el('button', { class: 'btn btn-primary', type: 'submit' }, idle, icon('arrow-right'));
+    const back = redo ? el('button', { class: 'btn btn-quiet', type: 'button' }, 'Voltar ao meu guia') : null;
+    back?.addEventListener('click', () => drawFull(redo.full, redo.orderId));
+    const live = el('div', { class: 'tool-form' }, form.node, el('div', { class: 'button-row' }, btn, back));
     const wrap = el('form', { novalidate: true }, live);
     wrap.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -475,7 +480,20 @@ export function renderGuided(root, kind, ctx) {
         throw err;
       }
       btn.disabled = true;
-      btn.textContent = 'Calculando…';
+      btn.textContent = redo ? 'Refazendo…' : 'Calculando…';
+      if (redo) {
+        try {
+          await ctx.api.redoGuided(redo.orderId, payload);
+          drawFull(await ctx.api.getGuided(redo.orderId), redo.orderId);
+          window.scrollTo({ top: 0 });
+          toast('Pronto: o guia foi refeito com os dados novos.');
+        } catch (error) {
+          btn.disabled = false;
+          btn.textContent = idle;
+          toast(error?.status === 403 || error?.status === 429 ? error.message : error?.status === 400 || error?.status === 422 ? 'Confira os valores preenchidos e tente de novo.' : 'Não consegui refazer agora. Tente de novo.');
+        }
+        return;
+      }
       try {
         const { caseId, preview } = await ctx.api.createGuided(kind, payload);
         ctx.state.guidedCaseId = caseId;
@@ -486,7 +504,10 @@ export function renderGuided(root, kind, ctx) {
         toast(error?.status === 429 ? 'Muitas tentativas seguidas. Espere um minutinho.' : error?.status === 422 || error?.status === 400 ? (error.message?.startsWith('Confira') ? error.message : 'Confira os valores preenchidos e tente de novo.') : 'Não consegui calcular agora. Tente de novo.');
       }
     });
-    root.replaceChildren(card(el('p', { class: 'section-sub' }, spec.lead), wrap, el('p', { class: 'fine' }, 'Ao continuar você aceita os Termos e a Política de Privacidade. O que você digitou não fica guardado: só o resultado.')));
+    const intro = redo
+      ? [accessBanner({ accessUntil: redo.full.accessUntil, what: 'guia' }), el('p', { class: 'section-sub' }, 'Preencha de novo com os dados atualizados. O guia anterior é substituído pelo novo resultado; o prazo continua o mesmo.')]
+      : [el('p', { class: 'section-sub' }, spec.lead)];
+    root.replaceChildren(card(...intro, wrap, el('p', { class: 'fine' }, redo ? 'O que você digitou não fica guardado: só o resultado.' : `Ao continuar você aceita os Termos e a Política de Privacidade. O que você digitou não fica guardado: só o resultado.${price() && price().active !== false ? ` Depois de pagar, você tem ${daysOf(spec.code)} dias de acesso e pode refazer com dados novos quantas vezes quiser.` : ''}`)));
   }
 
   function drawPreview(p, caseId) {
@@ -504,6 +525,7 @@ export function renderGuided(root, kind, ctx) {
       el('h3', {}, 'No guia completo'),
       el('ul', { class: 'discover-list' }, ...view.locked.map((t) => el('li', {}, icon('lock', 'icon icon-lock'), el('span', {}, t)))),
       el('div', { class: 'button-row' }, buy, again),
+      on ? el('p', { class: 'note' }, icon('info'), el('span', {}, `Depois de pagar, você tem ${daysOf(spec.code)} dias de acesso e pode refazer com dados novos quantas vezes quiser, sem pagar de novo.`)) : null,
       el('p', { class: 'fine' }, on ? 'Pagamento único por Pix. Nada é cobrado se você não gostar.' : 'Este guia ainda não foi liberado para venda. Volte em breve.'),
     ));
   }
@@ -522,6 +544,7 @@ export function renderGuided(root, kind, ctx) {
       }
     });
     root.replaceChildren(
+      accessBanner({ accessUntil, what: 'guia', onRedo: () => { drawForm({ orderId, full: { content, accessUntil } }); window.scrollTo({ top: 0 }); } }),
       ...FULL[kind](content, kind === 'resume' ? { personal } : orderId).filter(Boolean),
       card(el('p', { class: 'muted no-print' }, `Seu guia fica disponível até ${new Date(accessUntil).toLocaleDateString('pt-BR')}.`), el('p', { class: 'fine' }, 'Informação geral e cálculo indicativo: não substitui contrato, advogado, Defensoria Pública nem orientação financeira individual.'), link, linkOut),
     );
