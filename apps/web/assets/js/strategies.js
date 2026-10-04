@@ -32,7 +32,7 @@ export function strategiesSection(s) {
     out.push(
       block(
         'Qual caminho compensa mais',
-        el('p', { class: 'section-sub' }, 'O mesmo dinheiro por mês, em ordens diferentes. A diferença está nos juros e no tempo.'),
+        el('p', { class: 'section-sub' }, 'O mesmo dinheiro por mês, em ordens diferentes. Só mostramos os caminhos que dão resultado diferente.'),
         table(
           ['Caminho', 'Quita em', 'Juros pagos', 'Total pago'],
           s.comparison.map((c) => ({
@@ -41,6 +41,7 @@ export function strategiesSection(s) {
           })),
           { caption: 'Comparação dos caminhos de pagamento' },
         ),
+        s.comparisonNote ? el('p', { class: 'note' }, icon('info'), el('span', {}, s.comparisonNote)) : null,
       ),
     );
   }

@@ -39,10 +39,13 @@ function accountFields(init = {}) {
   const limit = moneyInput({ id: init.prefix ? `${init.prefix}-lis` : 'cw-lis', ariaLabel: 'Limite do cheque especial (LIS)', value: init.overdraftLimitCents || null, placeholder: 'sem limite' });
   const rate = el('input', { class: 'input', id: init.prefix ? `${init.prefix}-taxa` : 'cw-taxa', type: 'text', inputmode: 'decimal', maxlength: '5', 'aria-label': 'Taxa do cheque especial ao mês (%)', value: bpsToField(init.overdraftRateBps ?? 800) });
   const node = el(
-    'div', { class: 'lis-fields' },
-    el('div', { class: 'field' }, el('label', { class: 'label', for: opening.input.id }, 'Saldo da conta hoje'), opening.input, el('div', { class: 'check' }, negative, el('label', { for: negative.id }, 'A conta está no negativo (usando o cheque especial)'))),
-    el('div', { class: 'field' }, el('label', { class: 'label', for: limit.input.id }, 'Limite do cheque especial (LIS), se tiver'), limit.input, el('p', { class: 'fine' }, 'Está no app ou no extrato do banco. Deixe em branco se não tem.')),
-    el('div', { class: 'field' }, el('label', { class: 'label', for: rate.id }, 'Taxa do cheque especial (% ao mês)'), rate, el('p', { class: 'fine' }, 'Usamos 8% ao mês se você não souber. É o teto que os bancos podem cobrar.')),
+    'div', { class: 'lis-wrap' },
+    el('div', { class: 'lis-fields' },
+      el('div', { class: 'field' }, el('label', { class: 'label', for: opening.input.id }, 'Saldo da conta hoje'), opening.input, el('p', { class: 'fine' }, 'O que aparece no app do banco agora.')),
+      el('div', { class: 'field' }, el('label', { class: 'label', for: limit.input.id }, 'Limite do cheque especial (LIS)'), limit.input, el('p', { class: 'fine' }, 'Está no app ou no extrato do banco. Deixe em branco se não tem.')),
+      el('div', { class: 'field' }, el('label', { class: 'label', for: rate.id }, 'Taxa do cheque especial (% ao mês)'), rate, el('p', { class: 'fine' }, 'Usamos 8% ao mês se você não souber. É o teto que os bancos podem cobrar.')),
+    ),
+    el('div', { class: 'check lis-neg' }, negative, el('label', { for: negative.id }, 'A conta está no negativo (usando o cheque especial)')),
   );
   const read = () => {
     const base = centsOrZero(opening);

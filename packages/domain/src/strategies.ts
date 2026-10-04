@@ -74,6 +74,8 @@ export interface PlaybookItem {
 export interface Strategies {
   asOf: string;
   comparison: StrategyScenario[];
+  /** Quando a ordem de pagamento não muda o resultado (ex.: uma dívida só), explica em vez de repetir linhas iguais. */
+  comparisonNote: string | null;
   verdict: string;
   whatIfExtra: WhatIfExtra[];
   lumpSum: LumpSumScenario | null;
@@ -104,12 +106,18 @@ export function buildStrategies(input: DiagnoseInput, rules: Rules = RULES, give
 
   // ---- 1) comparação de caminhos ----
   const scen = (id: StrategyScenario['id'], label: string, description: string, s: SimulationResult): StrategyScenario => ({ id, label, description, months: s.months, interestCents: s.totalInterestCents, totalPaidCents: s.totalPaidCents, recommended: id === 'plan' });
-  const comparison: StrategyScenario[] = included.length === 0 ? [] : [
+  const allScenarios: StrategyScenario[] = included.length === 0 ? [] : [
     scen('baseline', 'Seguir como está', 'Pagar só as parcelas atuais, sem direcionar nada a mais.', d.baseline),
     scen('plan', 'Plano Fôlego', 'Essenciais em atraso primeiro; depois, os juros mais altos. A parcela de cada dívida quitada passa para a próxima.', d.plan),
     scen('avalanche', 'Avalanche (juros mais altos primeiro)', 'A que mais economiza juros no papel, sem olhar o que é essencial.', d.alternatives.avalanche),
     scen('snowball', 'Bola de neve (menor dívida primeiro)', 'Quita logo as menores para dar ânimo; costuma custar um pouco mais de juros.', d.alternatives.snowball),
   ];
+  // Linhas iguais ao Plano não acrescentam nada: só aparecem as que dão resultado diferente.
+  const plan = allScenarios.find((x) => x.id === 'plan');
+  const same = (x: StrategyScenario) => plan !== undefined && x.months === plan.months && x.interestCents === plan.interestCents && x.totalPaidCents === plan.totalPaidCents;
+  const comparison = allScenarios.filter((x) => x.id === 'baseline' || x.id === 'plan' || !same(x));
+  const hidden = allScenarios.filter((x) => (x.id === 'avalanche' || x.id === 'snowball') && same(x));
+  const comparisonNote = hidden.length === 0 ? null : included.length === 1 ? 'Você tem uma dívida só, então a ordem de pagamento não muda nada: avalanche e bola de neve dão o mesmo resultado do Plano Fôlego.' : 'Com as suas dívidas, trocar a ordem (juros mais altos ou menor saldo primeiro) dá o mesmo resultado do Plano Fôlego, por isso não repetimos essas linhas.';
   let verdict = '';
   if (included.length > 0) {
     if (d.budget.deficit) verdict = `Hoje faltam ${formatBrl(d.budget.gapCents)} por mês: nenhuma ordem de pagamento resolve enquanto a conta não fechar. O primeiro passo é abrir espaço no orçamento (veja as estratégias abaixo).`;
@@ -287,5 +295,5 @@ export function buildStrategies(input: DiagnoseInput, rules: Rules = RULES, give
     });
   }
 
-  return { asOf: d.asOf, comparison, verdict, whatIfExtra, lumpSum, settlements, refinance, schedule, milestones, playbook };
+  return { asOf: d.asOf, comparison, comparisonNote, verdict, whatIfExtra, lumpSum, settlements, refinance, schedule, milestones, playbook };
 }

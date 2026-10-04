@@ -62,7 +62,8 @@ async function paid(c: Client, kind: keyof typeof inputs) {
   return { caseId: created.json.caseId as string, orderId: o.json.orderId as string, preview: created.json.preview };
 }
 
-test('os guias nascem desligados: sem o dono ligar, não vendem', async () => {
+test('guia desligado pelo dono: não vende e o catálogo mostra inativo', async () => {
+  await db.query(`UPDATE app.products SET active = false WHERE code LIKE 'guide\_%'`); // a migração 024 liga os guias; aqui simulamos o dono desligando
   const c = client();
   const created = await c('POST', '/api/guided/forgotten', { body: { input: inputs.forgotten, acceptTerms: true } });
   assert.equal(created.status, 201);

@@ -13,6 +13,7 @@ import { audit } from '../services.ts';
 import { adminLogout, adminOf, can, changePassword, completeSetup, releasePasswordReset, requestSetupCode, passwordLogin, requirePermission } from './auth.ts';
 import type { AdminUser } from './auth.ts';
 import * as campaigns from './campaigns.ts';
+import * as dispatch from './dispatch.ts';
 import * as customers from './customers.ts';
 import * as manage from './manage.ts';
 import * as marketing from './marketing.ts';
@@ -269,7 +270,29 @@ export function registerGestao(app: FastifyInstance, deps: AdminRouteDeps): void
   });
   app.get(`${P}/parcerias/contatos`, async (req) => {
     await admin(req, 'parcerias');
-    return { items: await customers.consentedContacts(ctx, { category: (req.query as { categoria?: string }).categoria, page: pageQuery(req.query) }) };
+    const q = req.query as { categoria?: string; filtro?: string; parceiro?: string };
+    const filter = q.filtro === 'enviados' || q.filtro === 'nao_enviados' ? q.filtro : 'todos';
+    return dispatch.contactsWithDispatch(ctx, { category: q.categoria, filter, partnerId: q.parceiro && /^[0-9a-f-]{36}$/i.test(q.parceiro) ? q.parceiro : undefined, page: pageQuery(req.query) });
+  });
+  app.get(`${P}/parcerias/destinos`, async (req) => {
+    await admin(req, 'parcerias');
+    return dispatch.dispatchTargets(ctx);
+  });
+  app.post(`${P}/parcerias/enviar`, { config: { rateLimit: { max: 20 * scale, timeWindow: '1 minute' } } }, async (req) => {
+    const a = await admin(req, 'parcerias');
+    const b = z.strictObject({ partnerId: z.string().uuid(), campaignId: z.string().uuid(), caseIds: z.array(z.string().uuid()).min(1).max(dispatch.MAX_BATCH) }).parse(req.body);
+    return dispatch.dispatchContacts(ctx, a.id, b);
+  });
+  app.get(`${P}/parcerias/envios`, async (req) => {
+    await admin(req, 'parcerias');
+    const q = req.query as { parceiro?: string; situacao?: string };
+    return dispatch.deliveriesOverview(ctx, { partnerId: q.parceiro && /^[0-9a-f-]{36}$/i.test(q.parceiro) ? q.parceiro : undefined, status: q.situacao && /^[a-z]{4,12}$/.test(q.situacao) ? q.situacao : undefined, page: pageQuery(req.query) });
+  });
+  app.post(`${P}/parcerias/envios/:id/acao`, async (req) => {
+    const a = await admin(req, 'parcerias');
+    const { action } = z.strictObject({ action: z.enum(['retry', 'cancel']) }).parse(req.body);
+    await dispatch.deliveryAction(ctx, a.id, idParam((req.params as { id: string }).id), action);
+    return { ok: true };
   });
 
   // ---------- produtos e preços ----------

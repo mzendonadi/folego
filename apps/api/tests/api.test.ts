@@ -522,7 +522,7 @@ test('entrega traz as estratégias (comparação, plano mês a mês, marcos, rot
   const d = await c('GET', `/api/orders/${order.json.orderId}/delivery`);
   assert.equal(d.status, 200);
   const s = d.json.strategies;
-  assert.equal(s.comparison.length, 4);
+  assert.ok(s.comparison.length >= 2 && s.comparison.length <= 4, "só caminhos com resultado diferente aparecem");
   assert.ok(s.schedule.length > 0);
   assert.ok(s.milestones.some((m: any) => m.kind === 'debt_free'));
   assert.ok(s.playbook.some((p: any) => p.id === 'sair_do_rotativo'));

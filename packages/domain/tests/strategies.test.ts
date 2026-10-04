@@ -13,10 +13,11 @@ const base: DiagnoseInput = {
   ],
 };
 
-test('comparação traz os 4 caminhos, com o plano recomendado e os mesmos números do diagnóstico', () => {
+test('comparação traz só caminhos com resultado diferente (avalanche = plano some), com o plano recomendado e os mesmos números do diagnóstico', () => {
   const d = diagnose(base);
   const s = buildStrategies(base);
-  assert.deepEqual(s.comparison.map((c) => c.id), ['baseline', 'plan', 'avalanche', 'snowball']);
+  assert.deepEqual(s.comparison.map((c) => c.id), ['baseline', 'plan', 'snowball']);
+  assert.match(s.comparisonNote ?? '', /mesmo resultado do Plano/);
   const plan = s.comparison.find((c) => c.id === 'plan')!;
   assert.equal(plan.recommended, true);
   assert.equal(plan.months, d.plan.months);
@@ -85,4 +86,30 @@ test('sem dívida na fila (tudo possivelmente prescrito) não quebra', () => {
   const s = buildStrategies({ ...base, debts: [{ id: 'd1', creditorName: 'Antiga', kind: 'credit_card', balanceCents: 100_000, daysOverdue: 2500, firstDefaultOn: '2019-01-01' }] });
   assert.equal(s.comparison.length, 0);
   assert.ok(s.playbook.some((p) => p.id === 'prescricao'));
+});
+
+// Revisão pedida: linhas iguais não se repetem; com várias dívidas diferentes, os caminhos mostram resultados distintos.
+const mk = (debts: DiagnoseInput['debts'], profile: Partial<DiagnoseInput['profile']> = {}): DiagnoseInput => ({ asOf: '2026-10-01', profile: { ...base.profile, ...profile }, debts });
+
+test('uma dívida só: avalanche e bola de neve somem da comparação, com explicação', () => {
+  const s = buildStrategies(mk([{ id: 'a', creditorName: 'Banco', kind: 'personal_loan', balanceCents: 500_000, monthlyRateBps: 300, monthlyPaymentCents: 20_000, daysOverdue: 40 }]));
+  assert.deepEqual(s.comparison.map((c) => c.id), ['baseline', 'plan']);
+  assert.match(s.comparisonNote ?? '', /uma dívida só/);
+});
+
+test('com uma dívida essencial em atraso o plano difere da avalanche, e as duas aparecem', () => {
+  const s = buildStrategies(
+    mk(
+      [
+        { id: 'a', creditorName: 'Aluguel', kind: 'rent', balanceCents: 200_000, monthlyRateBps: 100, monthlyPaymentCents: 10_000, daysOverdue: 40 },
+        { id: 'b', creditorName: 'Cartão', kind: 'credit_card', balanceCents: 900_000, monthlyRateBps: 1000, monthlyPaymentCents: 20_000, daysOverdue: 0 },
+        { id: 'c', creditorName: 'Loja', kind: 'store_credit', balanceCents: 120_000, monthlyRateBps: 400, monthlyPaymentCents: 8_000, daysOverdue: 0 },
+      ],
+      { netIncomeCents: 450_000, fixedExpensesCents: 200_000 },
+    ),
+  );
+  const ids = s.comparison.map((c) => c.id);
+  assert.ok(ids.includes('avalanche'), 'a avalanche pura difere do plano quando há essencial em atraso');
+  const get = (id: string) => s.comparison.find((c) => c.id === id)!;
+  assert.ok(get('avalanche').interestCents <= get('snowball').interestCents + 1);
 });

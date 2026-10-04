@@ -1008,3 +1008,22 @@ fieldset.offer-box { min-inline-size: 0; }
 @media (min-width: 760px) { .stats { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 .stat { min-width: 0; }
 .stat dd { overflow-wrap: anywhere; font-size: clamp(1rem, 0.7rem + 1.8vw, 1.35rem); }
+
+/* Textos de apoio ocupam a largura do quadro (antes quebravam cedo por causa de um limite de 40em) */
+.card .section-sub, .d-section .section-sub, .card > p { max-width: none; }
+/* Nova carteira (conta bancária): colunas alinhadas pelo topo, aviso do negativo em linha própria */
+.lis-wrap { display: grid; gap: var(--s3); }
+.lis-fields { align-items: start; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }
+.lis-fields .field { display: grid; grid-template-rows: auto auto auto; align-content: start; gap: 6px; }
+.lis-fields .label { min-height: 2.6em; display: flex; align-items: flex-end; }
+@media (max-width: 640px) { .lis-fields .label { min-height: 0; } }
+.lis-neg { margin: 0; }
+
+/* Prumo v2 (cores da marca por classe, com versão escura) */
+.prumo-mark { height: 1em; width: 0.9em; vertical-align: -0.1em; margin-right: 0.3em; }
+.pm-string { stroke: #0E5B49; } .pm-hook-stroke { stroke: #A55F00; } .pm-hook { fill: #A55F00; } .pm-left { fill: #0E5B49; } .pm-right { fill: #0A3D31; } .pm-groove { stroke: #8FE0BE; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pm-string { stroke: #F6F3EC; } :root:not([data-theme="light"]) .pm-hook-stroke { stroke: #F2B24A; } :root:not([data-theme="light"]) .pm-hook { fill: #F2B24A; } :root:not([data-theme="light"]) .pm-left { fill: #8FE0BE; } :root:not([data-theme="light"]) .pm-right { fill: #4FB78F; } :root:not([data-theme="light"]) .pm-groove { stroke: #0A3D31; } }
+:root[data-theme="dark"] .pm-string { stroke: #F6F3EC; } :root[data-theme="dark"] .pm-hook-stroke { stroke: #F2B24A; } :root[data-theme="dark"] .pm-hook { fill: #F2B24A; } :root[data-theme="dark"] .pm-left { fill: #8FE0BE; } :root[data-theme="dark"] .pm-right { fill: #4FB78F; } :root[data-theme="dark"] .pm-groove { stroke: #0A3D31; }
+.pm-shine { stroke: #8FE0BE; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pm-shine { stroke: #D9EFE5; } }
+:root[data-theme="dark"] .pm-shine { stroke: #D9EFE5; }
