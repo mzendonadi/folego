@@ -19,8 +19,8 @@ O código do Asaas já está pronto (Pix com QR e assinatura no cartão). Ele s�
 1. No menu **Pix**, abra **Minhas chaves** e cadastre uma **chave aleatória** (a que o Asaas gera). Ela vira o valor `ASAAS_PIX_KEY`.
 2. Copie o texto da chave (parece `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`). Essa chave não é segredo, mas guarde junto.
 
-### A4. Criar o token do webhook
-Este token é uma senha que o Asaas envia em cada aviso de pagamento, para o nosso servidor saber que o aviso é verdadeiro. **Não é a chave da API.** Invente uma sequência longa (32 caracteres ou mais, com letras e números) ou gere no seu computador:
+### A4. Token do webhook
+Este token é uma senha que o Asaas envia em cada aviso de pagamento, para o nosso servidor saber que o aviso é verdadeiro. **Não é a chave da API.** O mais simples é usar o botão **Gerar Token** da própria tela do webhook (A5). Se preferir criar um, use 32 caracteres ou mais, ou gere no seu computador:
 
 ```bash
 openssl rand -hex 24
@@ -29,10 +29,25 @@ openssl rand -hex 24
 Guarde no gerenciador de senhas. Você vai usar o mesmo valor no Asaas (A5) e nos segredos do GitHub (A6).
 
 ### A5. Cadastrar o webhook no Asaas
-1. **Integrações → Webhooks → Criar webhook.**
-2. **Nome:** Fôlego. **URL:** `https://folego.online/webhooks/pix`. **Token de autenticação:** o valor do passo A4.
-3. **Fila:** deixe a sincronização ligada. **Eventos de cobrança:** marque `PAYMENT_RECEIVED`, `PAYMENT_CONFIRMED` e `PAYMENT_CREDIT_CARD_CAPTURE_REFUSED`. **Eventos de assinatura:** marque `SUBSCRIPTION_DELETED` e `SUBSCRIPTION_INACTIVATED`.
-4. Salve.
+**Integrações → Webhooks → Adicionar Webhook.** Preencha todos os campos, inclusive os obrigatórios:
+
+| Campo | Valor |
+|---|---|
+| Este Webhook ficará ativo? | Ligado |
+| Nome do Webhook | Fôlego |
+| URL do Webhook | `https://folego.online/webhooks/pix` |
+| E-mail | O seu (o Asaas avisa aqui se a entrega falhar) |
+| Versão da API | v3 |
+| **Tipo de envio** (obrigatório) | **Não sequencial** (o servidor confere cada pagamento no Asaas e aceita avisos fora de ordem; uma falha não trava a fila) |
+| **Fila de sincronização ativada?** | **Ligada.** Desligada, o Asaas não envia nenhum aviso ao site |
+| Token de autenticação | Clique em **Gerar Token** e guarde o valor no gerenciador de senhas. **Nunca tire print com o token à mostra.** É o mesmo valor do segredo `ASAAS_WEBHOOK_TOKEN` |
+
+**Eventos** (abra cada grupo e marque só estes):
+- **Cobranças:** pagamento recebido (`PAYMENT_RECEIVED`), pagamento confirmado (`PAYMENT_CONFIRMED`) e captura recusada no cartão (`PAYMENT_CREDIT_CARD_CAPTURE_REFUSED`).
+- **Assinaturas** (role a lista se não aparecer): assinatura removida (`SUBSCRIPTION_DELETED`) e assinatura inativada (`SUBSCRIPTION_INACTIVATED`).
+- **Notas fiscais, Transferências, Pague contas e Antecipações:** nenhum.
+
+Clique em **Salvar**.
 
 ### A6. Entregar as chaves ao Claude SEM passar pelo chat (segredos do GitHub)
 Você não precisa entrar no servidor. O GitHub guarda as chaves como **segredos** (ninguém vê o valor depois de salvo, nem o Claude) e a publicação grava no servidor sozinha, sem imprimir nada.
