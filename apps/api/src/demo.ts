@@ -2,7 +2,7 @@
 // Ligada: o Prumo abre completo (plano Desbravador, sem cobrança) e os produtos avulsos são liberados sem Pix nem cartão.
 // Desligada: volta a ser uma conta comum. O código de entrada é gerado no backoffice (não depende de caixa de e-mail).
 import { randomInt } from 'node:crypto';
-import { hmac } from './crypto.ts';
+import { hashPassword, hmac, verifyPassword } from './crypto.ts';
 import { AppError, notFound } from './errors.ts';
 import type { Ctx } from './services.ts';
 import { audit } from './services.ts';
@@ -27,12 +27,12 @@ export async function isDemoSubscriber(ctx: Ctx, subscriberId: string): Promise<
 }
 
 export async function list(ctx: Ctx) {
-  const r = await ctx.db.query<{ id: string; email: string; label: string; active: boolean; created_at: Date; last_login_at: Date | null }>(
-    `SELECT d.id, d.email::text AS email, d.label, d.active, d.created_at, s.last_login_at
+  const r = await ctx.db.query<{ id: string; email: string; label: string; active: boolean; created_at: Date; last_login_at: Date | null; has_password: boolean }>(
+    `SELECT d.id, d.email::text AS email, d.label, d.active, d.created_at, s.last_login_at, (d.password_hash IS NOT NULL) AS has_password
        FROM app.demo_accounts d LEFT JOIN app.subscribers s ON s.email = d.email AND s.deleted_at IS NULL ORDER BY d.created_at`,
   );
   return {
-    accounts: r.rows.map((x) => ({ id: x.id, email: x.email, label: x.label, active: x.active, createdAt: new Date(x.created_at).toISOString(), lastLoginAt: x.last_login_at ? new Date(x.last_login_at).toISOString() : null })),
+    accounts: r.rows.map((x) => ({ id: x.id, email: x.email, label: x.label, active: x.active, createdAt: new Date(x.created_at).toISOString(), lastLoginAt: x.last_login_at ? new Date(x.last_login_at).toISOString() : null, hasPassword: x.has_password })),
   };
 }
 
@@ -81,6 +81,34 @@ export async function issueCode(ctx: Ctx, adminId: string, id: string) {
   await ctx.db.query(`INSERT INTO app.login_codes(email, code_hash, expires_at) VALUES ($1, $2, now() + make_interval(mins => ${CODE_TTL_MIN}))`, [row.email, hmac(ctx.config.secret, `login:${row.email}:${code}`)]);
   await audit(ctx.db, `admin:${adminId}`, 'demo_code_issued', 'demo_account', id, {});
   return { email: row.email, code, minutes: CODE_TTL_MIN };
+}
+
+const DUMMY_HASH = hashPassword('conta-de-teste-inexistente');
+
+/** Gera uma senha nova para a conta de teste (aparece uma vez para o dono). */
+export async function setPassword(ctx: Ctx, adminId: string, id: string) {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+  const password = Array.from({ length: 4 }, () => Array.from({ length: 4 }, () => alphabet[randomInt(alphabet.length)]).join('')).join('-');
+  const r = await ctx.db.query(`UPDATE app.demo_accounts SET password_hash = $2 WHERE id = $1`, [id, hashPassword(password)]);
+  if (!r.rowCount) throw notFound();
+  await audit(ctx.db, `admin:${adminId}`, 'demo_password_reset', 'demo_account', id, {});
+  return { password };
+}
+
+/** Entrar com e-mail e senha: só vale para conta de teste LIGADA e com senha definida. Qualquer outro caso responde igual (401). */
+export async function passwordLogin(ctx: Ctx, sessionId: string, emailRaw: string, password: string): Promise<{ subscriberId: string }> {
+  const email = normalize(emailRaw);
+  const r = await ctx.db.query<{ password_hash: string | null; active: boolean }>(`SELECT password_hash, active FROM app.demo_accounts WHERE email = $1`, [email]);
+  const row = r.rows[0];
+  const ok = verifyPassword(password, row?.password_hash ?? DUMMY_HASH);
+  if (!row || !row.active || !row.password_hash || !ok) throw new AppError(401, 'invalid_credentials', 'E-mail ou senha incorretos.');
+  return ctx.db.tx(async (q) => {
+    const s = await q.query<{ id: string }>(`INSERT INTO app.subscribers(email, last_login_at) VALUES ($1, now()) ON CONFLICT (email) DO UPDATE SET last_login_at = now(), deleted_at = NULL RETURNING id`, [email]);
+    const id = s.rows[0]!.id;
+    await q.query(`UPDATE app.sessions SET subscriber_id = $2 WHERE id = $1`, [sessionId, id]);
+    await audit(q, `session:${sessionId}`, 'demo_password_login', 'subscriber', id);
+    return { subscriberId: id };
+  });
 }
 
 export async function remove(ctx: Ctx, adminId: string, id: string) {

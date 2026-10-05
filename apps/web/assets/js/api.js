@@ -11,6 +11,7 @@ export const getFeatures = impl.getFeatures;
 export const emailAccessLink = impl.emailAccessLink;
 export const requestLoginCode = impl.requestLoginCode;
 export const loginWithCode = impl.loginWithCode;
+export const loginWithPassword = impl.loginWithPassword;
 export const logout = impl.logout;
 export const getAccount = impl.getAccount;
 export const deleteAccount = impl.deleteAccount;

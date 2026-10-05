@@ -80,6 +80,7 @@ const notAvailable = () => {
 };
 export const requestLoginCode = notAvailable;
 export const loginWithCode = notAvailable;
+export const loginWithPassword = notAvailable;
 export const logout = notAvailable;
 export const getAccount = async () => ({ email: '', subscription: null });
 export const deleteAccount = notAvailable;

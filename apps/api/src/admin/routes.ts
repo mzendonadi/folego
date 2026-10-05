@@ -373,6 +373,10 @@ export function registerGestao(app: FastifyInstance, deps: AdminRouteDeps): void
     const a = await admin(req, 'assinaturas');
     return demo.issueCode(ctx, a.id, idParam((req.params as { id: string }).id));
   });
+  app.post(`${P}/demo/:id/senha`, { config: { rateLimit: { max: 10 * scale, timeWindow: '1 minute' } } }, async (req) => {
+    const a = await admin(req, 'assinaturas');
+    return demo.setPassword(ctx, a.id, idParam((req.params as { id: string }).id));
+  });
   app.delete(`${P}/demo/:id`, async (req) => {
     const a = await admin(req, 'assinaturas');
     return demo.remove(ctx, a.id, idParam((req.params as { id: string }).id));

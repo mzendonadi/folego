@@ -67,6 +67,9 @@ export async function emailAccessLink(orderId, email) {
 export async function requestLoginCode(email) {
   return request('POST', '/account/login-code', { body: { email }, headers: await guard() });
 }
+export async function loginWithPassword(email, password) {
+  return request('POST', '/account/login-password', { body: { email, password } });
+}
 export async function loginWithCode(email, code) {
   return request('POST', '/account/login', { body: { email, code } });
 }

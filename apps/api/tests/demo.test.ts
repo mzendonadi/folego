@@ -102,3 +102,32 @@ test('conta demo: ligar, entrar com o código, comprar sem cobrança e desligar'
   assert.equal((await o('DELETE', `/api/gestao/demo/${outro.id}`)).status, 200);
   assert.equal((await o('GET', '/api/gestao/demo')).json.accounts.some((x: any) => x.email === 'outro@exemplo.com'), false);
 });
+
+test('conta demo: entrar com e-mail e senha só com a conta ligada; senha nova invalida a antiga', async () => {
+  const o = client();
+  assert.equal((await o('POST', '/api/gestao/login-password', { email: 'dono@exemplo.com', password: 'Senha-Forte-2026' })).status, 200);
+  const acc = (await o('GET', '/api/gestao/demo')).json.accounts.find((x: any) => x.email === 'demo@folego.online');
+  assert.equal(acc.hasPassword, true, 'a conta nasce com senha inicial');
+  const nova = await o('POST', `/api/gestao/demo/${acc.id}/senha`, {});
+  assert.equal(nova.status, 200, JSON.stringify(nova.json));
+  assert.match(nova.json.password, /^[A-Za-z0-9]{4}(-[A-Za-z0-9]{4}){3}$/);
+
+  const u = client();
+  // desligada: senha certa não entra
+  await o('POST', `/api/gestao/demo/${acc.id}/ligar`, { active: false });
+  assert.equal((await u('POST', '/api/account/login-password', { email: 'demo@folego.online', password: nova.json.password })).status, 401);
+  // ligada: entra; senha errada e e-mail desconhecido recebem a mesma resposta
+  await o('POST', `/api/gestao/demo/${acc.id}/ligar`, { active: true });
+  assert.equal((await u('POST', '/api/account/login-password', { email: 'demo@folego.online', password: 'senha-errada-123' })).status, 401);
+  assert.equal((await u('POST', '/api/account/login-password', { email: 'ninguem@exemplo.com', password: nova.json.password })).status, 401);
+  const ok = await u('POST', '/api/account/login-password', { email: 'demo@folego.online', password: nova.json.password });
+  assert.equal(ok.status, 200, JSON.stringify(ok.json));
+  assert.equal(ok.json.demo, true);
+  assert.equal(ok.json.subscription.active, true);
+
+  // senha nova: a anterior deixa de valer
+  const outra = await o('POST', `/api/gestao/demo/${acc.id}/senha`, {});
+  assert.notEqual(outra.json.password, nova.json.password);
+  assert.equal((await client()('POST', '/api/account/login-password', { email: 'demo@folego.online', password: nova.json.password })).status, 401);
+  assert.equal((await client()('POST', '/api/account/login-password', { email: 'demo@folego.online', password: outra.json.password })).status, 200);
+});

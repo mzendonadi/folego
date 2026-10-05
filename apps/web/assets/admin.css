@@ -225,3 +225,10 @@
 .bo-table td.nowrap { white-space: nowrap; }
 .bo-table .bo-badge { white-space: nowrap; }
 @media (min-width: 1100px) { .bo-table td .bo-actions { flex-wrap: nowrap; justify-content: flex-end; } }
+
+/* Papéis sugeridos: um cartão por papel, com as áreas em etiquetas que quebram de linha. */
+.bo-roles { display: grid; gap: var(--s3); grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); align-items: start; }
+.bo-role { display: grid; gap: var(--s3); align-content: start; padding: var(--s4); border: 1px solid var(--line); border-radius: 14px; background: var(--surface); min-width: 0; }
+.bo-role h3 { margin: 0; font-size: 1.05rem; }
+.bo-role .bo-chips { min-width: 0; }
+.bo-role .bo-badge { white-space: normal; max-width: 100%; text-align: left; line-height: 1.3; }

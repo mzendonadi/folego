@@ -36,12 +36,27 @@ export async function contasTesteScreen() {
             toast(e?.message ?? 'Não consegui gerar o código.');
           }
         });
+        const pass = el('button', { class: 'btn btn-secondary btn-sm', type: 'button' }, x.hasPassword ? 'Nova senha' : 'Criar senha');
+        pass.addEventListener('click', async () => {
+          if (x.hasPassword && !(await confirmDialog({ title: 'Gerar uma senha nova?', text: 'A senha atual deixa de funcionar. A nova aparece uma vez só.', confirmLabel: 'Gerar' }))) return;
+          try {
+            const out = await api.senhaContaTeste(x.id);
+            draw();
+            const d = drawer('Senha de entrada');
+            d.body.append(
+              el('p', { class: 'note note-amber' }, el('span', {}, `Guarde agora, ela não aparece de novo. No Prumo (folego.online/#/conta), toque em "Conta de teste? Entrar com senha" e use ${x.email} com esta senha. Só funciona com a conta LIGADA.`)),
+              el('section', {}, el('h3', {}, x.email), el('div', { class: 'bo-secret' }, out.password)),
+            );
+          } catch (e) {
+            toast(e?.message ?? 'Não consegui gerar a senha.');
+          }
+        });
         const del = el('button', { class: 'btn btn-quiet btn-sm', type: 'button', 'aria-label': `Remover ${x.email}` }, 'Remover');
         del.addEventListener('click', async () => {
           if (!(await confirmDialog({ title: `Remover ${x.email}?`, text: 'A conta de teste sai da lista e o plano é encerrado. Os dados da conta continuam até serem apagados.', confirmLabel: 'Remover', danger: true }))) return;
           act(() => api.removerContaTeste(x.id), 'Conta de teste removida.');
         });
-        return el('span', { class: 'bo-actions' }, toggle, code, del);
+        return el('span', { class: 'bo-actions' }, toggle, pass, code, del);
       };
 
       const email = el('input', { class: 'input', type: 'email', 'aria-label': 'E-mail da conta de teste', placeholder: 'demo@folego.online' });

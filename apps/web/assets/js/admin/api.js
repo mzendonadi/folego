@@ -89,6 +89,7 @@ export const api = {
   contasTeste: () => call('GET', '/demo'),
   criarContaTeste: (b) => call('POST', '/demo', b),
   ligarContaTeste: (id, active) => call('POST', `/demo/${id}/ligar`, { active }),
+  senhaContaTeste: (id) => call('POST', `/demo/${id}/senha`, {}),
   codigoContaTeste: (id) => call('POST', `/demo/${id}/codigo`, {}),
   removerContaTeste: (id) => call('DELETE', `/demo/${id}`),
   acessos: (o) => call('GET', `/acessos${qs(o)}`),

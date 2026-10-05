@@ -46,12 +46,35 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
         toast(error?.status === 429 ? 'Você já pediu alguns códigos. Espere um pouco.' : 'Não consegui enviar o código agora.');
       }
     });
+    // Conta de teste (ligada pelo dono): entra com e-mail e senha, sem código no e-mail.
+    const pwEmail = el('input', { class: 'input', id: 'ac-pw-email', type: 'email', autocomplete: 'username', required: true });
+    const pwPass = el('input', { class: 'input', id: 'ac-pw', type: 'password', autocomplete: 'current-password', required: true });
+    const pwBtn = el('button', { class: 'btn btn-primary', type: 'submit' }, 'Entrar com senha');
+    const pwForm = el('form', { class: 'tool-form', hidden: true }, el('div', { class: 'field' }, el('label', { class: 'label', for: 'ac-pw-email' }, 'E-mail da conta de teste'), pwEmail), el('div', { class: 'field' }, el('label', { class: 'label', for: 'ac-pw' }, 'Senha'), pwPass), pwBtn);
+    pwForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      pwBtn.disabled = true;
+      try {
+        await api.loginWithPassword(pwEmail.value.trim(), pwPass.value);
+        boot();
+      } catch (error) {
+        pwBtn.disabled = false;
+        toast(error?.status === 429 ? 'Muitas tentativas. Espere alguns minutos.' : 'E-mail ou senha incorretos, ou a conta de teste está desligada.');
+      }
+    });
+    const pwToggle = el('button', { class: 'btn btn-quiet btn-sm', type: 'button' }, 'Conta de teste? Entrar com senha');
+    pwToggle.addEventListener('click', () => {
+      pwForm.hidden = !pwForm.hidden;
+      if (!pwForm.hidden) pwEmail.focus();
+    });
     root.replaceChildren(
       card(
         el('h2', {}, 'Entrar na sua conta'),
         el('p', { class: 'section-sub' }, 'Sem senha: mandamos um código de 6 dígitos para o seu e-mail, válido por 10 minutos.'),
         sendForm,
         codeBox,
+        el('div', {}, pwToggle),
+        pwForm,
       ),
     );
     function drawCode(addr, devCode) {

@@ -31,6 +31,7 @@ import { deepHealth } from './health.ts';
 import { eventSchema, recordEvent } from './admin/events.ts';
 import { publicCatalog } from './admin/manage.ts';
 import * as redo from './redo.ts';
+import * as demoAccounts from './demo.ts';
 import { refreshRuntime } from './runtime.ts';
 import { accessSchema, addEntriesSchema, cancelSchema, contributionSchema, createCaseSchema, entryWalletSchema, accountDebtSchema, accountDebtPatchSchema, debtPaymentSchema, monthLimitSchema, plannerSchema, objectiveSchema, inviteSchema, checkoutSchema, profileSchema, referralLeadSchema, referralInviteSchema, recurringDecisionSchema, reminderPatchSchema, reminderSchema, walletSchema, walletPatchSchema, createOrderSchema, emailLinkSchema, emailOnlySchema, goalSchema, incomeInterviewSchema, leadSchema, loginCodeSchema, newPartnerSchema, partnerLoginSchema, partnerStatusSchema, setCategorySchema, setLimitSchema, simulateSchema, subscriptionOrderSchema, toggleIncomeTaskSchema, translationSchema, guidedSchema, uuidParam, monthParam } from './schemas.ts';
 import { EngineInputError } from './engine.ts';
@@ -346,6 +347,13 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     const sessionId = await createSession(req, reply);
     await sub.verifyLoginCode(ctx, sessionId, email, code);
     return household.accountViewFor(ctx, await sub.subscriberOf(ctx, sessionId) as string);
+  });
+  // Entrada com senha: só para a conta de teste que o dono deixou LIGADA (qualquer outra pessoa entra por código no e-mail).
+  app.post('/api/account/login-password', { config: { rateLimit: { max: 6 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => {
+    const { email, password } = z.strictObject({ email: z.string().trim().toLowerCase().email().max(200), password: z.string().min(8).max(100) }).parse(req.body);
+    const sessionId = await createSession(req, reply);
+    await demoAccounts.passwordLogin(ctx, sessionId, email, password);
+    return household.accountViewFor(ctx, (await sub.subscriberOf(ctx, sessionId)) as string);
   });
   app.post('/api/account/logout', async (req, reply) => {
     const sessionId = await requireSession(req);

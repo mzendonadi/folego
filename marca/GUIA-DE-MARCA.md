@@ -23,7 +23,7 @@ Um **anel aberto** (a respiração) com um **ponto de ar âmbar** saindo pela ab
 A palavra "fôlego" é sempre em minúsculas, com o circunflexo, na fonte **Fraunces** peso 560. Nos SVG horizontais a palavra é texto (cai em Georgia sem a fonte); para materiais finais use os PNG já renderizados ou converta o texto em curvas no editor.
 
 ### Prumo
-Um **prumo de verdade**: fio, argola e colar âmbar, e o **peso** torneado com duas faces (luz e sombra), um brilho e dois sulcos, que afina até a ponta. É vertical e firme de propósito, o oposto do anel: o Fôlego acolhe, o Prumo mantém o rumo.
+Um **monograma P** em traço arredondado, a mesma linguagem do anel do Fôlego: a haste do P é o fio de prumo e o peso (menta) fica pendurado na ponta por um fio fino; um ponto âmbar marca o ponto de fixação. É a marca que continua nítida em 16 px (favicon e ícone do app).
 
 | Arquivo | Uso |
 |---|---|

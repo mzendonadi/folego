@@ -1024,12 +1024,6 @@ fieldset.offer-box { min-inline-size: 0; }
 
 /* Prumo v2 (cores da marca por classe, com versão escura) */
 .prumo-mark { height: 1em; width: 0.9em; vertical-align: -0.1em; margin-right: 0.3em; }
-.pm-string { stroke: #0E5B49; } .pm-hook-stroke { stroke: #A55F00; } .pm-hook { fill: #A55F00; } .pm-left { fill: #0E5B49; } .pm-right { fill: #0A3D31; } .pm-groove { stroke: #8FE0BE; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pm-string { stroke: #F6F3EC; } :root:not([data-theme="light"]) .pm-hook-stroke { stroke: #F2B24A; } :root:not([data-theme="light"]) .pm-hook { fill: #F2B24A; } :root:not([data-theme="light"]) .pm-left { fill: #8FE0BE; } :root:not([data-theme="light"]) .pm-right { fill: #4FB78F; } :root:not([data-theme="light"]) .pm-groove { stroke: #0A3D31; } }
-:root[data-theme="dark"] .pm-string { stroke: #F6F3EC; } :root[data-theme="dark"] .pm-hook-stroke { stroke: #F2B24A; } :root[data-theme="dark"] .pm-hook { fill: #F2B24A; } :root[data-theme="dark"] .pm-left { fill: #8FE0BE; } :root[data-theme="dark"] .pm-right { fill: #4FB78F; } :root[data-theme="dark"] .pm-groove { stroke: #0A3D31; }
-.pm-shine { stroke: #8FE0BE; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pm-shine { stroke: #D9EFE5; } }
-:root[data-theme="dark"] .pm-shine { stroke: #D9EFE5; }
 
 /* Conta bancária: os 3 campos usam as mesmas linhas (rótulo, campo, ajuda), então ficam alinhados qualquer que seja o texto. */
 .lis-fields { align-items: stretch; }
@@ -1092,3 +1086,9 @@ fieldset.offer-box { min-inline-size: 0; }
 .pix-trust { display: flex; gap: 8px; align-items: flex-start; margin: 0; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--mint); color: var(--mint-ink); font-size: 0.8125rem; line-height: 1.45; }
 .pix-trust .icon { flex: none; margin-top: 2px; width: 1.1em; height: 1.1em; }
 .pix-trust strong { font-weight: 700; }
+
+/* Prumo v4 (monograma P): cores por classe, com versão escura. */
+.pm-ink { stroke: #0E5B49; } .pm-bob { fill: #0E5B49; } .pm-accent { fill: #A55F00; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pm-ink { stroke: #F6F3EC; } :root:not([data-theme="light"]) .pm-bob { fill: #8FE0BE; } :root:not([data-theme="light"]) .pm-accent { fill: #F2B24A; } }
+:root[data-theme="dark"] .pm-ink { stroke: #F6F3EC; } :root[data-theme="dark"] .pm-bob { fill: #8FE0BE; } :root[data-theme="dark"] .pm-accent { fill: #F2B24A; }
+.prumo-badge { display: block; width: 64px; height: 64px; margin-bottom: var(--s3); border-radius: 16px; }

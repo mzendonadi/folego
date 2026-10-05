@@ -120,7 +120,7 @@ jobs['icon-maskable-512.png'] = () => { const [c, ctx] = canvas(512, 512, C.verd
 
 // ---- avatares ----
 jobs['avatar-folego-1024.png'] = () => { const [c, ctx] = canvas(1024, 1024, C.verde); folegoMark(ctx, 512, 512, 560, { ring: C.papel, dot: C.menta, puff: C.ambarClaro }); return c; };
-jobs['avatar-prumo-1024.png'] = () => { const [c, ctx] = canvas(1024, 1024, C.fundo); prumoMark(ctx, 512, 512, 640, { left: C.menta, right: C.mentaEscura, groove: C.fundo, shine: C.mentaClara, hook: C.ambarClaro, string: C.papel }); return c; };
+jobs['avatar-prumo-1024.png'] = () => { const [c, ctx] = canvas(1024, 1024, C.fundo); prumoOpt(ctx, 2, 512, 512, 620, true); return c; };
 
 // ---- imagem de compartilhamento do site ----
 jobs['og-image.png'] = () => {

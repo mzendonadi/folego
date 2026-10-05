@@ -159,7 +159,21 @@ async function usersTab(ctx) {
         d.users,
         { onRow: (u) => editor(u) },
       )),
-      card('Papéis sugeridos', table([{ label: 'Papel', render: (r) => r.label }, { label: 'Áreas liberadas por padrão', render: (r) => r.permissions.map((p) => d.sections.find((s) => s.id === p)?.label ?? p).join(' · ') }], d.roles)),
+      card(
+        'Papéis sugeridos',
+        el('p', { class: 'muted' }, 'Ao criar uma pessoa, o papel já marca estas áreas. Você pode ajustar uma a uma na hora de salvar.'),
+        el(
+          'div', { class: 'bo-roles' },
+          ...d.roles.map((r) => {
+            const areas = r.permissions.map((p) => d.sections.find((s) => s.id === p)?.label ?? p);
+            return el(
+              'article', { class: 'bo-role' },
+              el('header', { class: 'bo-head-line' }, el('h3', {}, r.label), badge(areas.length === d.sections.length ? 'Todas as áreas' : `${areas.length} ${areas.length === 1 ? 'área' : 'áreas'}`, 'muted')),
+              el('div', { class: 'bo-chips' }, ...(areas.length ? areas.map((a) => badge(a, 'ok')) : [el('span', { class: 'fine muted' }, 'Nenhuma área por padrão')])),
+            );
+          }),
+        ),
+      ),
     );
   }
   await draw();
