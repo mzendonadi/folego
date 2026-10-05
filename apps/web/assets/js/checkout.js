@@ -131,7 +131,8 @@ export function renderCheckout(root, ctx) {
       await ctx.api.demoConfirmPayment(orderId);
     });
 
-    payCard.replaceChildren(
+    // replaceChildren nativo escreve "null" na tela quando recebe null: os itens opcionais saem pelo filter(Boolean).
+    payCard.replaceChildren(...[
       el('h2', { id: 'co-pay-title' }, `Pague ${brl(order.totalCents)} no Pix`),
       // O aviso aparece sempre que o código for de demonstração, inclusive no servidor de produção ainda sem Pix real.
       DEV || String(order.pixCode).startsWith('DEMO-') ? el('div', { class: 'demo-notice', role: 'note' }, icon('alert'), el('p', {}, el('strong', {}, 'Ambiente de demonstração. '), 'Este código não é um Pix real e nenhum valor será cobrado. Use "Simular pagamento aprovado" para ver como fica a entrega.')) : null,
@@ -141,7 +142,7 @@ export function renderCheckout(root, ctx) {
       el('ol', { class: 'pix-steps' }, el('li', {}, 'Abra o app do seu banco e escolha Pix.'), el('li', {}, 'Leia o QR Code ou cole o código.'), el('li', {}, addon ? 'Confirme o valor. O item abre sozinho aqui.' : 'Confirme o valor. O Mapa abre sozinho aqui.')),
       el('div', { class: 'pix-meta' }, status, el('p', { class: 'muted' }, 'Expira em ', timer)),
       DEV || String(order.pixCode).startsWith('DEMO-') ? demoBtn : null,
-    );
+    ].filter(Boolean));
     announce('Pix gerado. Aguardando o pagamento.');
 
     const tick = () => {
