@@ -150,6 +150,22 @@ const banner = (w, h, withPrumo = false) => () => {
 jobs['capa-x-1500x500.png'] = banner(1500, 500);
 jobs['capa-linkedin-1584x396.png'] = banner(1584, 396);
 jobs['capa-facebook-1640x624.png'] = banner(1640, 624);
+// Capa de PÁGINA do Facebook: a foto de perfil fica centralizada e cobre a parte de baixo, e no celular as laterais são cortadas.
+// Por isso o conteúdo vai centralizado, só na metade de cima (acima de y = 340 de 624).
+jobs['capa-facebook-pagina-1640x624.png'] = () => {
+  const w = 1640, h = 624;
+  const [c, ctx] = canvas(w, h, C.verde);
+  ctx.save(); ctx.globalAlpha = 0.14; ctx.strokeStyle = C.papel; ctx.lineWidth = 2;
+  for (const r of [0.5, 0.8, 1.1, 1.45]) { ctx.beginPath(); ctx.arc(w * 0.9, h * 0.15, h * r, 0, Math.PI * 2); ctx.stroke(); }
+  for (const r of [0.4, 0.7]) { ctx.beginPath(); ctx.arc(w * 0.08, h * 0.95, h * r, 0, Math.PI * 2); ctx.stroke(); }
+  ctx.restore();
+  const m = 150, cy = 150, gap = 34, wordSize = 136, wordW = wordSize * 2.93;
+  const x0 = (w - (m + gap + wordW)) / 2;
+  folegoMark(ctx, x0 + m / 2, cy, m, { ring: C.papel, dot: C.menta, puff: C.ambarClaro });
+  text(ctx, 'fôlego', x0 + m + gap, cy + m * 0.14, { size: wordSize, weight: 560, color: C.papel });
+  text(ctx, 'Respira. A gente organiza suas dívidas com você.', w / 2, 292, { size: 38, weight: 500, fam: 'Figtree', color: C.mentaClara, align: 'center' });
+  return c;
+};
 
 // ---- modelos de publicação ----
 jobs['post-dica-1080.png'] = () => {
