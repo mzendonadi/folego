@@ -14,6 +14,7 @@ import { adminLogout, adminOf, can, changePassword, completeSetup, releasePasswo
 import type { AdminUser } from './auth.ts';
 import * as campaigns from './campaigns.ts';
 import * as access from './access.ts';
+import * as demo from '../demo.ts';
 import * as dispatch from './dispatch.ts';
 import * as customers from './customers.ts';
 import * as manage from './manage.ts';
@@ -351,6 +352,30 @@ export function registerGestao(app: FastifyInstance, deps: AdminRouteDeps): void
   app.post(`${P}/acessos/:id/encerrar`, async (req) => {
     const a = await admin(req, 'assinaturas');
     return access.endNow(ctx, a.id, idParam((req.params as { id: string }).id));
+  });
+
+  // ---------- contas de teste (demo) ----------
+  app.get(`${P}/demo`, async (req) => {
+    await admin(req, 'assinaturas');
+    return demo.list(ctx);
+  });
+  app.post(`${P}/demo`, async (req, reply) => {
+    const a = await admin(req, 'assinaturas');
+    const b = z.strictObject({ email: z.string().trim().toLowerCase().email().max(200), label: z.string().trim().max(80).optional() }).parse(req.body);
+    return reply.status(201).send(await demo.create(ctx, a.id, b));
+  });
+  app.post(`${P}/demo/:id/ligar`, async (req) => {
+    const a = await admin(req, 'assinaturas');
+    const { active } = z.strictObject({ active: z.boolean() }).parse(req.body);
+    return demo.setActive(ctx, a.id, idParam((req.params as { id: string }).id), active);
+  });
+  app.post(`${P}/demo/:id/codigo`, { config: { rateLimit: { max: 10 * scale, timeWindow: '1 minute' } } }, async (req) => {
+    const a = await admin(req, 'assinaturas');
+    return demo.issueCode(ctx, a.id, idParam((req.params as { id: string }).id));
+  });
+  app.delete(`${P}/demo/:id`, async (req) => {
+    const a = await admin(req, 'assinaturas');
+    return demo.remove(ctx, a.id, idParam((req.params as { id: string }).id));
   });
 
   // ---------- produtos e preços ----------

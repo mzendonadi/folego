@@ -15,6 +15,7 @@ import { diagnose, buildPreview, buildCalendar, buildStrategies, buildIncomeFact
 import type { DebtInput, Diagnosis, Preview, CalendarItem, Profile, Strategies, EmploymentType, TranslatorAnalysis, TranslatorPreview } from './engine.ts';
 import { encryptText, hmac, newToken, sha256 } from './crypto.ts';
 import { AppError, notFound } from './errors.ts';
+import { isDemoSession } from './demo.ts';
 
 export interface Ctx {
   db: Db;
@@ -219,6 +220,27 @@ export async function createOrder(ctx: Ctx, args: { sessionId: string; caseId: s
     const discount = Math.max(0, sum - ctx.config.bundlePriceCents);
     prices.set('calendar_30d', Math.max(0, prices.get('calendar_30d')! - discount)); // o desconto fica no item mais barato do combo
   }
+  // Conta de teste (demo) ativa: o pedido é confirmado na hora, sem cobrança e sem chamar o provedor. Total 0 e provedor "demo"
+  // mantêm a receita e os relatórios limpos; o conteúdo e o prazo de acesso são exatamente os de um pedido pago.
+  if (await isDemoSession(ctx, args.sessionId)) {
+    const demoId = await ctx.db.tx(async (q) => {
+      const created = await q.query<{ id: string }>(
+        `INSERT INTO app.orders(case_id, session_id, status, total_cents, idempotency_key) VALUES ($1,$2,'pending',0,$3) ON CONFLICT (session_id, idempotency_key) DO NOTHING RETURNING id`,
+        [args.caseId, args.sessionId, args.idempotencyKey],
+      );
+      const id = created.rows[0]?.id;
+      if (!id) throw new Error('falha ao criar pedido de teste');
+      for (const code of prices.keys()) await q.query(`INSERT INTO app.order_items(order_id, product_code, unit_price_cents) VALUES ($1,$2,0)`, [id, code]);
+      await q.query(
+        `INSERT INTO app.payments(order_id, provider, provider_payment_id, method, amount_cents, status, pix_copy_paste, pix_expires_at) VALUES ($1,'demo',$2,'pix',0,'pending','CONTA-DE-TESTE-SEM-COBRANCA', now() + interval '30 minutes')`,
+        [id, `demo-${id}`],
+      );
+      await audit(q, `session:${args.sessionId}`, 'demo_order_created', 'order', id, { items: [...prices.keys()] });
+      return id;
+    });
+    await confirmPayment(ctx, `demo-${demoId}`, 'demo');
+    return orderView(ctx.db, demoId);
+  }
   const totalCents = [...prices.values()].reduce((s, v) => s + v, 0);
 
   const expiresAt = new Date(Date.now() + PIX_TTL_MS);
@@ -313,11 +335,11 @@ export async function handleWebhook(ctx: Ctx, headers: Record<string, string | s
   return outcome;
 }
 
-async function confirmPayment(ctx: Ctx, providerPaymentId: string): Promise<WebhookOutcome> {
+async function confirmPayment(ctx: Ctx, providerPaymentId: string, provider: string = ctx.gateway.name): Promise<WebhookOutcome> {
   return ctx.db.tx(async (q) => {
     const p = await q.query<{ id: string; status: string; order_id: string; case_id: string | null; subscriber_id: string | null }>(
       `SELECT p.id, p.status, p.order_id, o.case_id, o.subscriber_id FROM app.payments p JOIN app.orders o ON o.id = p.order_id WHERE p.provider = $1 AND p.provider_payment_id = $2 FOR UPDATE OF p`,
-      [ctx.gateway.name, providerPaymentId],
+      [provider, providerPaymentId],
     );
     const pay = p.rows[0];
     if (!pay) return 'ignored';

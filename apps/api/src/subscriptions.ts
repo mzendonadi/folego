@@ -14,6 +14,7 @@ import { ownedWalletId, walletOverdraftAlerts } from './account-extras.ts';
 import { monthLimits } from './account-debts.ts';
 import { markMissionDone } from './coach-program.ts';
 import { billingView, CARD_GRACE_DAYS } from './billing.ts';
+import { isDemoSubscriber } from './demo.ts';
 import type { BillingView } from './billing.ts';
 
 const CODE_TTL_MIN = 10;
@@ -88,6 +89,8 @@ export interface AccountView {
   /** Assinatura mensal no cartão (mensal, renova em…, cancelada, acesso até…). Nulo para quem ainda não assinou desse jeito. */
   billing: BillingView | null;
   profile: { displayName: string | null; notifyDigest: boolean; notifyReminders: boolean; marketing: boolean };
+  /** Conta de teste ligada pelo dono: nada é cobrado (o Prumo mostra um aviso). */
+  demo: boolean;
 }
 
 export async function accountView(ctx: Ctx, subscriberId: string): Promise<AccountView> {
@@ -108,6 +111,7 @@ export async function accountView(ctx: Ctx, subscriberId: string): Promise<Accou
     subscription: row ? { plan: row.plan, active: row.status === 'active' && end + grace > Date.now(), periodEnd: end, cancelAtPeriodEnd: row.cancel_at_period_end } : null,
     billing,
     profile: { displayName: p.display_name, notifyDigest: p.notify_digest, notifyReminders: p.notify_reminders, marketing: !p.opted_out },
+    demo: await isDemoSubscriber(ctx, subscriberId),
   };
 }
 

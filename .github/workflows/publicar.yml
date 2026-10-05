@@ -125,6 +125,35 @@ jobs:
           printf '%s\n' "$KNOWN" > ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
+      # Chaves de produção (Asaas e Turnstile): você cadastra como SEGREDO no GitHub (veja o roteiro) e o executor grava no
+      # ~/folego/deploy/.env do servidor sem imprimir nada (o GitHub mascara segredos nos registros). Quem não cadastrou
+      # um segredo não muda nada: o que já está no servidor continua. Com as três chaves do Asaas presentes, o pagamento
+      # passa para o Asaas real e o gateway de mentira é desligado; só então os bloqueios do deploy.sh passam a valer.
+      - name: Preparar chaves de produção (se cadastradas)
+        env:
+          ASAAS_API_KEY: ${{ secrets.ASAAS_API_KEY }}
+          ASAAS_PIX_KEY: ${{ secrets.ASAAS_PIX_KEY }}
+          ASAAS_WEBHOOK_TOKEN: ${{ secrets.ASAAS_WEBHOOK_TOKEN }}
+          ASAAS_BASE_URL: ${{ secrets.ASAAS_BASE_URL }}
+          TURNSTILE_SITE_KEY: ${{ secrets.TURNSTILE_SITE_KEY }}
+          TURNSTILE_SECRET: ${{ secrets.TURNSTILE_SECRET }}
+        run: |
+          out="$RUNNER_TEMP/prod.env"; : > "$out"; chmod 600 "$out"
+          [ -n "$TURNSTILE_SITE_KEY" ] && printf 'TURNSTILE_SITE_KEY=%s\n' "$TURNSTILE_SITE_KEY" >> "$out"
+          [ -n "$TURNSTILE_SECRET" ]   && printf 'TURNSTILE_SECRET=%s\n' "$TURNSTILE_SECRET" >> "$out"
+          if [ -n "$ASAAS_API_KEY" ] && [ -n "$ASAAS_PIX_KEY" ] && [ -n "$ASAAS_WEBHOOK_TOKEN" ]; then
+            # A chave do Asaas começa com "$": aspas simples evitam que o Docker a corrompa.
+            printf "ASAAS_API_KEY='%s'\n" "$ASAAS_API_KEY" >> "$out"
+            printf 'ASAAS_PIX_KEY=%s\n' "$ASAAS_PIX_KEY" >> "$out"
+            printf 'ASAAS_WEBHOOK_TOKEN=%s\n' "$ASAAS_WEBHOOK_TOKEN" >> "$out"
+            printf 'ASAAS_BASE_URL=%s\n' "${ASAAS_BASE_URL:-https://api.asaas.com/v3}" >> "$out"
+            printf 'PAYMENT_PROVIDER=asaas\nREQUIRE_PRODUCTION_KEYS=1\n' >> "$out"
+            echo "Asaas: chaves presentes, o pagamento passa para o Asaas."
+          else
+            echo "Asaas: segredos não cadastrados, o pagamento continua como está no servidor."
+          fi
+          echo "Linhas preparadas: $(wc -l < "$out")"
+
       - name: Enviar e publicar no servidor
         env:
           HOST: ${{ vars.VPS_HOST }}
@@ -133,6 +162,7 @@ jobs:
         run: |
           SSH_OPTS="-i $HOME/.ssh/deploy_key -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=20"
           scp $SSH_OPTS -P "$PORT" "$RUNNER_TEMP/folego-deploy.tgz" "$USER_@$HOST:folego-deploy.tgz"
+          if [ -s "$RUNNER_TEMP/prod.env" ]; then scp $SSH_OPTS -P "$PORT" "$RUNNER_TEMP/prod.env" "$USER_@$HOST:.folego-prod.env"; fi
           # Extrai por cima de ~/folego sem apagar o que só existe no servidor (.env, certificados).
           ssh $SSH_OPTS -p "$PORT" "$USER_@$HOST" '
             set -e
@@ -140,7 +170,12 @@ jobs:
             tar -C ~/folego-new -xzf ~/folego-deploy.tgz
             cp -a ~/folego-new/. ~/folego/
             rm -rf ~/folego-new ~/folego-deploy.tgz
-            cd ~/folego && bash deploy/deploy.sh
+            cd ~/folego
+            if [ -s ~/.folego-prod.env ] && [ -f deploy/.env ]; then
+              bash deploy/ops/mesclar-env.sh ~/.folego-prod.env deploy/.env
+            fi
+            rm -f ~/.folego-prod.env
+            bash deploy/deploy.sh
           '
 
       - name: Conferir o site no ar
@@ -155,4 +190,4 @@ jobs:
 
       - name: Apagar a chave do executor
         if: always()
-        run: rm -f ~/.ssh/deploy_key "$RUNNER_TEMP/folego-deploy.tgz"
+        run: rm -f ~/.ssh/deploy_key "$RUNNER_TEMP/folego-deploy.tgz" "$RUNNER_TEMP/prod.env"

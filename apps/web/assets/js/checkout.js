@@ -98,6 +98,11 @@ export function renderCheckout(root, ctx) {
       const order = await ctx.api.createOrder({ caseId: ctx.caseId, products: codes() });
       if (disposed) return;
       orderId = order.orderId;
+      // Conta de teste ligada pelo dono: o servidor já confirmou o pedido, sem Pix e sem cobrança.
+      if (order.status === 'paid') {
+        toast('Conta de teste: liberado sem cobrança.');
+        return ctx.onPaid(order.orderId);
+      }
       drawSummary(true);
       drawPix(order);
     } catch (error) {

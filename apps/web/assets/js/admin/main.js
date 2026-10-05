@@ -8,6 +8,7 @@ const MENU = [
   { id: 'clientes', label: 'Clientes', icon: 'users', perm: ['clientes'], load: () => import('./screens/clientes.js').then((m) => m.clientesScreen) },
   { id: 'assinaturas', label: 'Assinaturas', icon: 'wallet', perm: ['assinaturas'], load: () => import('./screens/assinaturas.js').then((m) => m.assinaturasScreen) },
   { id: 'acessos', label: 'Acessos e prazos', icon: 'clock', perm: ['assinaturas'], load: () => import('./screens/acessos.js').then((m) => m.acessosScreen) },
+  { id: 'contas-teste', label: 'Contas de teste', icon: 'users', perm: ['assinaturas'], load: () => import('./screens/contas-teste.js').then((m) => m.contasTesteScreen) },
   { id: 'jornada', label: 'Jornada e funil', icon: 'route', perm: ['jornada', 'dashboard'], load: () => import('./screens/jornada.js').then((m) => m.jornadaScreen) },
   { id: 'parcerias', label: 'Parcerias', icon: 'link', perm: ['parcerias'], load: () => import('./screens/parcerias.js').then((m) => m.parceriasScreen) },
   { id: 'produtos', label: 'Produtos e preços', icon: 'tag', perm: ['precos'], load: () => import('./screens/produtos.js').then((m) => m.produtosScreen) },

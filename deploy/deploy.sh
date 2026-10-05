@@ -32,6 +32,26 @@ else
 fi
 chmod 600 "$DEPLOY/.env"
 
+# Bloqueios de produção real: valem quando REQUIRE_PRODUCTION_KEYS=1 (o workflow liga isso sozinho quando as chaves do
+# Asaas chegam). Se faltar algo, aborta ANTES de trocar qualquer coisa e a versão em execução continua no ar.
+# Só confere se as variáveis existem; nenhum valor é impresso.
+tem() { grep -Eq "^$1=.+" "$DEPLOY/.env"; }
+if grep -q '^REQUIRE_PRODUCTION_KEYS=1$' "$DEPLOY/.env"; then
+  faltando=""
+  grep -q '^PAYMENT_PROVIDER=asaas$' "$DEPLOY/.env" || faltando="$faltando PAYMENT_PROVIDER=asaas"
+  grep -q '^PAYMENT_PROVIDER=fake$' "$DEPLOY/.env" && faltando="$faltando (pagamento de mentira ligado)"
+  grep -q '^ALLOW_FAKE_GATEWAY_IN_PRODUCTION=' "$DEPLOY/.env" && faltando="$faltando (ALLOW_FAKE_GATEWAY_IN_PRODUCTION presente)"
+  for v in ASAAS_API_KEY ASAAS_PIX_KEY ASAAS_WEBHOOK_TOKEN TURNSTILE_SITE_KEY TURNSTILE_SECRET; do tem "$v" || faltando="$faltando $v"; done
+  if [ -n "$faltando" ]; then
+    echo "ABORTADO: produção real exige:$faltando"
+    echo "A versão atual continua no ar. Corrija o .env (ou os segredos do GitHub) e publique de novo."
+    exit 1
+  fi
+  echo "    produção real: Asaas e Turnstile presentes."
+else
+  echo "    AVISO: pagamento de demonstração (sem REQUIRE_PRODUCTION_KEYS). Cadastre as chaves do Asaas e do Turnstile para ligar o real."
+fi
+
 echo "==> 2/6 Certificado de origem"
 mkdir -p "$DEPLOY/certs"
 if [ ! -s "$DEPLOY/certs/origin.pem" ] || [ ! -s "$DEPLOY/certs/origin.key" ]; then

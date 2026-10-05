@@ -162,7 +162,7 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
 
     const bar = el(
       'header', { class: 'acc-bar' },
-      el('div', {}, el('span', { class: `pill tone-${head.tone === 'ok' ? 'ok' : 'attention'}` }, head.pill), el('p', { class: 'muted acc-mail' }, acc.profile?.displayName ? `${acc.profile.displayName} · ${acc.email}` : acc.email)),
+      el('div', {}, el('span', { class: `pill tone-${head.tone === 'ok' ? 'ok' : 'attention'}` }, head.pill), acc.demo ? el('span', { class: 'pill tone-attention demo-pill', title: 'Conta de teste ligada pelo dono: nada é cobrado, nem aqui nem nos produtos avulsos.' }, 'Conta de teste · nada é cobrado') : null, el('p', { class: 'muted acc-mail' }, acc.profile?.displayName ? `${acc.profile.displayName} · ${acc.email}` : acc.email)),
       acc.role === 'member' ? el('p', { class: 'fine muted' }, 'Conta compartilhada de ' + acc.ownerEmail) : null,
       el('p', { class: 'muted acc-until' }, head.line),
     );
