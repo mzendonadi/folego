@@ -167,6 +167,25 @@ jobs['capa-facebook-pagina-1640x624.png'] = () => {
   return c;
 };
 
+// ---- primeiro post: apresentação do Fôlego ----
+jobs['post-apresentacao-1080.png'] = () => {
+  const [c, ctx] = canvas(1080, 1080, C.verde);
+  ctx.save(); ctx.globalAlpha = 0.14; ctx.strokeStyle = C.papel; ctx.lineWidth = 2;
+  for (const r of [160, 300, 460, 640]) { ctx.beginPath(); ctx.arc(1000, 90, r, 0, Math.PI * 2); ctx.stroke(); }
+  ctx.restore();
+  text(ctx, 'Respira.', 90, 400, { size: 230, weight: 600, color: C.papel });
+  wrap(ctx, 'A gente organiza suas dívidas com você.', 90, 520, 860, 66, { size: 54, weight: 500, fam: 'Fraunces', color: C.mentaClara });
+  const itens = ['Diagnóstico grátis, em 3 minutos', 'Sem cadastro e sem CPF', 'Só paga se gostar'];
+  itens.forEach((t, i) => {
+    const y = 735 + i * 76;
+    ctx.fillStyle = C.ambarClaro; ctx.beginPath(); ctx.arc(104, y - 13, 9, 0, Math.PI * 2); ctx.fill();
+    text(ctx, t, 140, y, { size: 42, weight: 600, fam: 'Figtree', color: C.papel });
+  });
+  lockup(ctx, 90, 985, 64, { markOpts: { ring: C.papel, dot: C.menta, puff: C.ambarClaro }, color: C.papel });
+  text(ctx, 'folego.online', 990, 990, { size: 30, weight: 700, fam: 'Figtree', color: C.mentaClara, align: 'right' });
+  return c;
+};
+
 // ---- modelos de publicação ----
 jobs['post-dica-1080.png'] = () => {
   const [c, ctx] = canvas(1080, 1080, C.papel);
