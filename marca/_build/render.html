@@ -186,6 +186,69 @@ jobs['post-apresentacao-1080.png'] = () => {
   return c;
 };
 
+// ---- Prumo: três propostas de marca (folha de comparação; a marca em uso só muda depois da escolha) ----
+const prumoOpt = (ctx, kind, cx, cy, size, dark) => {
+  const s = size / 32;
+  ctx.save(); ctx.translate(cx - size / 2, cy - size / 2); ctx.scale(s, s); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  const ink = dark ? C.papel : C.verde, acc = dark ? C.ambarClaro : C.ambar, peso = dark ? C.menta : C.verde;
+  if (kind === 1) { // pêndulo em movimento: o peso no prumo (centro) e dois "fantasmas" nas pontas do balanço
+    ctx.strokeStyle = ink; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(16, 3.4); ctx.lineTo(16, 18.2); ctx.stroke();
+    for (const sg of [-1, 1]) {
+      const bx = 16 + sg * 19.2 * Math.sin(0.56), by = 3.4 + 19.2 * Math.cos(0.56);
+      ctx.save(); ctx.globalAlpha = 0.38;
+      ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(16, 3.4); ctx.lineTo(bx - sg * 2.2, by - 3); ctx.stroke();
+      ctx.fillStyle = peso; ctx.beginPath(); ctx.arc(bx, by, 3.3, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+    ctx.fillStyle = peso; ctx.beginPath(); ctx.arc(16, 22.6, 4.6, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = dark ? C.fundo : C.menta; ctx.beginPath(); ctx.arc(16, 22.6, 1.7, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = acc; ctx.beginPath(); ctx.arc(16, 3.4, 1.9, 0, Math.PI * 2); ctx.fill();
+  } else if (kind === 2) { // monograma P: a haste do P é o fio e o peso fica pendurado, ligado por um fio fino
+    ctx.strokeStyle = ink; ctx.lineWidth = 3.4;
+    ctx.beginPath(); ctx.moveTo(11.5, 6); ctx.lineTo(11.5, 21.5); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(11.5, 6); ctx.lineTo(17.2, 6); ctx.arc(17.2, 12.2, 6.2, -Math.PI / 2, Math.PI / 2); ctx.lineTo(11.5, 18.4); ctx.stroke();
+    ctx.lineWidth = 1.3; ctx.beginPath(); ctx.moveTo(11.5, 21.5); ctx.lineTo(11.5, 25.4); ctx.stroke();
+    ctx.fillStyle = peso; ctx.beginPath(); ctx.arc(11.5, 28.2, 2.6, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = acc; ctx.beginPath(); ctx.arc(24.6, 4.4, 1.5, 0, Math.PI * 2); ctx.fill();
+  } else { // peso facetado, versão limpa da marca atual (sem argola, colar nem sulcos)
+    ctx.strokeStyle = ink; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(16, 3.4); ctx.lineTo(16, 9.5); ctx.stroke();
+    const left = new Path2D('M16 9.5H13.2Q12.2 9.5 11.6 10.4L9.4 14.8Q9.1 15.5 9.4 16.3L16 30.6Z');
+    const right = new Path2D('M16 9.5H18.8Q19.8 9.5 20.4 10.4L22.6 14.8Q22.9 15.5 22.6 16.3L16 30.6Z');
+    ctx.fillStyle = dark ? C.papel : C.verde; ctx.fill(left);
+    ctx.fillStyle = dark ? C.menta : C.fundo; ctx.fill(right);
+    ctx.fillStyle = acc; ctx.beginPath(); ctx.arc(16, 3.4, 1.9, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+};
+jobs['prumo-opcoes.png'] = () => {
+  const W = 1800, H = 1250;
+  const [c, ctx] = canvas(W, H, C.papel);
+  text(ctx, 'Prumo: três propostas de marca', 60, 90, { size: 54, weight: 600, color: C.tinta });
+  const opts = [
+    ['1 · Pêndulo em movimento', 'O peso para no centro, no prumo; os fantasmas', 'mostram o balanço. Fala de estabilidade.'],
+    ['2 · Monograma P', 'A haste do P é o fio; o peso fica pendurado.', 'Funciona como letra e como símbolo.'],
+    ['3 · Peso facetado limpo', 'A marca atual sem argola, colar e sulcos:', 'duas faces e um ponto de fixação.'],
+  ];
+  opts.forEach(([title, l1, l2], i) => {
+    const x0 = 60 + i * 590, w = 540;
+    text(ctx, title, x0, 170, { size: 38, weight: 600, color: C.verde });
+    roundRect(ctx, x0, 200, w, 440, 40); ctx.fillStyle = C.verde; ctx.fill();
+    prumoOpt(ctx, i + 1, x0 + w / 2, 420, 280, true);
+    roundRect(ctx, x0, 670, w, 260, 40); ctx.fillStyle = '#FFFFFF'; ctx.fill(); ctx.strokeStyle = '#D9D4C8'; ctx.lineWidth = 2; ctx.stroke();
+    prumoOpt(ctx, i + 1, x0 + 120, 800, 150, false);
+    text(ctx, 'prumo', x0 + 215, 822, { size: 78, weight: 560, color: C.verde });
+    [64, 32, 16].forEach((sz, k) => {
+      const cx = x0 + 40 + [40, 150, 220][k];
+      roundRect(ctx, cx - sz * 0.9, 1008 - sz * 0.9 + 20, sz * 1.8, sz * 1.8, sz * 0.4); ctx.fillStyle = C.verde; ctx.fill();
+      prumoOpt(ctx, i + 1, cx, 1028, sz * 1.15, true);
+    });
+    text(ctx, '64 · 32 · 16 px', x0 + 330, 1040, { size: 20, weight: 500, fam: 'Figtree', color: C.tinta2 });
+    text(ctx, l1, x0, 1130, { size: 21, weight: 500, fam: 'Figtree', color: C.tinta });
+    text(ctx, l2, x0, 1162, { size: 21, weight: 500, fam: 'Figtree', color: C.tinta });
+  });
+  return c;
+};
+
 // ---- modelos de publicação ----
 jobs['post-dica-1080.png'] = () => {
   const [c, ctx] = canvas(1080, 1080, C.papel);
