@@ -65,7 +65,12 @@ let processingTimer = 0;
 let generatedTimer = 0;
 
 // ---------- roteamento ----------
+/** Endereço mostrado para cada tela. A página inicial é só o domínio, sem "#/" no final. */
+const urlOf = (view) => (view === 'landing' ? `${location.pathname}${location.search}` : ROUTES[view]);
+const isLandingHash = (hash) => hash === '' || hash === '#' || hash === '#/';
+
 function viewFromHash(hash) {
+  if (isLandingHash(hash)) return 'landing';
   if (hash === ROUTES.account || hash.startsWith(`${ROUTES.account}/`)) return 'account'; // #/conta e #/conta/<aba>
   if (hash.startsWith(`${ROUTES.unsubscribe}/`)) return 'unsubscribe'; // #/descadastrar/<assinatura>
   if (hash === ROUTES.guided || hash.startsWith(`${ROUTES.guided}/`)) return 'guided'; // #/guia e #/guia/<tipo>
@@ -100,7 +105,8 @@ function show(view, { focus = true, scroll = true } = {}) {
 
 function go(view) {
   const hash = ROUTES[view];
-  if (location.hash !== hash) history.pushState({ view }, '', hash);
+  const already = view === 'landing' ? isLandingHash(location.hash) : location.hash === hash;
+  if (!already) history.pushState({ view }, '', urlOf(view));
   route();
 }
 
@@ -153,7 +159,7 @@ async function redeemLink(token) {
     history.replaceState({ view: 'delivery' }, '', ROUTES.delivery); // tira o token da barra de endereço
     return true;
   } catch {
-    history.replaceState({ view: 'landing' }, '', ROUTES.landing);
+    history.replaceState({ view: 'landing' }, '', urlOf('landing'));
     toast('Este link não vale mais. Ele pode ter expirado ou ter sido trocado por um mais novo.');
     return false;
   }
@@ -195,6 +201,8 @@ async function openDelivery({ scrollTo = null } = {}) {
 }
 
 async function route() {
+  // Quem chega por um link com "#/" no final vê só o domínio na barra de endereço.
+  if (location.hash === '#/' || location.hash === '#') history.replaceState(history.state, '', urlOf('landing'));
   if (location.hash.startsWith('#/acesso/')) {
     const ok = await redeemLink(decodeURIComponent(location.hash.slice('#/acesso/'.length)));
     if (!ok) return route();
@@ -234,7 +242,7 @@ async function route() {
 }
 
 function replaceWith(view) {
-  history.replaceState({ view }, '', ROUTES[view]);
+  history.replaceState({ view }, '', urlOf(view));
   return route();
 }
 
@@ -593,7 +601,7 @@ function bindGlobalClicks() {
       if (node) {
         event.preventDefault();
         node.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' });
-        history.replaceState(history.state, '', `${location.pathname}${location.search}${ROUTES[current]}`);
+        history.replaceState(history.state, '', `${location.pathname}${location.search}${current === 'landing' ? '' : ROUTES[current]}`);
       }
     }
   });
