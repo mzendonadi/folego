@@ -890,7 +890,9 @@ ul, ol { margin: 0; padding: 0; }
 .prumo .section-head .lead { margin-top: var(--s3); }
 .prumo .micro { margin-top: var(--s5); }
 .objectives { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
-@media (max-width: 1139px) { .header-nav a[data-nav="tools"], .header-nav a[data-nav="translator"] { display: none; } }
+/* Em larguras médias o menu perde primeiro o que é secundário; o Tradutor de cobrança fica visível. */
+@media (max-width: 1139px) { .header-nav a[data-nav="tools"], .header-nav a[href="#duvidas"] { display: none; } }
+@media (max-width: 1019px) { .header-nav a[href="#o-que-recebe"] { display: none; } }
 .partner-cta { margin-top: var(--s2); }
 
 /* Indicações */
@@ -1092,3 +1094,22 @@ fieldset.offer-box { min-inline-size: 0; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pm-ink { stroke: #F6F3EC; } :root:not([data-theme="light"]) .pm-bob { fill: #8FE0BE; } :root:not([data-theme="light"]) .pm-accent { fill: #F2B24A; } }
 :root[data-theme="dark"] .pm-ink { stroke: #F6F3EC; } :root[data-theme="dark"] .pm-bob { fill: #8FE0BE; } :root[data-theme="dark"] .pm-accent { fill: #F2B24A; }
 .prumo-badge { display: block; width: 64px; height: 64px; margin-bottom: var(--s3); border-radius: 16px; }
+
+/* Landing: Tradutor de cobrança (texto à esquerda, exemplo antes e depois à direita). */
+.tr-grid { display: grid; gap: var(--s6); align-items: center; }
+@media (min-width: 900px) { .tr-grid { grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr); gap: var(--s7, 56px); } }
+.tr-copy { display: grid; gap: var(--s4); align-content: start; }
+.tr-copy h2, .tr-copy p { margin: 0; }
+.tr-points { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s3); }
+.tr-points li { position: relative; padding-left: 28px; color: var(--ink-2); }
+.tr-points li::before { content: ""; position: absolute; left: 4px; top: 0.6em; width: 10px; height: 10px; border-radius: 50%; background: var(--primary); }
+.tr-cta { margin-top: var(--s2) !important; }
+.tr-demo { display: grid; gap: var(--s3); min-width: 0; }
+.tr-demo p { margin: 0; }
+.tr-msg { margin: 0; padding: var(--s4) var(--s5); border-radius: var(--radius); border: 1px dashed var(--field); background: color-mix(in srgb, var(--surface) 55%, transparent); }
+.tr-msg figcaption { font-size: 0.8125rem; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
+.tr-msg blockquote { margin: 0; font-family: var(--font-display); font-size: 1.15rem; line-height: 1.45; color: var(--ink); }
+.tr-read { display: grid; gap: var(--s3); padding: var(--s5); border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); margin-left: var(--s5); }
+.tr-read-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2) var(--s3); }
+.tr-read-do { padding-top: var(--s3); border-top: 1px solid var(--line); }
+@media (max-width: 560px) { .tr-read { margin-left: 0; } }
