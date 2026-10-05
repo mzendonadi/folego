@@ -134,6 +134,8 @@ export function renderCheckout(root, ctx) {
     // replaceChildren nativo escreve "null" na tela quando recebe null: os itens opcionais saem pelo filter(Boolean).
     payCard.replaceChildren(...[
       el('h2', { id: 'co-pay-title' }, `Pague ${brl(order.totalCents)} no Pix`),
+      // Quem paga vê de quem é o Pix antes de abrir o banco (passa confiança e ensina a conferir o recebedor).
+      el('p', { class: 'pix-trust' }, icon('shield'), el('span', {}, el('strong', {}, 'Este Pix é em nome de Matheus Zendonadi dos Santos, quem criou o Fôlego.'), ' Administrador de Empresas, especialista financeiro e em gestão de projetos. Antes de confirmar, confira o nome do recebedor no app do banco (ele pode aparecer abreviado).')),
       // O aviso aparece sempre que o código for de demonstração, inclusive no servidor de produção ainda sem Pix real.
       DEV || String(order.pixCode).startsWith('DEMO-') ? el('div', { class: 'demo-notice', role: 'note' }, icon('alert'), el('p', {}, el('strong', {}, 'Ambiente de demonstração. '), 'Este código não é um Pix real e nenhum valor será cobrado. Use "Simular pagamento aprovado" para ver como fica a entrega.')) : null,
       qrHolder,

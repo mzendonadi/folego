@@ -1087,3 +1087,8 @@ fieldset.offer-box { min-inline-size: 0; }
 .access-banner > .btn { grid-column: 1 / -1; justify-self: start; }
 @media (min-width: 720px) { .access-banner > .btn { grid-column: auto; grid-row: 1; grid-column: 3; } .access-banner { grid-template-columns: auto minmax(0, 1fr) auto; } }
 @media (prefers-reduced-motion: reduce) { .ab-meter > span { transition: none; } }
+
+/* Tela de Pix: de quem é o Pix, em letra pequena e discreta. */
+.pix-trust { display: flex; gap: 8px; align-items: flex-start; margin: 0; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--mint); color: var(--mint-ink); font-size: 0.8125rem; line-height: 1.45; }
+.pix-trust .icon { flex: none; margin-top: 2px; width: 1.1em; height: 1.1em; }
+.pix-trust strong { font-weight: 700; }
