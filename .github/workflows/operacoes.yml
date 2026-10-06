@@ -20,7 +20,7 @@ on:
         description: 'O que fazer'
         required: true
         type: choice
-        options: [status, instalar_rotinas, backup_agora, testar_restauracao, limpar_dados_de_teste]
+        options: [status, pagamentos, instalar_rotinas, backup_agora, testar_restauracao, limpar_dados_de_teste]
       confirmar:
         description: 'Só para limpar_dados_de_teste: digite LIMPAR'
         required: false
@@ -64,6 +64,7 @@ jobs:
           SSH="ssh -i $HOME/.ssh/deploy_key -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=20 -p $PORT $USER_@$HOST"
           case "$ACAO" in
             status)               $SSH 'bash ~/folego/deploy/ops/status.sh' ;;
+            pagamentos)           $SSH 'bash ~/folego/deploy/ops/pagamentos.sh' ;;
             instalar_rotinas)     $SSH 'bash ~/folego/deploy/ops/install-cron.sh && bash ~/folego/deploy/ops/backup.sh' ;;
             backup_agora)         $SSH 'bash ~/folego/deploy/ops/backup.sh' ;;
             testar_restauracao)   $SSH 'bash ~/folego/deploy/ops/backup.sh && bash ~/folego/deploy/ops/restore-test.sh' ;;
