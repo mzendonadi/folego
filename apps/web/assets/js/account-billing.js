@@ -76,6 +76,7 @@ export function drawCardCheckout(plan, mount, { api, onBack = null, onDone, befo
   const nameInput = el('input', { type: 'text', id: 'co-name', class: 'input', autocomplete: 'name', maxlength: '100', placeholder: 'Como está no seu documento' });
   const cpfInput = el('input', { type: 'text', id: 'co-cpf', class: 'input', inputmode: 'numeric', autocomplete: 'off', maxlength: '14', placeholder: '000.000.000-00' });
   const phoneInput = el('input', { type: 'tel', id: 'co-phone', class: 'input', inputmode: 'tel', autocomplete: 'tel-national', maxlength: '15', placeholder: '(11) 91234-5678' });
+  const adsInput = el('input', { type: 'checkbox', id: 'co-ads' });
   nameInput.setAttribute('aria-describedby', 'co-data-hint');
   cpfInput.setAttribute('aria-describedby', 'co-data-hint');
   const digits = (v) => v.replace(/\D/g, '');
@@ -100,6 +101,7 @@ export function drawCardCheckout(plan, mount, { api, onBack = null, onDone, befo
       el('div', { class: 'field' }, el('label', { for: 'co-name', class: 'label' }, 'Nome completo'), nameInput),
       el('div', { class: 'field' }, el('label', { for: 'co-cpf', class: 'label' }, 'CPF'), cpfInput)),
     el('div', { class: 'field' }, el('label', { for: 'co-phone', class: 'label' }, 'Celular com DDD (opcional)'), phoneInput, el('p', { class: 'hint' }, 'Só para avisos sobre a cobrança e suporte.')),
+    el('div', { class: 'check' }, adsInput, el('label', { for: 'co-ads' }, 'Quero receber novidades e aceito que meu e-mail e celular sejam usados para personalizar anúncios (por exemplo, na Meta). É opcional e você pode retirar o aceite quando quiser.')),
     el('div', { class: 'check' }, terms, el('label', { for: 'co-terms' }, 'Li e aceito os ', openTerms, ' e autorizo a cobrança mensal recorrente de ', brl(plan.priceCents), ' no meu cartão até eu cancelar.')),
     go,
   );
@@ -109,7 +111,7 @@ export function drawCardCheckout(plan, mount, { api, onBack = null, onDone, befo
     go.textContent = 'Preparando o pagamento…';
     let order;
     try {
-      order = await api.createCheckout(plan.code, { name: nameInput.value.trim(), cpf: digits(cpfInput.value), ...(digits(phoneInput.value).length >= 10 ? { phone: digits(phoneInput.value) } : {}) });
+      order = await api.createCheckout(plan.code, { name: nameInput.value.trim(), cpf: digits(cpfInput.value), ...(digits(phoneInput.value).length >= 10 ? { phone: digits(phoneInput.value) } : {}), adsConsent: adsInput.checked });
     } catch (e) {
       go.disabled = false;
       go.textContent = 'Continuar para o pagamento seguro';

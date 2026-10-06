@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
+import { sendCapi } from './capi.ts';
 import staticPlugin from '@fastify/static';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
@@ -81,6 +82,15 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.addContentTypeParser('application/pdf', { parseAs: 'buffer', bodyLimit: 16 * 1024 * 1024 }, (_req, body, done) => done(null, body));
   app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_req, body, done) => done(null, {}));
   await app.register(cookie);
+  // PageView anônimo para a Meta (desligado por padrão: envia IP e navegador de todo visitante, sem aceite).
+  if (config.metaPageView && config.metaCapiToken) {
+    app.addHook('onRequest', async (req) => {
+      if (req.method !== 'GET' || req.url !== '/') return;
+      const ck = req.headers.cookie ?? '';
+      const ua = req.headers['user-agent'];
+      void sendCapi(ctx, { name: 'PageView', eventId: randomUUID(), ip: clientIp(req), userAgent: typeof ua === 'string' ? ua : undefined, url: `${config.publicUrl}/`, fbc: /_fbc=([^;]+)/.exec(ck)?.[1], fbp: /_fbp=([^;]+)/.exec(ck)?.[1] });
+    });
+  }
   await app.register(rateLimit, { global: true, max: 300 * scale, timeWindow: '1 minute', keyGenerator: clientIp });
 
   // Cabeçalhos comuns e proteção CSRF: toda escrita em /api precisa do cabeçalho x-folego (um formulário de
@@ -185,7 +195,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     const key = req.headers['idempotency-key'];
     if (typeof key !== 'string' || key.length < 8 || key.length > 100) throw new AppError(400, 'idempotency_key', 'Cabeçalho Idempotency-Key obrigatório (de 8 a 100 caracteres)');
     const body = createOrderSchema.parse(req.body);
-    const order = await svc.createOrder(ctx, { sessionId, caseId: body.caseId, products: body.products ?? ['recovery_map', ...(body.withLetters ? ['defense_letters'] : [])], idempotencyKey: key });
+    const order = await svc.createOrder(ctx, { sessionId, caseId: body.caseId, products: body.products ?? ['recovery_map', ...(body.withLetters ? ['defense_letters'] : [])], idempotencyKey: key, contact: body.contact, ip: clientIp(req), userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined });
     return reply.status(201).send(order);
   });
 
@@ -381,8 +391,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.post('/api/account/subscription-checkout', { config: { rateLimit: { max: 15 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => {
     const selfId = await requireSelf(req);
     await household.assertNotMember(ctx, selfId);
-    const { plan, acceptTerms, referralCode, cpf, name, phone } = checkoutSchema.parse(req.body);
-    return reply.status(201).send(await billing.startCardCheckout(ctx, { subscriberId: selfId, plan, acceptTerms, referralCode, cpf, name, phone }));
+    const { plan, acceptTerms, referralCode, cpf, name, phone, adsConsent } = checkoutSchema.parse(req.body);
+    return reply.status(201).send(await billing.startCardCheckout(ctx, { subscriberId: selfId, plan, acceptTerms, referralCode, cpf, name, phone, adsConsent }));
   });
   app.post('/api/account/subscription-cancel', async (req) => {
     const { cancel } = cancelSchema.parse(req.body);

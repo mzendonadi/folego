@@ -7,6 +7,7 @@ import type { Db, Queryable } from './db.ts';
 import type { PaymentGateway } from './gateway.ts';
 import { layout } from './email.ts';
 import { activateSubscription } from './subscriptions.ts';
+import { pixIntent, purchase } from './capi.ts';
 import { leadState, leadDocumentId } from './leads.ts';
 import type { LeadState } from './leads.ts';
 import type { EmailSender } from './email.ts';
@@ -176,8 +177,18 @@ export const OFFERABLE = ['recovery_map', 'defense_letters', 'calendar_30d', 'ex
 /** Preço fechado do Kit Completo (Mapa + Cartas + Calendário comprados juntos). O desconto é calculado aqui, nunca no navegador. */
 export const BUNDLE_PRICE_CENTS = 5990;
 
-export async function createOrder(ctx: Ctx, args: { sessionId: string; caseId: string; products: string[]; idempotencyKey: string }): Promise<OrderView> {
+export async function createOrder(ctx: Ctx, args: { sessionId: string; caseId: string; products: string[]; idempotencyKey: string; contact?: { email: string; phone: string; adsConsent: boolean } | undefined; ip?: string | undefined; userAgent?: string | undefined }): Promise<OrderView> {
   await ownedCase(ctx.db, args.sessionId, args.caseId);
+  // Contato rápido (e-mail e celular) antes de gerar o Pix: criptografado, no caso, e some junto com ele (7 dias sem pagar, 30 depois de pago).
+  if (args.contact) {
+    await ctx.db.query(
+      `UPDATE app.cases SET contact_email_enc = $2, contact_phone_enc = $3, ads_consent = $4, contact_at = now() WHERE id = $1`,
+      [args.caseId, encryptText(ctx.config.secret, args.contact.email), encryptText(ctx.config.secret, args.contact.phone), args.contact.adsConsent],
+    );
+  } else if (ctx.gateway.name === 'asaas') {
+    const has = await ctx.db.query(`SELECT 1 FROM app.cases WHERE id = $1 AND contact_email_enc IS NOT NULL`, [args.caseId]);
+    if (has.rows.length === 0) throw new AppError(422, 'contact_required', 'Informe seu e-mail e celular para gerar o Pix.');
+  }
 
   const existing = await ctx.db.query<{ id: string }>(`SELECT id FROM app.orders WHERE session_id = $1 AND idempotency_key = $2`, [args.sessionId, args.idempotencyKey]);
   if (existing.rows[0]) return orderView(ctx.db, existing.rows[0].id);
@@ -267,7 +278,9 @@ export async function createOrder(ctx: Ctx, args: { sessionId: string; caseId: s
     await audit(q, `session:${args.sessionId}`, 'order_created', 'order', id, { totalCents, items: codes });
     return id;
   });
-  return orderView(ctx.db, orderId);
+  const view = await orderView(ctx.db, orderId);
+  void pixIntent(ctx, { caseId: args.caseId, orderId, totalCents, ip: args.ip, userAgent: args.userAgent }).catch(() => {});
+  return view;
 }
 
 export async function getOrder(ctx: Ctx, sessionId: string, orderId: string): Promise<{ status: string; totalCents: number }> {
@@ -336,6 +349,12 @@ export async function handleWebhook(ctx: Ctx, headers: Record<string, string | s
 }
 
 async function confirmPayment(ctx: Ctx, providerPaymentId: string, provider: string = ctx.gateway.name): Promise<WebhookOutcome> {
+  const outcome = await confirmPaymentTx(ctx, providerPaymentId, provider);
+  if (outcome === 'confirmed') void purchase(ctx, providerPaymentId).catch(() => {}); // Meta: depois de gravar, sem atrasar nem derrubar o pagamento
+  return outcome;
+}
+
+async function confirmPaymentTx(ctx: Ctx, providerPaymentId: string, provider: string): Promise<WebhookOutcome> {
   return ctx.db.tx(async (q) => {
     const p = await q.query<{ id: string; status: string; order_id: string; case_id: string | null; subscriber_id: string | null }>(
       `SELECT p.id, p.status, p.order_id, o.case_id, o.subscriber_id FROM app.payments p JOIN app.orders o ON o.id = p.order_id WHERE p.provider = $1 AND p.provider_payment_id = $2 FOR UPDATE OF p`,

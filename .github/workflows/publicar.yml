@@ -137,10 +137,14 @@ jobs:
           ASAAS_BASE_URL: ${{ secrets.ASAAS_BASE_URL }}
           TURNSTILE_SITE_KEY: ${{ secrets.TURNSTILE_SITE_KEY }}
           TURNSTILE_SECRET: ${{ secrets.TURNSTILE_SECRET }}
+          META_CAPI_TOKEN: ${{ secrets.META_CAPI_TOKEN }}
+          META_TEST_EVENT_CODE: ${{ secrets.META_TEST_EVENT_CODE }}
         run: |
           out="$RUNNER_TEMP/prod.env"; : > "$out"; chmod 600 "$out"
           [ -n "$TURNSTILE_SITE_KEY" ] && printf 'TURNSTILE_SITE_KEY=%s\n' "$TURNSTILE_SITE_KEY" >> "$out"
           [ -n "$TURNSTILE_SECRET" ]   && printf 'TURNSTILE_SECRET=%s\n' "$TURNSTILE_SECRET" >> "$out"
+          [ -n "$META_CAPI_TOKEN" ]     && printf 'META_CAPI_TOKEN=%s\n' "$META_CAPI_TOKEN" >> "$out"
+          [ -n "$META_TEST_EVENT_CODE" ] && printf 'META_TEST_EVENT_CODE=%s\n' "$META_TEST_EVENT_CODE" >> "$out"
           if [ -n "$ASAAS_API_KEY" ] && [ -n "$ASAAS_PIX_KEY" ] && [ -n "$ASAAS_WEBHOOK_TOKEN" ]; then
             # A chave do Asaas começa com "$": aspas simples evitam que o Docker a corrompa.
             printf "ASAAS_API_KEY='%s'\n" "$ASAAS_API_KEY" >> "$out"

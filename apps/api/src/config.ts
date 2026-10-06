@@ -64,6 +64,12 @@ export interface Config {
   /** Cloudflare Turnstile (anti-robô). Sem as duas chaves fica desligado. */
   turnstileSiteKey: string | null;
   turnstileSecret: string | null;
+  /** Meta Conversions API (servidor). Sem o token fica desligada. */
+  metaCapiToken: string | null;
+  metaPixelId: string;
+  metaTestEventCode: string | null;
+  /** PageView anônimo (IP e navegador de todo visitante) só com META_CAPI_PAGEVIEW=1. */
+  metaPageView: boolean;
   /** Desconto (%) na próxima fatura por indicação que assina. */
   referralDiscountPct: number;
 }
@@ -134,6 +140,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     referralEnabled: true,
     turnstileSiteKey: env.TURNSTILE_SITE_KEY ? env.TURNSTILE_SITE_KEY : null,
     turnstileSecret: env.TURNSTILE_SECRET ? env.TURNSTILE_SECRET : null,
+    metaCapiToken: env.META_CAPI_TOKEN ? env.META_CAPI_TOKEN : null,
+    metaPixelId: env.META_PIXEL_ID && /^\d{6,20}$/.test(env.META_PIXEL_ID) ? env.META_PIXEL_ID : '1643796570757610',
+    metaTestEventCode: env.META_TEST_EVENT_CODE ? env.META_TEST_EVENT_CODE : null,
+    metaPageView: env.META_CAPI_PAGEVIEW === '1',
     referralDiscountPct: 10,
   };
 }

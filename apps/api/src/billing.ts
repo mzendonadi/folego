@@ -27,7 +27,7 @@ export interface CheckoutView {
 }
 
 /** Começa a assinatura mensal: registra o aceite dos termos, cria a assinatura no provedor e devolve a página do cartão. */
-export async function startCardCheckout(ctx: Ctx, args: { subscriberId: string; plan: string; acceptTerms: boolean; referralCode?: string | undefined; cpf?: string | undefined; name?: string | undefined; phone?: string | undefined }): Promise<CheckoutView> {
+export async function startCardCheckout(ctx: Ctx, args: { subscriberId: string; plan: string; acceptTerms: boolean; referralCode?: string | undefined; cpf?: string | undefined; name?: string | undefined; phone?: string | undefined; adsConsent?: boolean | undefined }): Promise<CheckoutView> {
   if (!ctx.config.subscriptionsEnabled) throw notFound();
   if (ctx.gateway.name === 'asaas' && !args.cpf) throw new AppError(422, 'cpf_required', 'Para assinar no cartão, informe o seu CPF.');
   if (ctx.gateway.name === 'asaas' && !args.name) throw new AppError(422, 'name_required', 'Para assinar no cartão, informe o seu nome completo.');
@@ -47,8 +47,8 @@ export async function startCardCheckout(ctx: Ctx, args: { subscriberId: string; 
   // Dados cadastrais guardados já na intenção de assinar (mesmo que a pessoa desista antes de pagar): CPF e celular criptografados.
   if (args.cpf || args.name || args.phone) {
     await ctx.db.query(
-      `UPDATE app.subscribers SET display_name = coalesce($2, display_name), cpf_enc = coalesce($3, cpf_enc), cpf_last4 = coalesce($4, cpf_last4), phone_enc = coalesce($5, phone_enc), profile_updated_at = now() WHERE id = $1`,
-      [args.subscriberId, args.name ?? null, args.cpf ? encryptText(ctx.config.secret, args.cpf) : null, args.cpf ? args.cpf.slice(-4) : null, args.phone ? encryptText(ctx.config.secret, args.phone) : null],
+      `UPDATE app.subscribers SET display_name = coalesce($2, display_name), cpf_enc = coalesce($3, cpf_enc), cpf_last4 = coalesce($4, cpf_last4), phone_enc = coalesce($5, phone_enc), ads_consent = coalesce($6, ads_consent), profile_updated_at = now() WHERE id = $1`,
+      [args.subscriberId, args.name ?? null, args.cpf ? encryptText(ctx.config.secret, args.cpf) : null, args.cpf ? args.cpf.slice(-4) : null, args.phone ? encryptText(ctx.config.secret, args.phone) : null, args.adsConsent ?? null],
     );
   }
   const who = await ctx.db.query<{ email: string; display_name: string | null }>(`SELECT email::text AS email, display_name FROM app.subscribers WHERE id = $1`, [args.subscriberId]);

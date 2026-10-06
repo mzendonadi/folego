@@ -49,8 +49,16 @@ export const createCaseSchema = z.object({
   acceptTerms: z.literal(true),
 });
 
+/** Contato de quem vai pagar o Pix: e-mail e celular com DDD; adsConsent é o aceite separado (opcional, desmarcado). */
+export const orderContactSchema = z.strictObject({
+  email: z.string().trim().toLowerCase().email().max(200),
+  phone: z.string().trim().transform((v) => v.replace(/\D/g, '')).refine((d) => /^\d{10,11}$/.test(d), 'Celular inválido'),
+  adsConsent: z.boolean().default(false),
+});
+
 export const createOrderSchema = z.object({
   caseId: z.string().uuid(),
+  contact: orderContactSchema.optional(),
   withLetters: z.boolean().default(false),
   products: z.array(z.enum(['recovery_map', 'defense_letters', 'calendar_30d', 'extra_income_plan', 'collection_translator', 'guide_financing', 'guide_housebills', 'guide_forgotten', 'guide_resume'])).min(1).max(4).optional(),
 });
@@ -118,7 +126,7 @@ export const cpfSchema = z.string().trim().transform((v) => v.replace(/[.\-\s]/g
   };
   return dv(9) === Number(d[9]) && dv(10) === Number(d[10]);
 }, 'CPF inválido');
-export const checkoutSchema = z.object({ plan: z.enum(['controle', 'ousado', 'desbravador']), acceptTerms: z.literal(true), cpf: cpfSchema.optional(), name: z.string().trim().min(5).max(100).regex(/\S+\s+\S+/, 'Informe nome e sobrenome').optional(), phone: z.string().trim().transform((v) => v.replace(/\D/g, '')).refine((d) => /^\d{10,11}$/.test(d), 'Celular inválido').optional(), referralCode: z.string().trim().toLowerCase().max(40).optional() });
+export const checkoutSchema = z.object({ plan: z.enum(['controle', 'ousado', 'desbravador']), acceptTerms: z.literal(true), cpf: cpfSchema.optional(), adsConsent: z.boolean().optional(), name: z.string().trim().min(5).max(100).regex(/\S+\s+\S+/, 'Informe nome e sobrenome').optional(), phone: z.string().trim().transform((v) => v.replace(/\D/g, '')).refine((d) => /^\d{10,11}$/.test(d), 'Celular inválido').optional(), referralCode: z.string().trim().toLowerCase().max(40).optional() });
 export const referralLeadSchema = z.object({ friendEmail: z.string().trim().toLowerCase().email().max(200), yourName: z.string().trim().min(2).max(40) });
 export const referralInviteSchema = z.object({ email: z.string().trim().toLowerCase().email().max(200) });
 export const creditAdjustSchema = z.object({ subscriberId: z.string().uuid(), delta: z.number().int().min(-12).max(12), reason: z.string().trim().min(3).max(200) });

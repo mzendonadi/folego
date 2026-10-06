@@ -82,7 +82,7 @@ function client() {
 async function novoPedido(key: string) {
   const c = client();
   const created = await c('POST', '/api/cases', { body: validCase() });
-  const order = await c('POST', '/api/orders', { body: { caseId: created.json.caseId, withLetters: false }, headers: { 'idempotency-key': key } });
+  const order = await c('POST', '/api/orders', { body: { caseId: created.json.caseId, withLetters: false, contact: { email: 'cliente@exemplo.com', phone: '11912345678', adsConsent: false } }, headers: { 'idempotency-key': key } });
   const pay = await db.query<{ provider_payment_id: string }>(`SELECT provider_payment_id FROM app.payments WHERE order_id = $1`, [order.json.orderId]);
   return { c, order: order.json, qrId: pay.rows[0]!.provider_payment_id };
 }
@@ -171,7 +171,7 @@ test('erro do provedor ao criar o Pix vira 502 sem vazar detalhes', async () => 
     const cookieRes = await app2.inject({ method: 'POST', url: '/api/cases', headers: { 'x-folego': '1', 'content-type': 'application/json' }, payload: JSON.stringify(validCase()) });
     const cookie = String(cookieRes.headers['set-cookie']).split(';')[0]!;
     const caseId = JSON.parse(cookieRes.body).caseId;
-    const res = await app2.inject({ method: 'POST', url: '/api/orders', headers: { 'x-folego': '1', 'content-type': 'application/json', cookie, 'idempotency-key': 'asaas-erro-0001' }, payload: JSON.stringify({ caseId, withLetters: false }) });
+    const res = await app2.inject({ method: 'POST', url: '/api/orders', headers: { 'x-folego': '1', 'content-type': 'application/json', cookie, 'idempotency-key': 'asaas-erro-0001' }, payload: JSON.stringify({ contact: { email: 'cliente@exemplo.com', phone: '11912345678', adsConsent: false }, caseId, withLetters: false }) });
     assert.equal(res.statusCode, 502);
     assert.ok(!res.body.includes('CHAVE-INTERNA-SECRETA'));
     const orphan = await db.query(`SELECT 1 FROM app.orders WHERE idempotency_key = 'asaas-erro-0001'`);
