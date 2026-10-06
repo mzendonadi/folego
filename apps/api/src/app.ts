@@ -381,8 +381,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.post('/api/account/subscription-checkout', { config: { rateLimit: { max: 15 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => {
     const selfId = await requireSelf(req);
     await household.assertNotMember(ctx, selfId);
-    const { plan, acceptTerms, referralCode, cpf } = checkoutSchema.parse(req.body);
-    return reply.status(201).send(await billing.startCardCheckout(ctx, { subscriberId: selfId, plan, acceptTerms, referralCode, cpf }));
+    const { plan, acceptTerms, referralCode, cpf, name, phone } = checkoutSchema.parse(req.body);
+    return reply.status(201).send(await billing.startCardCheckout(ctx, { subscriberId: selfId, plan, acceptTerms, referralCode, cpf, name, phone }));
   });
   app.post('/api/account/subscription-cancel', async (req) => {
     const { cancel } = cancelSchema.parse(req.body);

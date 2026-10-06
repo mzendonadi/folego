@@ -21,6 +21,7 @@ export function newDebt() {
 export function emptyAnswers() {
   return {
     employmentType: '',
+    cltContract: '', // só quando o vínculo é CLT: 'permanent' (prazo indeterminado) ou 'temporary' (contratação temporária)
     employmentNote: '', // só quando o vínculo é "Outra situação": a pessoa conta, em poucas palavras, como entra o dinheiro
     netIncomeCents: null,
     ageBand: '',

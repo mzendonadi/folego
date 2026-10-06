@@ -2,7 +2,7 @@
 // Celular: um passo por vez. Desktop: linha do tempo que nasce apagada e acende a cada passo concluído.
 import { $, $$, el, icon, announce, focusSoon, prefersReducedMotion } from './dom.js';
 import { state, saveDraft, newDebt } from './state.js';
-import { EMPLOYMENT, AGE_BANDS, UFS, DEBT_KINDS, OVERDUE_BANDS, KIND_LABEL } from './copy.js';
+import { EMPLOYMENT, CLT_CONTRACTS, AGE_BANDS, UFS, DEBT_KINDS, OVERDUE_BANDS, KIND_LABEL } from './copy.js';
 import { brl, centsToField, fieldToCents, maskMoneyLive, percentToBps, todayISO, plural } from './format.js';
 
 const STEPS = [
@@ -88,10 +88,20 @@ function bodyVinculo() {
   describe(note, 'employment-note', true);
   const noteField = field({ id: 'employment-note', label: 'Conte em poucas palavras (opcional)', hint: 'Não pedimos nome nem CPF. Só ajuda a entender o seu caso.', control: note, className: 'field-employment-note' });
   noteField.hidden = state.answers.employmentType !== 'other';
+  // CLT: pergunta de acompanhamento (mesmo padrão das demais opções), obrigatória só para quem marcou CLT.
+  const contract = el('div', { class: 'choices', role: 'radiogroup', id: 'clt-contract', 'aria-labelledby': 'clt-contract-label', 'aria-describedby': 'clt-contract-err' });
+  for (const opt of CLT_CONTRACTS) {
+    const input = el('input', { type: 'radio', name: 'cltContract', value: opt.value, 'data-field': 'cltContract' });
+    input.checked = state.answers.cltContract === opt.value;
+    contract.append(el('label', { class: 'choice' }, input, el('span', { class: 'choice-body' }, el('strong', {}, opt.label), el('span', { class: 'muted' }, opt.hint))));
+  }
+  const contractField = el('div', { class: 'field field-clt-contract' }, el('p', { class: 'label', id: 'clt-contract-label' }, 'Qual é o seu tipo de contrato?'), contract, el('p', { class: 'error', id: 'clt-contract-err', hidden: true }));
+  contractField.hidden = state.answers.employmentType !== 'clt';
   return [
     el('p', { class: 'hint' }, 'Isso ajuda a entender quais caminhos fazem sentido pra você. A gente não pede CPF.'),
     group,
     el('p', { class: 'error', id: 'employment-err', hidden: true }),
+    contractField,
     noteField,
   ];
 }
@@ -278,7 +288,7 @@ function buildTimeline() {
 function stepSummary(i) {
   const a = state.answers;
   if (i === 0) {
-    const label = EMPLOYMENT.find((e) => e.value === a.employmentType)?.label ?? '';
+    const label = (EMPLOYMENT.find((e) => e.value === a.employmentType)?.label ?? '') + (a.employmentType === 'clt' && a.cltContract ? ` · ${CLT_CONTRACTS.find((c) => c.value === a.cltContract)?.short ?? ''}` : '');
     return a.employmentType === 'other' && (a.employmentNote ?? '').trim() ? `${label}: ${a.employmentNote.trim()}` : label;
   }
   if (i === 1) return a.netIncomeCents === null ? '' : brl(a.netIncomeCents);
@@ -377,6 +387,7 @@ function validateStep(i) {
   const a = state.answers;
   const errors = []; // [controlId, message]
   if (i === 0 && !a.employmentType) errors.push(['employment', 'Escolha a opção que mais parece com a sua.']);
+  if (i === 0 && a.employmentType === 'clt' && !a.cltContract) errors.push(['clt-contract', 'Escolha o tipo de contrato.']);
   if (i === 1 && a.netIncomeCents === null) errors.push(['income', 'Conte quanto entra por mês, mesmo que aproximado. Se não entra nada, digite 0.']);
   if (i === 1 && a.netIncomeCents !== null && a.netIncomeCents > MAX_MONTHLY_CENTS) errors.push(['income', 'Esse valor parece alto demais para um mês. Confira (digite só os reais, ex.: 3200).']);
   if (i === 2) {
@@ -463,6 +474,7 @@ export function buildInput() {
       fixedExpensesCents: a.fixedExpensesCents ?? 0,
       employmentType: a.employmentType,
       ...(a.employmentType === 'other' && (a.employmentNote ?? '').trim() ? { employmentNote: a.employmentNote.trim() } : {}),
+      ...(a.employmentType === 'clt' && a.cltContract ? { cltContract: a.cltContract } : {}),
       ageBand: a.ageBand,
       uf: a.uf,
     },
@@ -494,6 +506,7 @@ export function answersFromInput(input) {
   return {
     employmentType: p.employmentType ?? '',
     employmentNote: p.employmentNote ?? '',
+    cltContract: p.cltContract ?? '',
     netIncomeCents: p.netIncomeCents ?? null,
     ageBand: p.ageBand ?? '',
     uf: p.uf ?? '',
@@ -563,11 +576,19 @@ function onInput(event) {
     else if (key === 'ratePct') d.ratePct = t.value;
     else if (key === 'firstDefaultMonth') d.firstDefaultMonth = t.value;
     if (key === 'installments' && t.value !== d.installments) t.value = d.installments;
+  } else if (key === 'cltContract') {
+    a.cltContract = t.value;
+    clearError('clt-contract');
   } else if (key === 'employmentNote') {
     a.employmentNote = t.value;
   } else if (key === 'employmentType') {
     a.employmentType = t.value;
     clearError('employment');
+    const contractField = $('.field-clt-contract');
+    if (contractField) {
+      contractField.hidden = a.employmentType !== 'clt';
+      if (a.employmentType !== 'clt') a.cltContract = '';
+    }
     const noteField = $('.field-employment-note');
     if (noteField) {
       noteField.hidden = a.employmentType !== 'other';

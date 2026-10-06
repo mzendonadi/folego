@@ -99,6 +99,29 @@ function referralSection(r) {
   );
 }
 
+/** Dados cadastrais do assinante: CPF só com os 4 últimos dígitos; completo e celular só com permissão (e fica na auditoria). */
+function personalData(s, ctx) {
+  const masked = s.cpfLast4 ? `***.***.*${s.cpfLast4.slice(0, 2)}-${s.cpfLast4.slice(2)}` : '—';
+  const box = el('dl', { class: 'bo-dl' });
+  const fill = (v) => box.replaceChildren(...Object.entries(v).map(([k, val]) => el('div', {}, el('dt', {}, k), el('dd', {}, val || '—'))));
+  fill({ Nome: s.name || '—', 'E-mail': s.email, CPF: masked, Celular: s.hasPhone ? 'informado' : '—' });
+  const reveal = ctx.can('clientes_pii') && (s.cpfLast4 || s.hasPhone)
+    ? el('button', { class: 'btn btn-quiet btn-sm', type: 'button', onclick: async (e) => {
+        const btn = e.currentTarget;
+        btn.disabled = true;
+        try {
+          const d = await api.assinanteDados(s.id);
+          fill({ Nome: d.name || s.name || '—', 'E-mail': s.email, CPF: d.cpf ? d.cpf.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4') : '—', Celular: d.phone ? d.phone.replace(/^(\d{2})(\d{4,5})(\d{4})$/, '($1) $2-$3') : '—' });
+          btn.remove();
+        } catch (err) {
+          toast(err.message);
+          btn.disabled = false;
+        }
+      } }, 'Mostrar CPF e celular (fica na auditoria)')
+    : null;
+  return el('section', {}, el('h3', {}, 'Dados cadastrais'), box, reveal);
+}
+
 export async function subscriberDrawer(id, ctx, onChange = () => {}) {
   const dw = drawer('Assinante');
   dw.body.append(loading());
@@ -136,7 +159,8 @@ export async function subscriberDrawer(id, ctx, onChange = () => {}) {
         )
       : null;
     dw.body.replaceChildren(...[
-      el('div', { class: 'bo-head-line' }, el('h3', {}, s.email), badge(label, tone)),
+      el('div', { class: 'bo-head-line' }, el('h3', {}, s.name || s.email), s.awaitingPayment ? badge('Pagamento iniciado', 'warn') : badge(label, tone)),
+      personalData(s, ctx),
       dl([['Plano', s.plan ? PLAN[s.plan] : '—'], ['Vence em', s.periodEnd ? day(s.periodEnd) : '—'], ['Cadastro', dt(s.createdAt)], ['Último acesso', dt(s.lastLoginAt)], ['Lançamentos', int(s.usage.entries)], ['Metas / aportes', `${int(s.usage.goals)} / ${int(s.usage.contributions)}`], ['Último lançamento', dt(s.usage.lastEntryAt)]]),
       actions,
       el('section', {}, el('h3', {}, 'Pedidos'), table([

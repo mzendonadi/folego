@@ -5,6 +5,7 @@
 //   são apagados (pelo backoffice, após o download de segurança, ou automaticamente depois da janela de retenção).
 import { attribute } from './referrals.ts';
 import { AppError, notFound } from './errors.ts';
+import { encryptText } from './crypto.ts';
 import { layout } from './email.ts';
 import type { Ctx } from './services.ts';
 import { audit, num } from './services.ts';
@@ -26,9 +27,10 @@ export interface CheckoutView {
 }
 
 /** Começa a assinatura mensal: registra o aceite dos termos, cria a assinatura no provedor e devolve a página do cartão. */
-export async function startCardCheckout(ctx: Ctx, args: { subscriberId: string; plan: string; acceptTerms: boolean; referralCode?: string | undefined; cpf?: string | undefined }): Promise<CheckoutView> {
+export async function startCardCheckout(ctx: Ctx, args: { subscriberId: string; plan: string; acceptTerms: boolean; referralCode?: string | undefined; cpf?: string | undefined; name?: string | undefined; phone?: string | undefined }): Promise<CheckoutView> {
   if (!ctx.config.subscriptionsEnabled) throw notFound();
   if (ctx.gateway.name === 'asaas' && !args.cpf) throw new AppError(422, 'cpf_required', 'Para assinar no cartão, informe o seu CPF.');
+  if (ctx.gateway.name === 'asaas' && !args.name) throw new AppError(422, 'name_required', 'Para assinar no cartão, informe o seu nome completo.');
   if (!args.acceptTerms) throw new AppError(422, 'terms_required', 'Para assinar, aceite os termos e a cobrança mensal no cartão.');
   const plan = planByCode(args.plan);
   if (!plan) throw new AppError(422, 'invalid_plan', 'Plano inválido');
@@ -42,6 +44,13 @@ export async function startCardCheckout(ctx: Ctx, args: { subscriberId: string; 
   if (cur.rows[0] && ['active', 'past_due'].includes(cur.rows[0].status)) throw new AppError(409, 'already_subscribed', 'Você já tem uma assinatura mensal ativa. Para trocar de plano, cancele e assine o novo depois do fim do mês pago.');
   if (sub.rows[0]?.active && cur.rows[0]?.status === 'canceled') throw new AppError(409, 'still_in_period', 'Seu plano está cancelado, mas o acesso continua até o fim do mês já pago. Depois dessa data você pode assinar de novo.');
 
+  // Dados cadastrais guardados já na intenção de assinar (mesmo que a pessoa desista antes de pagar): CPF e celular criptografados.
+  if (args.cpf || args.name || args.phone) {
+    await ctx.db.query(
+      `UPDATE app.subscribers SET display_name = coalesce($2, display_name), cpf_enc = coalesce($3, cpf_enc), cpf_last4 = coalesce($4, cpf_last4), phone_enc = coalesce($5, phone_enc), profile_updated_at = now() WHERE id = $1`,
+      [args.subscriberId, args.name ?? null, args.cpf ? encryptText(ctx.config.secret, args.cpf) : null, args.cpf ? args.cpf.slice(-4) : null, args.phone ? encryptText(ctx.config.secret, args.phone) : null],
+    );
+  }
   const who = await ctx.db.query<{ email: string; display_name: string | null }>(`SELECT email::text AS email, display_name FROM app.subscribers WHERE id = $1`, [args.subscriberId]);
   const email = who.rows[0]?.email ?? '';
 

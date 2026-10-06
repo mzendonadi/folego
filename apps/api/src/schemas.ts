@@ -40,6 +40,8 @@ export const createCaseSchema = z.object({
     employmentType: z.enum(['inss_retiree', 'public_servant', 'clt', 'self_employed', 'other']),
     /** Só com vínculo "outra situação": como o dinheiro entra, em poucas palavras (opcional). */
     employmentNote: z.string().trim().max(60).optional(),
+    /** Só com vínculo CLT: contrato por prazo determinado (temporário) ou indeterminado. Descritivo; fica no caso. */
+    cltContract: z.enum(['temporary', 'permanent']).optional(),
     ageBand: z.enum(AGE_BANDS),
     uf: z.enum(UFS),
   }),
@@ -116,7 +118,7 @@ export const cpfSchema = z.string().trim().transform((v) => v.replace(/[.\-\s]/g
   };
   return dv(9) === Number(d[9]) && dv(10) === Number(d[10]);
 }, 'CPF inválido');
-export const checkoutSchema = z.object({ plan: z.enum(['controle', 'ousado', 'desbravador']), acceptTerms: z.literal(true), cpf: cpfSchema.optional(), referralCode: z.string().trim().toLowerCase().max(40).optional() });
+export const checkoutSchema = z.object({ plan: z.enum(['controle', 'ousado', 'desbravador']), acceptTerms: z.literal(true), cpf: cpfSchema.optional(), name: z.string().trim().min(5).max(100).regex(/\S+\s+\S+/, 'Informe nome e sobrenome').optional(), phone: z.string().trim().transform((v) => v.replace(/\D/g, '')).refine((d) => /^\d{10,11}$/.test(d), 'Celular inválido').optional(), referralCode: z.string().trim().toLowerCase().max(40).optional() });
 export const referralLeadSchema = z.object({ friendEmail: z.string().trim().toLowerCase().email().max(200), yourName: z.string().trim().min(2).max(40) });
 export const referralInviteSchema = z.object({ email: z.string().trim().toLowerCase().email().max(200) });
 export const creditAdjustSchema = z.object({ subscriberId: z.string().uuid(), delta: z.number().int().min(-12).max(12), reason: z.string().trim().min(3).max(200) });

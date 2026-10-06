@@ -9,6 +9,11 @@ export const EMPLOYMENT = [
   { value: 'other', label: 'Outra situação', hint: 'Bicos, sem renda fixa…' },
 ];
 
+export const CLT_CONTRACTS = [
+  { value: 'permanent', label: 'Prazo indeterminado', hint: 'Contrato sem data para acabar', short: 'prazo indeterminado' },
+  { value: 'temporary', label: 'Contratação temporária', hint: 'Contrato com data para terminar', short: 'contrato temporário' },
+];
+
 export const AGE_BANDS = [
   ['18-24', '18 a 24 anos'], ['25-34', '25 a 34 anos'], ['35-44', '35 a 44 anos'], ['45-54', '45 a 54 anos'],
   ['55-64', '55 a 64 anos'], ['65-74', '65 a 74 anos'], ['75+', '75 anos ou mais'],

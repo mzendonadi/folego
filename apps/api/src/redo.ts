@@ -67,7 +67,7 @@ export async function redoMap(ctx: Ctx, sessionId: string, orderId: string, raw:
   if (t.kind !== 'map') throw new AppError(409, 'wrong_kind', 'Este pedido não é de um Mapa.');
   const input = redoMapSchema.parse(raw);
   const debts: DebtInput[] = input.debts.map((d, i) => ({ id: `d${i + 1}`, ...d }));
-  const { employmentNote, ...engineProfile } = input.profile;
+  const { employmentNote, cltContract, ...engineProfile } = input.profile;
   const asOf = todaySaoPaulo();
   const diagnosis = diagnose({ asOf, profile: engineProfile, debts });
   const preview = buildPreview(diagnosis, debts);
@@ -77,7 +77,7 @@ export async function redoMap(ctx: Ctx, sessionId: string, orderId: string, raw:
       `UPDATE app.cases SET employment_type = $2, net_income_cents = $3, fixed_expenses_cents = $4, age_band = $5, uf = $6, inputs = $7::jsonb,
               debt_total_cents = $8, debt_count = $9, has_overdue = $10, debt_kinds = $11, updated_at = now() WHERE id = $1`,
       [t.caseId, input.profile.employmentType, input.profile.netIncomeCents, input.profile.fixedExpensesCents, input.profile.ageBand, input.profile.uf,
-        JSON.stringify({ asOf, debts, ...(employmentNote && input.profile.employmentType === 'other' ? { employmentNote } : {}) }),
+        JSON.stringify({ asOf, debts, ...(employmentNote && input.profile.employmentType === 'other' ? { employmentNote } : {}), ...(cltContract && input.profile.employmentType === 'clt' ? { cltContract } : {}) }),
         debts.reduce((s, x) => s + x.balanceCents, 0), debts.length, debts.some((x) => x.daysOverdue > 0), [...new Set(debts.map((x) => x.kind))]],
     );
     await q.query(`DELETE FROM app.debts WHERE case_id = $1`, [t.caseId]);

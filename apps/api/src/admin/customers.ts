@@ -27,6 +27,10 @@ export interface SubscriberRow {
   cancelAtPeriodEnd: boolean;
   paidCents: number;
   paidOrders: number;
+  name: string | null;
+  cpfLast4: string | null;
+  /** Pediu para assinar (pagamento iniciado) mas ainda não pagou. */
+  awaitingPayment: boolean;
 }
 
 export async function listSubscribers(ctx: Ctx, opts: { status?: string; q?: string; page?: number }): Promise<{ total: number; page: number; pageSize: number; items: SubscriberRow[]; counts: Record<string, number> }> {
@@ -48,10 +52,11 @@ export async function listSubscribers(ctx: Ctx, opts: { status?: string; q?: str
   const total = await ctx.db.query<{ n: string }>(`SELECT count(*) AS n ${base}${filter}`, listParams);
   const r = await ctx.db.query<{
     id: string; email: string; created_at: Date; last_login_at: Date | null; plan: string | null; status: string; period_end: Date | null;
-    cancel: boolean | null; paid: string | null; n: string | null;
+    cancel: boolean | null; paid: string | null; n: string | null; name: string | null; cpf_last4: string | null; awaiting: boolean;
   }>(
     `SELECT b.id, b.email::text AS email, b.created_at, b.last_login_at, s.plan, ${SUB_STATUS_SQL} AS status, s.current_period_end AS period_end,
-            s.cancel_at_period_end AS cancel, o.paid, o.n
+            s.cancel_at_period_end AS cancel, o.paid, o.n, b.display_name AS name, b.cpf_last4,
+            (s.id IS NULL AND EXISTS (SELECT 1 FROM app.billing_profiles bp WHERE bp.subscriber_id = b.id AND bp.status = 'pending')) AS awaiting
        ${base}${filter}
       ORDER BY (CASE WHEN ${SUB_STATUS_SQL} = 'em_debito' THEN 0 WHEN ${SUB_STATUS_SQL} = 'vencendo' THEN 1 ELSE 2 END), s.current_period_end NULLS LAST, b.created_at DESC
       LIMIT ${PAGE} OFFSET ${page * PAGE}`,
@@ -74,13 +79,17 @@ export async function listSubscribers(ctx: Ctx, opts: { status?: string; q?: str
       cancelAtPeriodEnd: Boolean(x.cancel),
       paidCents: num(x.paid ?? 0),
       paidOrders: num(x.n ?? 0),
+      name: x.name,
+      cpfLast4: x.cpf_last4,
+      awaitingPayment: Boolean(x.awaiting),
     })),
   };
 }
 
 export async function subscriberDetail(ctx: Ctx, id: string) {
-  const s = await ctx.db.query<{ id: string; email: string; created_at: Date; last_login_at: Date | null; plan: string | null; status: string; period_end: Date | null; cancel: boolean | null }>(
-    `SELECT b.id, b.email::text AS email, b.created_at, b.last_login_at, s.plan, ${SUB_STATUS_SQL} AS status, s.current_period_end AS period_end, s.cancel_at_period_end AS cancel
+  const s = await ctx.db.query<{ id: string; email: string; created_at: Date; last_login_at: Date | null; plan: string | null; status: string; period_end: Date | null; cancel: boolean | null; name: string | null; cpf_last4: string | null; has_phone: boolean; awaiting: boolean }>(
+    `SELECT b.id, b.email::text AS email, b.display_name AS name, b.cpf_last4, (b.phone_enc IS NOT NULL) AS has_phone,
+            (s.id IS NULL AND EXISTS (SELECT 1 FROM app.billing_profiles bp WHERE bp.subscriber_id = b.id AND bp.status = 'pending')) AS awaiting, b.created_at, b.last_login_at, s.plan, ${SUB_STATUS_SQL} AS status, s.current_period_end AS period_end, s.cancel_at_period_end AS cancel
        FROM app.subscribers b LEFT JOIN app.subscriptions s ON s.subscriber_id = b.id WHERE b.id = $1 AND b.deleted_at IS NULL`,
     [id],
   );
@@ -109,6 +118,10 @@ export async function subscriberDetail(ctx: Ctx, id: string) {
   return {
     id: row.id,
     email: row.email,
+    name: row.name,
+    cpfLast4: row.cpf_last4,
+    hasPhone: row.has_phone,
+    awaitingPayment: row.awaiting,
     createdAt: iso(row.created_at),
     lastLoginAt: iso(row.last_login_at),
     plan: row.plan,
@@ -120,6 +133,17 @@ export async function subscriberDetail(ctx: Ctx, id: string) {
     usage: { entries: num(u?.entries ?? 0), goals: num(u?.goals ?? 0), contributions: num(u?.contributions ?? 0), lastEntryAt: iso(u?.last_entry) },
     history: audits.rows.map((a) => ({ at: iso(a.occurred_at), actor: a.actor, action: a.action, data: a.data })),
   };
+}
+
+/** Mostra CPF e celular (descriptografados) de um assinante. Exige permissão própria e deixa rastro na auditoria. */
+export async function revealSubscriberData(ctx: Ctx, admin: AdminUser, id: string): Promise<{ name: string | null; cpf: string | null; phone: string | null }> {
+  if (!can(admin, 'clientes_pii')) throw new AppError(403, 'forbidden', 'Você não tem permissão para ver dados pessoais.');
+  const r = await ctx.db.query<{ display_name: string | null; cpf_enc: Buffer | null; phone_enc: Buffer | null }>(`SELECT display_name, cpf_enc, phone_enc FROM app.subscribers WHERE id = $1 AND deleted_at IS NULL`, [id]);
+  const row = r.rows[0];
+  if (!row) throw notFound();
+  await audit(ctx.db, `admin:${admin.id}`, 'admin_reveal_subscriber_data', 'subscriber', id, { by: admin.email });
+  const dec = (b: Buffer | null) => (b ? decryptText(ctx.config.secret, Buffer.from(b)) : null);
+  return { name: row.display_name, cpf: dec(row.cpf_enc), phone: dec(row.phone_enc) };
 }
 
 const PLAN_CODES = ['controle', 'ousado', 'desbravador'];
@@ -232,7 +256,7 @@ export async function caseDetail(ctx: Ctx, id: string) {
     id: string; session_id: string; created_at: Date; status: string; product_kind: string; uf: string | null; employment_type: string | null; employment_note: string | null; age_band: string | null;
     net_income_cents: string | null; fixed_expenses_cents: string | null; debt_total_cents: string | null; debt_count: number | null; has_overdue: boolean | null; debt_kinds: string[]; purge_after: Date;
   }>(
-    `SELECT id, session_id, created_at, status, product_kind, uf::text AS uf, employment_type, inputs->>'employmentNote' AS employment_note, age_band, net_income_cents, fixed_expenses_cents, debt_total_cents, debt_count, has_overdue, debt_kinds, purge_after
+    `SELECT id, session_id, created_at, status, product_kind, uf::text AS uf, employment_type, coalesce(inputs->>'employmentNote', CASE inputs->>'cltContract' WHEN 'temporary' THEN 'contrato temporário' WHEN 'permanent' THEN 'prazo indeterminado' END) AS employment_note, age_band, net_income_cents, fixed_expenses_cents, debt_total_cents, debt_count, has_overdue, debt_kinds, purge_after
        FROM app.cases WHERE id = $1`,
     [id],
   );

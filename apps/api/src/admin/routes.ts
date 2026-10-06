@@ -164,6 +164,10 @@ export function registerGestao(app: FastifyInstance, deps: AdminRouteDeps): void
     const q = req.query as { status?: string; q?: string };
     return customers.listSubscribers(ctx, { status: q.status ?? 'todos', q: q.q, page: pageQuery(req.query) });
   });
+  app.post(`${P}/assinaturas/:id/dados`, { config: { rateLimit: { max: 30 * scale, timeWindow: '1 minute' } } }, async (req) => {
+    const a = await admin(req, 'clientes_pii');
+    return customers.revealSubscriberData(ctx, a, idParam((req.params as { id: string }).id));
+  });
   app.get(`${P}/assinaturas/resumo`, async (req) => {
     await admin(req, 'assinaturas', 'dashboard');
     return metrics.subscriptions(ctx, daysQuery(req.query));

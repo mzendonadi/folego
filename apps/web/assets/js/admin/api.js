@@ -80,6 +80,7 @@ export const api = {
   },
   assinaturasResumo: (dias) => call('GET', `/assinaturas/resumo${qs({ dias })}`),
   assinante: (id) => call('GET', `/assinaturas/${id}`),
+  assinanteDados: (id) => call('POST', `/assinaturas/${id}/dados`, {}),
   assinanteAcao: (id, body) => call('POST', `/assinaturas/${id}/acao`, body),
   parcerias: (dias) => call('GET', `/parcerias${qs({ dias })}`),
   contatos: (o) => call('GET', `/parcerias/contatos${qs(o)}`),

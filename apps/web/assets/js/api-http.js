@@ -264,14 +264,14 @@ export async function acceptHousehold() {
 export async function leaveHousehold() {
   return request('POST', '/account/household/leave');
 }
-export async function createCheckout(plan, cpf) {
+export async function createCheckout(plan, data = {}) {
   let referralCode;
   try {
     referralCode = localStorage.getItem('folego_ind') || undefined;
   } catch {
     referralCode = undefined;
   }
-  return request('POST', '/account/subscription-checkout', { body: { plan, acceptTerms: true, ...(cpf ? { cpf } : {}), ...(referralCode && /^[a-z0-9]{8}$/.test(referralCode) ? { referralCode } : {}) } });
+  return request('POST', '/account/subscription-checkout', { body: { plan, acceptTerms: true, ...(data.cpf ? { cpf: data.cpf } : {}), ...(data.name ? { name: data.name } : {}), ...(data.phone ? { phone: data.phone } : {}), ...(referralCode && /^[a-z0-9]{8}$/.test(referralCode) ? { referralCode } : {}) } });
 }
 export async function getExport() {
   return request('GET', '/account/export');

@@ -97,7 +97,7 @@ async function termsDocumentId(q: Queryable): Promise<string> {
 export async function createCase(ctx: Ctx, args: { sessionId: string; ipHash: Buffer | null; input: CreateCaseInput; userAgent: string | null }): Promise<{ caseId: string; preview: Preview }> {
   const { input } = args;
   const debts: DebtInput[] = input.debts.map((d, i) => ({ id: `d${i + 1}`, ...d }));
-  const { employmentNote, ...engineProfile } = input.profile; // a observação é só descritiva: não entra no cálculo
+  const { employmentNote, cltContract, ...engineProfile } = input.profile; // observação e tipo de contrato são só descritivos: não entram no cálculo
   const engineInput = { asOf: todaySaoPaulo(), profile: engineProfile, debts };
   const diagnosis = diagnose(engineInput);
   const preview = buildPreview(diagnosis, debts);
@@ -106,7 +106,7 @@ export async function createCase(ctx: Ctx, args: { sessionId: string; ipHash: Bu
     const created = await q.query<{ id: string }>(
       `INSERT INTO app.cases(session_id, status, employment_type, net_income_cents, fixed_expenses_cents, age_band, uf, inputs, purge_after, debt_total_cents, debt_count, has_overdue, debt_kinds)
        VALUES ($1, 'previewed', $2, $3, $4, $5, $6, $7::jsonb, now() + interval '7 days', $8, $9, $10, $11) RETURNING id`,
-      [args.sessionId, input.profile.employmentType, input.profile.netIncomeCents, input.profile.fixedExpensesCents, input.profile.ageBand, input.profile.uf, JSON.stringify({ asOf: engineInput.asOf, debts, ...(employmentNote && input.profile.employmentType === 'other' ? { employmentNote } : {}) }), debts.reduce((s, x) => s + x.balanceCents, 0), debts.length, debts.some((x) => x.daysOverdue > 0), [...new Set(debts.map((x) => x.kind))]],
+      [args.sessionId, input.profile.employmentType, input.profile.netIncomeCents, input.profile.fixedExpensesCents, input.profile.ageBand, input.profile.uf, JSON.stringify({ asOf: engineInput.asOf, debts, ...(employmentNote && input.profile.employmentType === 'other' ? { employmentNote } : {}), ...(cltContract && input.profile.employmentType === 'clt' ? { cltContract } : {}) }), debts.reduce((s, x) => s + x.balanceCents, 0), debts.length, debts.some((x) => x.daysOverdue > 0), [...new Set(debts.map((x) => x.kind))]],
     );
     const id = created.rows[0]?.id;
     if (!id) throw new Error('falha ao criar caso');

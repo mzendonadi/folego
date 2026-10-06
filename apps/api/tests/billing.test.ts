@@ -255,3 +255,30 @@ test('adaptador Asaas: cria cliente + assinatura mensal no cartão sem dados de 
   assert.deepEqual(asaas.parseWebhook(h, { id: 'e4', event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_4', pixQrCodeId: 'qr1' } }), { kind: 'payment', event: { providerEventId: 'e4', providerPaymentId: 'qr1' } }, 'o fluxo antigo de Pix continua entendido');
   assert.deepEqual(asaas.parseWebhook(h, { id: 'e5', event: 'PAYMENT_CREATED' }), { kind: 'ignore' });
 });
+
+test('checkout guarda nome, CPF e celular criptografados; backoffice mostra mascarado, revela com auditoria e marca pagamento iniciado', async () => {
+  const c = client();
+  await subLogin(c, 'dados@exemplo.com');
+  assert.equal((await c('POST', '/api/account/subscription-checkout', { body: { plan: 'controle', acceptTerms: true, cpf: '11111111111' } })).status, 400, 'CPF inválido');
+  const co = await c('POST', '/api/account/subscription-checkout', { body: { plan: 'controle', acceptTerms: true, cpf: '529.982.247-25', name: 'Maria da Silva', phone: '(11) 91234-5678' } });
+  assert.equal(co.status, 201);
+  const id = await subIdOf('dados@exemplo.com');
+  const raw = await db.query<{ cpf_enc: Buffer; cpf_last4: string; display_name: string }>(`SELECT cpf_enc, cpf_last4, display_name FROM app.subscribers WHERE id = $1`, [id]);
+  assert.equal(raw.rows[0]!.cpf_last4, '4725');
+  assert.equal(raw.rows[0]!.display_name, 'Maria da Silva');
+  assert.ok(!Buffer.from(raw.rows[0]!.cpf_enc).toString('utf8').includes('52998224725'), 'CPF não fica em claro');
+  const owner = await ownerClient();
+  const list = (await owner('GET', '/api/gestao/assinaturas?q=dados@')).json;
+  const row = list.items.find((x: any) => x.id === id);
+  assert.equal(row.cpfLast4, '4725');
+  assert.equal(row.awaitingPayment, true, 'pagamento iniciado e ainda não pago');
+  assert.ok(!JSON.stringify(list).includes('52998224725'));
+  const shown = (await owner('POST', `/api/gestao/assinaturas/${id}/dados`, { body: {} })).json;
+  assert.equal(shown.cpf, '52998224725');
+  assert.equal(shown.phone, '11912345678');
+  const log = await db.query(`SELECT 1 FROM app.audit_log WHERE action = 'admin_reveal_subscriber_data' AND entity_id = $1`, [id]);
+  assert.equal(log.rows.length, 1);
+  assert.equal(await payFirst(co.json.orderId), 'confirmed');
+  const after = (await owner('GET', '/api/gestao/assinaturas?q=dados@')).json.items.find((x: any) => x.id === id);
+  assert.equal(after.awaitingPayment, false);
+});

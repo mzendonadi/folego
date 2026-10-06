@@ -49,9 +49,10 @@ export async function assinaturasScreen(ctx) {
         ),
         card('Assinantes', el('div', { class: 'bo-toolbar' }, chips, search), table(
           [
-            { label: 'E-mail', render: (s) => s.email },
+            { label: 'Assinante', render: (s) => (s.name ? el('span', {}, el('strong', {}, s.name), el('br'), s.email) : s.email) },
+            { label: 'CPF', render: (s) => (s.cpfLast4 ? `***.***.*${s.cpfLast4.slice(0, 2)}-${s.cpfLast4.slice(2)}` : '—') },
             { label: 'Plano', render: (s) => (s.plan ? PLAN[s.plan] : '—') },
-            { label: 'Situação', render: (s) => badge(...(SUB_STATUS[s.status] ?? [s.status, 'muted'])) },
+            { label: 'Situação', render: (s) => (s.awaitingPayment ? badge('Pagamento iniciado', 'warn') : badge(...(SUB_STATUS[s.status] ?? [s.status, 'muted']))) },
             { label: 'Vence', render: (s) => (s.periodEnd ? `${new Date(s.periodEnd).toLocaleDateString('pt-BR')} (${s.daysLeft >= 0 ? `em ${s.daysLeft} d` : `há ${-s.daysLeft} d`})` : '—') },
             { label: 'Pedidos', align: 'right', render: (s) => int(s.paidOrders) },
             { label: 'Total pago', align: 'right', render: (s) => brl(s.paidCents) },
@@ -60,7 +61,7 @@ export async function assinaturasScreen(ctx) {
           list.items,
           { emptyText: 'Nenhuma assinatura neste filtro.', onRow: (s) => subscriberDrawer(s.id, ctx, draw) },
         ), pager(list.page, list.total, list.pageSize, (p) => { st.page = p; draw(); })),
-        el('p', { class: 'fine' }, 'A cobrança é mensal e recorrente no cartão de crédito (Asaas). "Em débito" = o acesso venceu e a mensalidade não entrou (cartão recusado ou assinatura encerrada). Quem cancela por conta própria vai para a aba Cancelados e mantém o acesso até o fim do mês pago. Clique numa linha para estender dias como cortesia, trocar o plano ou ver a jornada.'),
+        el('p', { class: 'fine' }, 'A cobrança é mensal e recorrente no cartão de crédito (Asaas). "Em débito" = o acesso venceu e a mensalidade não entrou (cartão recusado ou assinatura encerrada). Quem cancela por conta própria vai para a aba Cancelados e mantém o acesso até o fim do mês pago. "Pagamento iniciado" = a pessoa abriu a página do cartão, mas ainda não pagou. Clique numa linha para estender dias como cortesia, trocar o plano ou ver a jornada.'),
       );
     } catch (e) {
       host.replaceChildren(errorBox(e, draw));

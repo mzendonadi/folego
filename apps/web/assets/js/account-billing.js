@@ -72,10 +72,20 @@ export function drawCardCheckout(plan, mount, { api, onBack = null, onDone, befo
   const openTerms = el('button', { class: 'link', type: 'button' }, 'Termos e privacidade');
   openTerms.addEventListener('click', () => document.getElementById('dlg-terms')?.showModal());
   const go = el('button', { class: 'btn btn-primary btn-lg btn-block', type: 'button', disabled: true }, `Continuar para o pagamento seguro`, icon('arrow-right'));
-  const cpfInput = el('input', { type: 'text', id: 'co-cpf', inputmode: 'numeric', autocomplete: 'off', maxlength: '14', placeholder: '000.000.000-00' });
-  const refresh = () => { go.disabled = !(terms.checked && cpfInput.value.replace(/\D/g, '').length === 11); };
+  // Dados de quem assina: mesmos componentes dos demais formulários (.field, .label, .hint, .input).
+  const nameInput = el('input', { type: 'text', id: 'co-name', class: 'input', autocomplete: 'name', maxlength: '100', placeholder: 'Como está no seu documento' });
+  const cpfInput = el('input', { type: 'text', id: 'co-cpf', class: 'input', inputmode: 'numeric', autocomplete: 'off', maxlength: '14', placeholder: '000.000.000-00' });
+  const phoneInput = el('input', { type: 'tel', id: 'co-phone', class: 'input', inputmode: 'tel', autocomplete: 'tel-national', maxlength: '15', placeholder: '(11) 91234-5678' });
+  nameInput.setAttribute('aria-describedby', 'co-data-hint');
+  cpfInput.setAttribute('aria-describedby', 'co-data-hint');
+  const digits = (v) => v.replace(/\D/g, '');
+  const maskCpf = (v) => digits(v).slice(0, 11).replace(/^(\d{3})(\d)/, '$1.$2').replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d)/, '.$1-$2');
+  const maskPhone = (v) => digits(v).slice(0, 11).replace(/^(\d{2})(\d)/, '($1) $2').replace(/(\d{4,5})(\d{4})$/, '$1-$2');
+  const refresh = () => { go.disabled = !(terms.checked && nameInput.value.trim().split(/\s+/).length >= 2 && nameInput.value.trim().length >= 5 && digits(cpfInput.value).length === 11); };
+  cpfInput.addEventListener('input', () => { cpfInput.value = maskCpf(cpfInput.value); refresh(); });
+  phoneInput.addEventListener('input', () => { phoneInput.value = maskPhone(phoneInput.value); });
+  nameInput.addEventListener('input', refresh);
   terms.addEventListener('change', refresh);
-  cpfInput.addEventListener('input', refresh);
   const body = card(
     back,
     el('h2', {}, `Assinar o plano ${plan.name}`),
@@ -85,8 +95,11 @@ export function drawCardCheckout(plan, mount, { api, onBack = null, onDone, befo
       el('li', {}, icon('check'), 'Cancele quando quiser, na própria conta: a cobrança para na hora'),
       el('li', {}, icon('check'), 'Ao cancelar, você usa o app e baixa seus dados até o fim do mês pago (sem reembolso do mês em andamento)'),
       el('li', {}, icon('check'), 'O cartão é digitado na página segura do provedor de pagamento; o Fôlego não vê nem guarda o número do cartão')),
-    el('div', { class: 'field' }, el('label', { for: 'co-cpf' }, 'Seu CPF'), cpfInput,
-      el('p', { class: 'fine' }, 'Pedimos o CPF só na assinatura mensal no cartão: o provedor de pagamento exige para cobrar todo mês. Não guardamos o CPF no Fôlego. Nos produtos pagos por Pix, como o Mapa da Virada, não pedimos CPF.')),
+    el('p', { class: 'hint', id: 'co-data-hint' }, 'Pedimos estes dados só na assinatura mensal no cartão: o provedor de pagamento exige nome e CPF para cobrar todo mês. Ficam guardados com criptografia e só a equipe autorizada vê. Nos produtos pagos por Pix, como o Mapa da Virada, não pedimos CPF.'),
+    el('div', { class: 'field-row' },
+      el('div', { class: 'field' }, el('label', { for: 'co-name', class: 'label' }, 'Nome completo'), nameInput),
+      el('div', { class: 'field' }, el('label', { for: 'co-cpf', class: 'label' }, 'CPF'), cpfInput)),
+    el('div', { class: 'field' }, el('label', { for: 'co-phone', class: 'label' }, 'Celular com DDD (opcional)'), phoneInput, el('p', { class: 'hint' }, 'Só para avisos sobre a cobrança e suporte.')),
     el('div', { class: 'check' }, terms, el('label', { for: 'co-terms' }, 'Li e aceito os ', openTerms, ' e autorizo a cobrança mensal recorrente de ', brl(plan.priceCents), ' no meu cartão até eu cancelar.')),
     go,
   );
@@ -96,7 +109,7 @@ export function drawCardCheckout(plan, mount, { api, onBack = null, onDone, befo
     go.textContent = 'Preparando o pagamento…';
     let order;
     try {
-      order = await api.createCheckout(plan.code, cpfInput.value.replace(/\D/g, ''));
+      order = await api.createCheckout(plan.code, { name: nameInput.value.trim(), cpf: digits(cpfInput.value), ...(digits(phoneInput.value).length >= 10 ? { phone: digits(phoneInput.value) } : {}) });
     } catch (e) {
       go.disabled = false;
       go.textContent = 'Continuar para o pagamento seguro';
