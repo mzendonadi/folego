@@ -20,7 +20,7 @@ on:
         description: 'O que fazer'
         required: true
         type: choice
-        options: [status, pagamentos, instalar_rotinas, backup_agora, testar_restauracao, limpar_dados_de_teste]
+        options: [status, pagamentos, logs_api, instalar_rotinas, backup_agora, testar_restauracao, limpar_dados_de_teste]
       confirmar:
         description: 'Só para limpar_dados_de_teste: digite LIMPAR'
         required: false
@@ -65,6 +65,7 @@ jobs:
           case "$ACAO" in
             status)               $SSH 'bash ~/folego/deploy/ops/status.sh' ;;
             pagamentos)           $SSH 'bash ~/folego/deploy/ops/pagamentos.sh' ;;
+            logs_api)             $SSH "cd ~/folego/deploy && sudo docker compose logs --since 6h --no-log-prefix api 2>&1 | grep -E 'subscription-checkout|asaas_erro|gateway_|\"level\":(40|50)' | sed -E 's/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/***/g' | cut -c1-600 | tail -60" ;;
             instalar_rotinas)     $SSH 'bash ~/folego/deploy/ops/install-cron.sh && bash ~/folego/deploy/ops/backup.sh' ;;
             backup_agora)         $SSH 'bash ~/folego/deploy/ops/backup.sh' ;;
             testar_restauracao)   $SSH 'bash ~/folego/deploy/ops/backup.sh && bash ~/folego/deploy/ops/restore-test.sh' ;;
