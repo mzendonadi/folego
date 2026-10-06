@@ -236,7 +236,7 @@ test('adaptador Asaas: cria cliente + assinatura mensal no cartão sem dados de 
     return new Response('{}', { status: 404 });
   }) as unknown as typeof fetch;
   const asaas = new AsaasGateway({ apiKey: 'k', baseUrl: 'https://api-sandbox.asaas.com/v3', pixKey: 'x', webhookToken: 'tok', fetchFn });
-  const out = await asaas.createCardSubscription({ orderId: 'o1', subscriberId: 's1', email: 'a@b.com', name: 'Ana', planName: 'Ousado', valueCents: 3999, firstDueOn: '2026-10-03', successUrl: 'https://folego.online/#/conta' });
+  const out = await asaas.createCardSubscription({ orderId: 'o1', subscriberId: 's1', email: 'a@b.com', name: 'Ana', planName: 'Ousado', valueCents: 3999, firstDueOn: '2026-10-03', cpf: '52998224725' });
   assert.deepEqual(out, { providerCustomerId: 'cus_1', providerSubscriptionId: 'sub_1', providerPaymentId: 'pay_1', checkoutUrl: 'https://www.asaas.com/i/abc' });
   const subCall = calls.find((c) => c.url.endsWith('/subscriptions'))!;
   assert.equal(subCall.body.billingType, 'CREDIT_CARD');

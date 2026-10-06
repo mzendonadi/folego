@@ -38,7 +38,8 @@ export interface CardSubscriptionInput {
   valueCents: number;
   /** Primeira cobrança (yyyy-mm-dd). As seguintes caem no mesmo dia de cada mês. */
   firstDueOn: string;
-  successUrl: string;
+  /** CPF só com dígitos (o Asaas exige para cobrar no cartão). Não guardamos. */
+  cpf?: string | undefined;
 }
 
 export interface CardSubscription {
@@ -242,7 +243,7 @@ export class AsaasGateway implements PaymentGateway {
    * cartão e cobra as próximas mensalidades sozinho. Nenhum dado de cartão passa pelo nosso servidor (fora do escopo PCI).
    */
   async createCardSubscription(input: CardSubscriptionInput): Promise<CardSubscription> {
-    const customer = (await this.call('POST', '/customers', { name: input.name, email: input.email, externalReference: input.subscriberId })) as { id?: unknown };
+    const customer = (await this.call('POST', '/customers', { name: input.name, email: input.email, externalReference: input.subscriberId, ...(input.cpf ? { cpfCnpj: input.cpf } : {}) })) as { id?: unknown };
     if (typeof customer.id !== 'string') throw new AppError(502, 'gateway_error', 'Resposta inesperada do provedor de pagamento.');
     const sub = (await this.call('POST', '/subscriptions', {
       customer: customer.id,
@@ -252,7 +253,6 @@ export class AsaasGateway implements PaymentGateway {
       cycle: 'MONTHLY',
       description: `Prumo (Fôlego) - plano ${input.planName}`,
       externalReference: input.orderId,
-      callback: { successUrl: input.successUrl, autoRedirect: true },
     })) as { id?: unknown };
     if (typeof sub.id !== 'string') throw new AppError(502, 'gateway_error', 'Resposta inesperada do provedor de pagamento.');
     const pays = (await this.call('GET', `/subscriptions/${encodeURIComponent(sub.id)}/payments?limit=1`)) as { data?: Array<{ id?: unknown; invoiceUrl?: unknown }> };

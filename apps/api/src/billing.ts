@@ -26,8 +26,9 @@ export interface CheckoutView {
 }
 
 /** Começa a assinatura mensal: registra o aceite dos termos, cria a assinatura no provedor e devolve a página do cartão. */
-export async function startCardCheckout(ctx: Ctx, args: { subscriberId: string; plan: string; acceptTerms: boolean; referralCode?: string | undefined }): Promise<CheckoutView> {
+export async function startCardCheckout(ctx: Ctx, args: { subscriberId: string; plan: string; acceptTerms: boolean; referralCode?: string | undefined; cpf?: string | undefined }): Promise<CheckoutView> {
   if (!ctx.config.subscriptionsEnabled) throw notFound();
+  if (ctx.gateway.name === 'asaas' && !args.cpf) throw new AppError(422, 'cpf_required', 'Para assinar no cartão, informe o seu CPF.');
   if (!args.acceptTerms) throw new AppError(422, 'terms_required', 'Para assinar, aceite os termos e a cobrança mensal no cartão.');
   const plan = planByCode(args.plan);
   if (!plan) throw new AppError(422, 'invalid_plan', 'Plano inválido');
@@ -60,7 +61,7 @@ export async function startCardCheckout(ctx: Ctx, args: { subscriberId: string; 
       planName: plan.name,
       valueCents,
       firstDueOn: addDaysIso(new Date(), 0),
-      successUrl: `${ctx.config.publicUrl}/#/conta`,
+      cpf: args.cpf,
     });
   } catch (e) {
     await ctx.db.query(`UPDATE app.orders SET status = 'canceled' WHERE id = $1`, [orderId]);

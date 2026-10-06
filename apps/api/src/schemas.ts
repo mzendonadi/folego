@@ -105,7 +105,18 @@ export const newPartnerSchema = z.object({
 export const emailOnlySchema = z.object({ email: z.string().trim().toLowerCase().email().max(200) });
 export const loginCodeSchema = z.object({ email: z.string().trim().toLowerCase().email().max(200), code: z.string().regex(/^\d{6}$/) });
 export const subscriptionOrderSchema = z.object({ plan: z.enum(['controle', 'ousado', 'desbravador']) });
-export const checkoutSchema = z.object({ plan: z.enum(['controle', 'ousado', 'desbravador']), acceptTerms: z.literal(true), referralCode: z.string().trim().toLowerCase().max(40).optional() });
+/** CPF com dígitos verificadores válidos; aceita pontos e traço e devolve só os 11 dígitos. */
+export const cpfSchema = z.string().trim().transform((v) => v.replace(/[.\-\s]/g, '')).refine((d) => {
+  if (!/^\d{11}$/.test(d) || /^(\d)\1{10}$/.test(d)) return false;
+  const dv = (n: number) => {
+    let s = 0;
+    for (let i = 0; i < n; i++) s += Number(d[i]) * (n + 1 - i);
+    const r = (s * 10) % 11;
+    return r === 10 ? 0 : r;
+  };
+  return dv(9) === Number(d[9]) && dv(10) === Number(d[10]);
+}, 'CPF inválido');
+export const checkoutSchema = z.object({ plan: z.enum(['controle', 'ousado', 'desbravador']), acceptTerms: z.literal(true), cpf: cpfSchema.optional(), referralCode: z.string().trim().toLowerCase().max(40).optional() });
 export const referralLeadSchema = z.object({ friendEmail: z.string().trim().toLowerCase().email().max(200), yourName: z.string().trim().min(2).max(40) });
 export const referralInviteSchema = z.object({ email: z.string().trim().toLowerCase().email().max(200) });
 export const creditAdjustSchema = z.object({ subscriberId: z.string().uuid(), delta: z.number().int().min(-12).max(12), reason: z.string().trim().min(3).max(200) });
