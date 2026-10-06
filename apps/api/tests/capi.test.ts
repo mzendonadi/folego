@@ -15,7 +15,7 @@ let db: Db;
 let app: FastifyInstance;
 let gateway: FakeGateway;
 const mailbox = new MemorySender();
-const config = { ...loadConfig({ NODE_ENV: 'test' }), webhookSecret: 'segredo-de-teste', metaCapiToken: 'token-de-teste', metaPixelId: '123456789' };
+const config = { ...loadConfig({ NODE_ENV: 'test' }), webhookSecret: 'segredo-de-teste', metaCapiToken: 'token-de-teste', metaPixelId: '123456789', adminEmails: ['dono@exemplo.com'] };
 const ctx = () => ({ db, config, gateway, email: mailbox });
 const sha = (v: string) => createHash('sha256').update(v).digest('hex');
 const sent: Array<{ url: string; auth: string; body: any }> = [];
@@ -90,14 +90,13 @@ test('com aceite de publicidade: Lead, InitiateCheckout e Purchase saem com e-ma
   assert.equal(row.rows[0]!.days, '30');
 });
 
-test('sem aceite de publicidade: o contato fica guardado criptografado, mas nada vai para a Meta', async () => {
+test('o contato fica guardado criptografado e os eventos seguem para a Meta mesmo sem o campo de aceite', async () => {
   sent.length = 0;
   const { caseId, orderId } = await order(false, 'capi-sem-aceite-1');
   await pay(orderId);
   await wait();
-  assert.equal(sent.length, 0);
-  const raw = await db.query<{ e: Buffer; p: Buffer; ads: boolean }>(`SELECT contact_email_enc AS e, contact_phone_enc AS p, ads_consent AS ads FROM app.cases WHERE id = $1`, [caseId]);
-  assert.equal(raw.rows[0]!.ads, false);
+  assert.deepEqual(sent.map((s) => s.body.data[0].event_name), ['Lead', 'InitiateCheckout', 'Purchase']);
+  const raw = await db.query<{ e: Buffer; p: Buffer }>(`SELECT contact_email_enc AS e, contact_phone_enc AS p FROM app.cases WHERE id = $1`, [caseId]);
   assert.ok(!Buffer.from(raw.rows[0]!.e).toString('utf8').includes('maria'), 'criptografado');
 });
 
@@ -112,6 +111,24 @@ test('retenção: não pagante tem 7 dias; ao apagar o caso, o contato some junt
   assert.equal(r.rows[0]!.e, null);
   assert.equal(r.rows[0]!.p, null);
   assert.equal(r.rows[0]!.ads, false);
+});
+
+test('backoffice: o caso mostra que há contato do Pix e só o dono revela, com auditoria', async () => {
+  const { caseId } = await order(false, 'capi-backoffice-01');
+  const own = client();
+  const code = () => /\b(\d{6})\b/.exec(mailbox.sent.at(-1)!.text)![1]!;
+  mailbox.sent.length = 0;
+  await own('POST', '/api/gestao/setup-code', { body: { email: 'dono@exemplo.com' } });
+  await own('POST', '/api/gestao/setup', { body: { email: 'dono@exemplo.com', code: code(), password: 'Senha-Forte-2026' } });
+  assert.equal((await own('POST', '/api/gestao/login-password', { body: { email: 'dono@exemplo.com', password: 'Senha-Forte-2026' } })).status, 200);
+  const detail = await own('GET', `/api/gestao/clientes/avulsos/${caseId}`);
+  assert.equal(detail.json.hasPixContact, true);
+  assert.ok(!JSON.stringify(detail.json).toLowerCase().includes('maria@exemplo.com'), 'a ficha não traz o e-mail em claro');
+  const shown = await own('POST', `/api/gestao/contato-pix/${caseId}`, { body: {} });
+  assert.equal(shown.json.email, 'maria@exemplo.com');
+  assert.equal(shown.json.phone, '11912345678');
+  const log = await db.query(`SELECT 1 FROM app.audit_log WHERE action = 'admin_reveal_pix_contact' AND entity_id = $1`, [caseId]);
+  assert.equal(log.rows.length, 1);
 });
 
 test('contato inválido é recusado e o celular é normalizado para o padrão da Meta', async () => {

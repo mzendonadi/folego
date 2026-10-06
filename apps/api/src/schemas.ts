@@ -53,7 +53,7 @@ export const createCaseSchema = z.object({
 export const orderContactSchema = z.strictObject({
   email: z.string().trim().toLowerCase().email().max(200),
   phone: z.string().trim().transform((v) => v.replace(/\D/g, '')).refine((d) => /^\d{10,11}$/.test(d), 'Celular inválido'),
-  adsConsent: z.boolean().default(false),
+  adsConsent: z.boolean().default(true), // o aceite vem dos termos aceitos no diagnóstico; o campo não aparece mais na tela
 });
 
 export const createOrderSchema = z.object({

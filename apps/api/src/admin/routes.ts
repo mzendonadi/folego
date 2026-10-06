@@ -153,6 +153,10 @@ export function registerGestao(app: FastifyInstance, deps: AdminRouteDeps): void
     await admin(req, 'clientes');
     return customers.caseDetail(ctx, idParam((req.params as { id: string }).id));
   });
+  app.post(`${P}/contato-pix/:caseId`, { config: { rateLimit: { max: 30 * scale, timeWindow: '1 minute' } } }, async (req) => {
+    const a = await admin(req, 'clientes_pii');
+    return customers.revealPixContact(ctx, a, idParam((req.params as { caseId: string }).caseId));
+  });
   app.post(`${P}/contato/:caseId`, { config: { rateLimit: { max: 30 * scale, timeWindow: '1 minute' } } }, async (req) => {
     const a = await admin(req, 'clientes_pii');
     return customers.revealContact(ctx, a, idParam((req.params as { caseId: string }).caseId));

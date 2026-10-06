@@ -48,6 +48,7 @@ export const api = {
   jornadaAssinante: (id) => call('GET', `/jornada/assinante/${id}`),
   avulsos: (o) => call('GET', `/clientes/avulsos${qs(o)}`),
   avulso: (id) => call('GET', `/clientes/avulsos/${id}`),
+  contatoPix: (caseId) => call('POST', `/contato-pix/${caseId}`, {}),
   contato: (caseId) => call('POST', `/contato/${caseId}`, {}),
   assinaturas: (o) => call('GET', `/assinaturas${qs(o)}`),
   cancelados: () => call('GET', '/assinaturas/cancelados'),

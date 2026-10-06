@@ -1,6 +1,6 @@
 // Meta Conversions API (servidor para servidor). Sem pixel no navegador (D-022).
-// Regra de privacidade: só enviamos eventos com dados da pessoa (e-mail/celular em hash SHA-256, IP e navegador) quando ela marcou
-// o aceite SEPARADO de publicidade. Sem o aceite, nada sai. O PageView anônimo fica desligado até META_CAPI_PAGEVIEW=1.
+// Os dados da pessoa (e-mail/celular em hash SHA-256, IP e navegador) seguem para a Meta, conforme informado nos termos.
+// O PageView anônimo fica desligado até META_CAPI_PAGEVIEW=1.
 // Falhas nunca derrubam o pedido: tudo aqui é "dispare e esqueça" e só registra no log do servidor.
 import { createHash } from 'node:crypto';
 import { decryptText } from './crypto.ts';
@@ -92,7 +92,7 @@ export async function pixIntent(ctx: Ctx, a: { caseId: string; orderId: string; 
   if (!ctx.config.metaCapiToken) return;
   const r = await ctx.db.query<{ e: Buffer | null; p: Buffer | null; ads: boolean }>(`SELECT contact_email_enc AS e, contact_phone_enc AS p, ads_consent AS ads FROM app.cases WHERE id = $1`, [a.caseId]);
   const row = r.rows[0];
-  if (!row?.ads) return;
+  if (!row) return;
   const base = { email: dec(ctx, row.e), phone: dec(ctx, row.p), externalId: a.caseId, ip: a.ip, userAgent: a.userAgent, url: `${ctx.config.publicUrl}/#/pagamento` };
   await sendCapi(ctx, { ...base, name: 'Lead', eventId: `lead-${a.caseId}` });
   await sendCapi(ctx, { ...base, name: 'InitiateCheckout', eventId: `ic-${a.orderId}`, valueCents: a.totalCents, orderId: a.orderId });
@@ -112,7 +112,6 @@ export async function purchase(ctx: Ctx, providerPaymentId: string): Promise<voi
   const row = r.rows[0];
   if (!row || row.provider === 'demo') return;
   const isSub = Boolean(row.sid);
-  if (!(isSub ? row.sads : row.cads)) return;
   await sendCapi(ctx, {
     name: 'Purchase',
     eventId: `purchase-${row.id}`,

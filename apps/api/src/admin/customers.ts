@@ -276,6 +276,7 @@ export async function caseDetail(ctx: Ctx, id: string) {
   );
   const consent = await ctx.db.query<{ action: string; scope: { categories?: string[] }; created_at: Date }>(`SELECT action, scope, created_at FROM app.v_current_consents WHERE case_id = $1 AND purpose = 'lead_sharing'`, [id]);
   const contact = await ctx.db.query(`SELECT 1 FROM app.lead_contacts WHERE case_id = $1`, [id]);
+  const pix = await ctx.db.query(`SELECT 1 FROM app.cases WHERE id = $1 AND contact_email_enc IS NOT NULL`, [id]);
   const interview = await ctx.db.query<{ hours_band: string; mode: string; has_vehicle: boolean; capital_cents: string; created_at: Date }>(`SELECT hours_band, mode, has_vehicle, capital_cents, created_at FROM app.income_interviews WHERE case_id = $1`, [id]);
   const cons = consent.rows[0];
   return {
@@ -299,6 +300,7 @@ export async function caseDetail(ctx: Ctx, id: string) {
     deliverables: deliverables.rows.map((d) => ({ product: d.product_code, status: d.status, source: d.generation_meta?.source ?? null, at: iso(d.generated_at) })),
     leadConsent: cons ? { active: cons.action === 'grant', categories: cons.scope.categories ?? [], at: iso(cons.created_at) } : null,
     hasContact: contact.rows.length > 0,
+    hasPixContact: pix.rows.length > 0,
     incomeInterview: interview.rows[0] ? { hoursBand: interview.rows[0].hours_band, mode: interview.rows[0].mode, hasVehicle: interview.rows[0].has_vehicle, capitalCents: num(interview.rows[0].capital_cents), at: iso(interview.rows[0].created_at) } : null,
   };
 }
@@ -318,6 +320,17 @@ export async function revealContact(ctx: Ctx, admin: AdminUser, caseId: string):
   await audit(ctx.db, `admin:${admin.id}`, 'admin_reveal_contact', 'case', caseId, { by: admin.email });
   const dec = (b: Buffer) => decryptText(ctx.config.secret, Buffer.from(b));
   return { name: dec(row.full_name_enc), phone: dec(row.phone_enc), email: row.email_enc ? dec(row.email_enc) : null };
+}
+
+/** Contato informado ao gerar o Pix (e-mail e celular). Exige permissão própria e deixa rastro na auditoria. */
+export async function revealPixContact(ctx: Ctx, admin: AdminUser, caseId: string): Promise<{ email: string | null; phone: string | null }> {
+  if (!can(admin, 'clientes_pii')) throw new AppError(403, 'forbidden', 'Você não tem permissão para ver dados pessoais.');
+  const r = await ctx.db.query<{ e: Buffer | null; p: Buffer | null }>(`SELECT contact_email_enc AS e, contact_phone_enc AS p FROM app.cases WHERE id = $1`, [caseId]);
+  const row = r.rows[0];
+  if (!row || !row.e) throw notFound();
+  await audit(ctx.db, `admin:${admin.id}`, 'admin_reveal_pix_contact', 'case', caseId, { by: admin.email });
+  const dec = (b: Buffer | null) => (b ? decryptText(ctx.config.secret, Buffer.from(b)) : null);
+  return { email: dec(row.e), phone: dec(row.p) };
 }
 
 export async function consentedContacts(ctx: Ctx, opts: { category?: string; page?: number }) {

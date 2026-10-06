@@ -271,7 +271,7 @@ export async function createCheckout(plan, data = {}) {
   } catch {
     referralCode = undefined;
   }
-  return request('POST', '/account/subscription-checkout', { body: { plan, acceptTerms: true, ...(data.cpf ? { cpf: data.cpf } : {}), ...(data.name ? { name: data.name } : {}), ...(data.phone ? { phone: data.phone } : {}), ...(data.adsConsent ? { adsConsent: true } : {}), ...(referralCode && /^[a-z0-9]{8}$/.test(referralCode) ? { referralCode } : {}) } });
+  return request('POST', '/account/subscription-checkout', { body: { plan, acceptTerms: true, ...(data.cpf ? { cpf: data.cpf } : {}), ...(data.name ? { name: data.name } : {}), ...(data.phone ? { phone: data.phone } : {}), ...(referralCode && /^[a-z0-9]{8}$/.test(referralCode) ? { referralCode } : {}) } });
 }
 export async function getExport() {
   return request('GET', '/account/export');

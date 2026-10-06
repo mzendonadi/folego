@@ -48,7 +48,7 @@ export async function startCardCheckout(ctx: Ctx, args: { subscriberId: string; 
   if (args.cpf || args.name || args.phone) {
     await ctx.db.query(
       `UPDATE app.subscribers SET display_name = coalesce($2, display_name), cpf_enc = coalesce($3, cpf_enc), cpf_last4 = coalesce($4, cpf_last4), phone_enc = coalesce($5, phone_enc), ads_consent = coalesce($6, ads_consent), profile_updated_at = now() WHERE id = $1`,
-      [args.subscriberId, args.name ?? null, args.cpf ? encryptText(ctx.config.secret, args.cpf) : null, args.cpf ? args.cpf.slice(-4) : null, args.phone ? encryptText(ctx.config.secret, args.phone) : null, args.adsConsent ?? null],
+      [args.subscriberId, args.name ?? null, args.cpf ? encryptText(ctx.config.secret, args.cpf) : null, args.cpf ? args.cpf.slice(-4) : null, args.phone ? encryptText(ctx.config.secret, args.phone) : null, args.adsConsent ?? true],
     );
   }
   const who = await ctx.db.query<{ email: string; display_name: string | null }>(`SELECT email::text AS email, display_name FROM app.subscribers WHERE id = $1`, [args.subscriberId]);

@@ -41,6 +41,25 @@ export async function caseDrawer(id, ctx) {
     } else if (c.hasContact) contactBox.append(el('p', { class: 'fine' }, 'Há contato guardado, mas a pessoa não autoriza (ou revogou) o contato: os dados ficam ocultos.'));
     else contactBox.append(el('p', { class: 'fine' }, 'Nenhum contato guardado (compra anônima).'));
 
+    const pixBox = el('div', { class: 'bo-contact' });
+    if (c.hasPixContact) {
+      if (ctx.can('clientes_pii')) {
+        const pbtn = el('button', { class: 'btn btn-secondary btn-sm', type: 'button' }, icon('lock'), 'Ver e-mail e celular (fica registrado)');
+        pbtn.addEventListener('click', async () => {
+          pbtn.disabled = true;
+          try {
+            const r = await api.contatoPix(id);
+            const fone = r.phone ? r.phone.replace(/^(\d{2})(\d{4,5})(\d{4})$/, '($1) $2-$3') : '—';
+            pixBox.replaceChildren(dl([['E-mail', r.email ?? '—'], ['Celular', fone]]), el('p', { class: 'fine' }, 'Esta consulta foi registrada na auditoria.'));
+          } catch (e) {
+            pbtn.disabled = false;
+            toast(e.message);
+          }
+        });
+        pixBox.append(pbtn);
+      } else pixBox.append(el('p', { class: 'fine' }, 'Há contato do Pix guardado, mas você não tem a permissão para ver dados pessoais.'));
+    } else pixBox.append(el('p', { class: 'fine' }, 'Nenhum contato do Pix (não gerou o código, ou os dados já foram apagados pelo prazo).'));
+
     // replaceChildren() nativo não ignora null (viraria o texto "null"): por isso o filter.
     dw.body.replaceChildren(...[
       el('section', {}, el('h3', {}, 'Perfil'), dl([
@@ -54,6 +73,7 @@ export async function caseDrawer(id, ctx) {
       ], c.orders, { emptyText: 'Não gerou pedido: só viu o resultado grátis.' })),
       c.deliverables.length ? el('section', {}, el('h3', {}, 'Entregas'), table([{ label: 'Produto', render: (d) => PRODUCT[d.product] ?? d.product }, { label: 'Situação', render: (d) => d.status }, { label: 'Origem', render: (d) => (d.source === 'ai' ? 'IA' : d.source === 'template' ? 'Modelo fixo' : '—') }, { label: 'Quando', render: (d) => dt(d.at) }], c.deliverables)) : null,
       c.incomeInterview ? el('section', {}, el('h3', {}, 'Entrevista de renda extra'), dl([['Horas por semana', c.incomeInterview.hoursBand], ['Modo', c.incomeInterview.mode], ['Tem veículo', c.incomeInterview.hasVehicle ? 'Sim' : 'Não'], ['Capital para começar', brl(c.incomeInterview.capitalCents)]])) : null,
+      el('section', {}, el('h3', {}, 'Contato do Pix'), pixBox),
       el('section', {}, el('h3', {}, 'Contato e autorização'), c.leadConsent ? dl([['Autorização', c.leadConsent.active ? badge('Ativa', 'ok') : badge('Revogada', 'muted')], ['Categorias', c.leadConsent.categories.map((k) => CATEGORY[k] ?? k).join(', ') || '—'], ['Desde', dt(c.leadConsent.at)]]) : el('p', { class: 'fine' }, 'Sem autorização de contato de parceiros.'), contactBox),
       el('section', {}, el('h3', {}, 'Jornada no site'), timeline(j.timeline)),
     ].filter(Boolean));

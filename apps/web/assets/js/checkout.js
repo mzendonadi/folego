@@ -18,7 +18,7 @@ export function renderCheckout(root, ctx) {
   let pollId = 0;
   let orderId = null;
   let disposed = false;
-  let contact = { email: '', phone: '', ads: false };
+  let contact = { email: '', phone: '' };
 
   const stop = () => {
     window.clearInterval(timerId);
@@ -90,13 +90,11 @@ export function renderCheckout(root, ctx) {
     const phone = el('input', { class: 'input', id: 'co-phone', type: 'tel', inputmode: 'tel', autocomplete: 'tel-national', maxlength: '15', placeholder: '(11) 91234-5678', value: contact.phone });
     phone.addEventListener('input', () => { phone.value = maskPhone(phone.value); });
     email.setAttribute('aria-describedby', 'co-contact-hint');
-    const ads = el('input', { type: 'checkbox', id: 'co-ads', checked: contact.ads });
     return el('div', { class: 'co-contact' },
-      el('p', { class: 'hint', id: 'co-contact-hint' }, 'Usamos para enviar o link de acesso ao seu Mapa e os avisos do pedido. Guardamos com criptografia e apagamos em até 7 dias se você não pagar, ou 30 dias depois do pagamento.'),
+      el('p', { class: 'hint', id: 'co-contact-hint' }, 'Usamos para enviar o link de acesso ao seu Mapa e os avisos do pedido, e também para medir e melhorar nossos anúncios (compartilhamos com a Meta). Guardamos com criptografia e apagamos em até 7 dias se você não pagar, ou 30 dias depois do pagamento.'),
       el('div', { class: 'field-row' },
         el('div', { class: 'field' }, el('label', { for: 'co-email', class: 'label' }, 'E-mail'), email),
         el('div', { class: 'field' }, el('label', { for: 'co-phone', class: 'label' }, 'Celular com DDD'), phone)),
-      el('div', { class: 'check' }, ads, el('label', { for: 'co-ads' }, 'Quero receber novidades e aceito que meu e-mail e celular sejam usados para personalizar anúncios (por exemplo, na Meta). É opcional e você pode retirar o aceite quando quiser.')),
     );
   }
 
@@ -115,7 +113,7 @@ export function renderCheckout(root, ctx) {
     const emailEl = payCard.querySelector('#co-email');
     if (emailEl) {
       const phoneEl = payCard.querySelector('#co-phone');
-      contact = { email: emailEl.value.trim(), phone: phoneEl.value, ads: payCard.querySelector('#co-ads').checked };
+      contact = { email: emailEl.value.trim(), phone: phoneEl.value };
       const badEmail = !validEmail(contact.email);
       const badPhone = ![10, 11].includes(digitsOf(contact.phone).length);
       emailEl.toggleAttribute('aria-invalid', badEmail);
@@ -126,7 +124,7 @@ export function renderCheckout(root, ctx) {
     btn.disabled = true;
     btn.textContent = 'Gerando o Pix…';
     try {
-      const order = await ctx.api.createOrder({ caseId: ctx.caseId, products: codes(), ...(addon || !contact.email ? {} : { contact: { email: contact.email, phone: digitsOf(contact.phone), adsConsent: contact.ads } }) });
+      const order = await ctx.api.createOrder({ caseId: ctx.caseId, products: codes(), ...(addon || !contact.email ? {} : { contact: { email: contact.email, phone: digitsOf(contact.phone) } }) });
       if (disposed) return;
       orderId = order.orderId;
       // Conta de teste ligada pelo dono: o servidor já confirmou o pedido, sem Pix e sem cobrança.
