@@ -189,10 +189,23 @@ export class AsaasGateway implements PaymentGateway {
       throw new AppError(502, 'gateway_unreachable', 'Não consegui falar com o provedor de pagamento. Tente de novo.');
     }
     if (!res.ok) {
-      // Nunca repassamos o corpo do erro ao cliente: pode citar dados da conta.
+      // Nunca repassamos o corpo do erro ao cliente: pode citar dados da conta. O motivo vai só para o registro do servidor.
+      await this.logRefusal(method, path, res);
       throw new AppError(502, 'gateway_error', 'O provedor de pagamento recusou o pedido. Tente de novo.');
     }
     return res.json();
+  }
+
+  private async logRefusal(method: string, path: string, res: Response): Promise<void> {
+    let errors: string[] = [];
+    try {
+      const body = (await res.clone().json()) as { errors?: Array<{ code?: unknown; description?: unknown }> };
+      errors = (body.errors ?? []).slice(0, 5).map((e) => `${String(e.code ?? '?').slice(0, 60)}: ${String(e.description ?? '').slice(0, 200)}`);
+    } catch {
+      /* corpo que não é JSON: só o código HTTP */
+    }
+    const route = path.replace(/\?.*$/, '').replace(/\/[A-Za-z0-9_-]{8,}/g, '/:id'); // sem ids no registro
+    console.error(JSON.stringify({ level: 50, msg: 'asaas_erro', metodo: method, caminho: route, status: res.status, erros: errors }));
   }
 
   async createPix(input: { orderId: string; amountCents: number; expiresAt: Date }): Promise<PixCharge> {

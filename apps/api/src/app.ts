@@ -378,7 +378,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     return reply.status(201).send(await sub.createSubscriptionOrder(ctx, { sessionId, subscriberId, plan, idempotencyKey: key }));
   });
   // Assinatura mensal no cartão de crédito (Asaas): a pessoa aceita os termos e digita o cartão na página segura do provedor.
-  app.post('/api/account/subscription-checkout', { config: { rateLimit: { max: 6 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => {
+  app.post('/api/account/subscription-checkout', { config: { rateLimit: { max: 15 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => {
     const selfId = await requireSelf(req);
     await household.assertNotMember(ctx, selfId);
     const { plan, acceptTerms, referralCode } = checkoutSchema.parse(req.body);
