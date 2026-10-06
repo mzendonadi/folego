@@ -93,7 +93,7 @@ export async function pixIntent(ctx: Ctx, a: { caseId: string; orderId: string; 
   const r = await ctx.db.query<{ e: Buffer | null; p: Buffer | null; ads: boolean }>(`SELECT contact_email_enc AS e, contact_phone_enc AS p, ads_consent AS ads FROM app.cases WHERE id = $1`, [a.caseId]);
   const row = r.rows[0];
   if (!row) return;
-  const base = { email: dec(ctx, row.e), phone: dec(ctx, row.p), externalId: a.caseId, ip: a.ip, userAgent: a.userAgent, url: `${ctx.config.publicUrl}/#/pagamento` };
+  const base = { email: dec(ctx, row.e), phone: dec(ctx, row.p), externalId: a.caseId, ip: a.ip, userAgent: a.userAgent, url: `${ctx.config.publicUrl}/pagamento` };
   await sendCapi(ctx, { ...base, name: 'Lead', eventId: `lead-${a.caseId}` });
   await sendCapi(ctx, { ...base, name: 'InitiateCheckout', eventId: `ic-${a.orderId}`, valueCents: a.totalCents, orderId: a.orderId });
 }

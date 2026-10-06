@@ -175,7 +175,7 @@ export async function marketingScreen(ctx) {
       subject: el('input', { class: 'input', type: 'text', maxlength: '120', value: full?.subject ?? '', disabled: !editable, placeholder: 'Sem link e sem promessa de resultado' }),
       body: el('textarea', { class: 'input', rows: '9', maxlength: '4000', disabled: !editable, placeholder: 'Escreva em parágrafos separados por uma linha em branco.' }),
       buttonLabel: el('input', { class: 'input', type: 'text', maxlength: '40', value: full?.buttonLabel ?? '', disabled: !editable, placeholder: 'Ex.: Abrir minha conta' }),
-      buttonUrl: el('input', { class: 'input', type: 'url', maxlength: '300', value: full?.buttonUrl ?? '', disabled: !editable, placeholder: 'https://folego.online/#/conta' }),
+      buttonUrl: el('input', { class: 'input', type: 'url', maxlength: '300', value: full?.buttonUrl ?? '', disabled: !editable, placeholder: 'https://folego.online/conta' }),
     };
     f.body.value = full?.body ?? '';
     const read = () => ({ name: f.name.value.trim(), audience: f.audience.value, subject: f.subject.value.trim(), body: f.body.value.trim(), buttonLabel: f.buttonLabel.value.trim() || null, buttonUrl: f.buttonUrl.value.trim() || null });

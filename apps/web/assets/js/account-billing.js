@@ -60,7 +60,7 @@ export function exportButtons(api) {
 }
 
 /** Assinar: aceite dos termos + cobrança mensal no cartão. Abre a página segura do provedor e espera a confirmação. */
-export function drawCardCheckout(plan, mount, { api, onBack = null, onDone, before = 0 }) {
+export function drawCardCheckout(plan, mount, { api, onBack = null, onDone, before = 0, email = '' }) {
   let pollId = 0;
   const stop = () => window.clearInterval(pollId);
   const back = onBack ? el('button', { class: 'btn btn-quiet btn-sm', type: 'button' }, icon('arrow-left'), 'Voltar') : null;
@@ -68,6 +68,14 @@ export function drawCardCheckout(plan, mount, { api, onBack = null, onDone, befo
     stop();
     onBack();
   });
+  // Quem está assinando: mostra o e-mail da conta e deixa trocar antes de seguir (evita assinar na conta errada).
+  const swap = el('button', { class: 'link', type: 'button' }, 'Trocar de conta');
+  swap.addEventListener('click', async () => {
+    stop();
+    await api.logout().catch(() => {});
+    onDone();
+  });
+  const who = el('p', { class: 'muted', id: 'co-who' }, 'Assinando como ', el('strong', {}, email), ' · ', swap);
   const terms = el('input', { type: 'checkbox', id: 'co-terms' });
   const openTerms = el('button', { class: 'link', type: 'button' }, 'Termos e privacidade');
   openTerms.addEventListener('click', () => document.getElementById('dlg-terms')?.showModal());
@@ -76,8 +84,6 @@ export function drawCardCheckout(plan, mount, { api, onBack = null, onDone, befo
   const nameInput = el('input', { type: 'text', id: 'co-name', class: 'input', autocomplete: 'name', maxlength: '100', placeholder: 'Como está no seu documento' });
   const cpfInput = el('input', { type: 'text', id: 'co-cpf', class: 'input', inputmode: 'numeric', autocomplete: 'off', maxlength: '14', placeholder: '000.000.000-00' });
   const phoneInput = el('input', { type: 'tel', id: 'co-phone', class: 'input', inputmode: 'tel', autocomplete: 'tel-national', maxlength: '15', placeholder: '(11) 91234-5678' });
-  nameInput.setAttribute('aria-describedby', 'co-data-hint');
-  cpfInput.setAttribute('aria-describedby', 'co-data-hint');
   const digits = (v) => v.replace(/\D/g, '');
   const maskCpf = (v) => digits(v).slice(0, 11).replace(/^(\d{3})(\d)/, '$1.$2').replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d)/, '.$1-$2');
   const maskPhone = (v) => digits(v).slice(0, 11).replace(/^(\d{2})(\d)/, '($1) $2').replace(/(\d{4,5})(\d{4})$/, '$1-$2');
@@ -89,13 +95,13 @@ export function drawCardCheckout(plan, mount, { api, onBack = null, onDone, befo
   const body = card(
     back,
     el('h2', {}, `Assinar o plano ${plan.name}`),
+    email ? who : null,
     el('p', { class: 'plan-sum' }, el('strong', {}, `${brl(plan.priceCents)} por mês`), ' · cobrança mensal no cartão de crédito'),
     el('ul', { class: 'tick-list left' },
       el('li', {}, icon('check'), 'Renova sozinha todo mês, no mesmo dia, até você cancelar'),
       el('li', {}, icon('check'), 'Cancele quando quiser, na própria conta: a cobrança para na hora'),
       el('li', {}, icon('check'), 'Ao cancelar, você usa o app e baixa seus dados até o fim do mês pago (sem reembolso do mês em andamento)'),
       el('li', {}, icon('check'), 'O cartão é digitado na página segura do provedor de pagamento; o Fôlego não vê nem guarda o número do cartão')),
-    el('p', { class: 'hint', id: 'co-data-hint' }, 'Pedimos estes dados só na assinatura mensal no cartão: o provedor de pagamento exige nome e CPF para cobrar todo mês. Ficam guardados com criptografia e só a equipe autorizada vê. Também usamos seus dados de contato para medir e melhorar nossos anúncios (compartilhamos com a Meta). Nos produtos pagos por Pix, como o Mapa da Virada, não pedimos CPF.'),
     el('div', { class: 'field-row' },
       el('div', { class: 'field' }, el('label', { for: 'co-name', class: 'label' }, 'Nome completo'), nameInput),
       el('div', { class: 'field' }, el('label', { for: 'co-cpf', class: 'label' }, 'CPF'), cpfInput)),
@@ -105,29 +111,35 @@ export function drawCardCheckout(plan, mount, { api, onBack = null, onDone, befo
   );
   mount.replaceChildren(body);
   go.addEventListener('click', async () => {
+    // A página segura do provedor abre numa aba nova (aberta já no clique, para o navegador não bloquear) e esta tela
+    // continua aqui, aguardando; quando o pagamento passa, ela mesma avança.
+    const win = window.open('', '_blank');
+    if (win) win.opener = null;
     go.disabled = true;
     go.textContent = 'Preparando o pagamento…';
+    for (const n of [nameInput, cpfInput, phoneInput, terms]) n.disabled = true;
     let order;
     try {
       order = await api.createCheckout(plan.code, { name: nameInput.value.trim(), cpf: digits(cpfInput.value), ...(digits(phoneInput.value).length >= 10 ? { phone: digits(phoneInput.value) } : {}) });
     } catch (e) {
+      win?.close();
+      for (const n of [nameInput, cpfInput, phoneInput, terms]) n.disabled = false;
       go.disabled = false;
       go.textContent = 'Continuar para o pagamento seguro';
       return toast(e?.message || 'Não deu para iniciar agora. Tente de novo.');
     }
     const demo = String(order.checkoutUrl).startsWith('DEMO-CARD');
     const status = el('p', { class: 'pix-status', role: 'status' }, icon('clock'), el('span', {}, 'Aguardando a confirmação do pagamento…'));
-    const open = demo ? null : el('a', { class: 'btn btn-primary btn-lg btn-block', href: order.checkoutUrl, target: '_blank', rel: 'noopener noreferrer' }, 'Abrir o pagamento seguro', icon('arrow-right'));
-    const demoBtn = demo ? el('button', { class: 'btn btn-secondary', type: 'button' }, 'Simular cartão aprovado') : null;
-    demoBtn?.addEventListener('click', () => api.demoConfirmPayment(order.orderId).catch(() => {}));
-    mount.replaceChildren(card(
-      back,
-      el('h2', {}, `Pagamento do plano ${plan.name}`),
-      demo ? el('div', { class: 'demo-notice', role: 'note' }, icon('alert'), el('p', {}, el('strong', {}, 'Ambiente de demonstração. '), 'Nenhum cartão será cobrado.')) : el('p', { class: 'muted' }, 'Abrimos o pagamento em uma página segura do nosso provedor. Digite o cartão lá; esta tela confirma sozinha quando o pagamento passar.'),
-      open,
-      demoBtn,
-      status,
-    ));
+    const reopen = el('a', { class: 'link', href: order.checkoutUrl, target: '_blank', rel: 'noopener noreferrer' }, 'Reabrir a página de pagamento');
+    if (demo) {
+      win?.close();
+      const demoBtn = el('button', { class: 'btn btn-secondary btn-block', type: 'button' }, 'Simular cartão aprovado');
+      demoBtn.addEventListener('click', () => api.demoConfirmPayment(order.orderId).catch(() => {}));
+      go.replaceWith(el('div', { class: 'demo-notice', role: 'note' }, icon('alert'), el('p', {}, el('strong', {}, 'Ambiente de demonstração. '), 'Nenhum cartão será cobrado.')), demoBtn, status);
+    } else {
+      if (win && !win.closed) win.location.href = order.checkoutUrl;
+      go.replaceWith(status, win && !win.closed ? el('p', { class: 'fine' }, 'Concluiu o pagamento na outra aba? Esta tela confirma sozinha. ', reopen) : el('a', { class: 'btn btn-primary btn-lg btn-block', href: order.checkoutUrl, target: '_blank', rel: 'noopener noreferrer' }, 'Abrir o pagamento seguro', icon('arrow-right')));
+    }
     pollId = window.setInterval(async () => {
       const now = await api.getAccount().catch(() => null);
       if (now?.subscription?.active && now.subscription.periodEnd > before) {

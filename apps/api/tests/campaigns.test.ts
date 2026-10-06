@@ -117,7 +117,7 @@ test('campanha: rascunho → teste obrigatório → só quem tem permissão apro
   const mail = mailbox.sent.find((m) => m.to === 'camp-a@exemplo.com')!;
   assert.ok(mail.text.includes(unsubscribeUrl(ctx(), subA)));
   assert.ok(mail.html.includes('Cancelar o recebimento'));
-  assert.match(mail.headers!['List-Unsubscribe']!, /#\/descadastrar\//);
+  assert.match(mail.headers!['List-Unsubscribe']!, /\/descadastrar#/);
   assert.equal((await o('GET', '/api/gestao/marketing/emails')).json.campaigns.find((c: any) => c.id === id).status, 'sent');
 
   // frequência: quem recebeu agora não é elegível a outra campanha na mesma semana
@@ -127,7 +127,7 @@ test('campanha: rascunho → teste obrigatório → só quem tem permissão apro
 
 test('descadastro: link assinado funciona sem login, é idempotente, adulterado é recusado, e e-mail de conta continua chegando', async () => {
   const sid = await makeSubscriber('sair@exemplo.com', 'controle', 'camp-sair-00000001');
-  const token = unsubscribeUrl(ctx(), sid).split('/descadastrar/')[1]!;
+  const token = unsubscribeUrl(ctx(), sid).split('/descadastrar#')[1]!;
   const c = client();
   assert.equal((await c('POST', '/api/unsubscribe', { body: { token: `${sid}.assinatura-falsa-xxxxxxxxxxxxxxxxxxxx` } })).status, 400);
   assert.equal((await c('POST', '/api/unsubscribe', { body: { token } })).status, 204);

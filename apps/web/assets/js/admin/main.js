@@ -111,7 +111,7 @@ const can = (section) => Boolean(me?.sections.find((s) => s.id === section)?.all
 const allowedMenu = () => MENU.filter((m) => m.perm.some(can));
 
 function currentRoute() {
-  const id = location.hash.replace(/^#\/?/, '').split('/')[0] || allowedMenu()[0]?.id;
+  const id = (location.pathname.startsWith('/gestao/') ? location.pathname.slice('/gestao/'.length).split('/')[0] : '') || allowedMenu()[0]?.id;
   return allowedMenu().find((m) => m.id === id) ?? allowedMenu()[0];
 }
 
@@ -122,7 +122,7 @@ function drawShell() {
     root.replaceChildren(el('main', { class: 'bo-login' }, el('div', { class: 'bo-login-card' }, el('h1', {}, 'Sem áreas liberadas'), el('p', { class: 'muted' }, 'Seu acesso existe, mas nenhuma área foi liberada. Peça ao dono para ajustar as permissões.'), logoutButton())));
     return;
   }
-  const links = allowedMenu().map((m) => el('a', { class: 'bo-nav-link', href: `#/${m.id}`, 'aria-current': m.id === route.id ? 'page' : null }, icon(m.icon), el('span', {}, m.label)));
+  const links = allowedMenu().map((m) => el('a', { class: 'bo-nav-link', href: `/gestao/${m.id}`, 'aria-current': m.id === route.id ? 'page' : null }, icon(m.icon), el('span', {}, m.label)));
   const toggle = el('button', { class: 'btn btn-quiet btn-sm bo-burger', type: 'button', 'aria-label': 'Abrir menu', 'aria-expanded': String(navOpen) }, icon('menu'));
   const sidebar = el('aside', { class: `bo-side${navOpen ? ' is-open' : ''}`, 'aria-label': 'Menu do backoffice' },
     el('div', { class: 'bo-brand' }, el('img', { src: '/assets/favicon.svg', alt: '', width: '28', height: '28' }), el('span', {}, 'fôlego'), el('small', {}, 'backoffice')),
@@ -210,11 +210,23 @@ async function boot() {
   drawShell();
 }
 
-window.addEventListener('hashchange', () => {
+function onRouteChange() {
   if (!me) return;
   navOpen = false;
   drawShell();
   document.getElementById('bo-content')?.focus({ preventScroll: true });
+}
+// Endereço antigo (/gestao/#/clientes) vira /gestao/clientes.
+const legacyBo = /^#\/([^/]+)/.exec(location.hash);
+if (legacyBo) history.replaceState(null, '', `/gestao/${legacyBo[1]}`);
+window.addEventListener('popstate', onRouteChange);
+window.addEventListener('hashchange', onRouteChange);
+document.addEventListener('click', (e) => {
+  const a = e.target instanceof Element ? e.target.closest('a.bo-nav-link') : null;
+  if (!a || !me || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  e.preventDefault();
+  history.pushState(null, '', a.getAttribute('href'));
+  onRouteChange();
 });
 
 boot();

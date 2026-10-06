@@ -78,7 +78,7 @@ export async function invite(ctx: Ctx, ownerId: string, rawEmail: string): Promi
       `${self.rows[0]?.email} convidou você para compartilhar a conta de finanças do Prumo (lançamentos, dívidas, metas e lembretes).`,
       'Para aceitar, entre no Prumo com este e-mail e clique em "Aceitar convite" na aba Compartilhar. Quem aceita vê e edita os dados da conta; só o titular paga e cancela.',
       'Se você não conhece quem convidou, é só ignorar este e-mail.',
-    ], { label: 'Abrir o Prumo', url: `${ctx.config.publicUrl}/#/conta/familia` });
+    ], { label: 'Abrir o Prumo', url: `${ctx.config.publicUrl}/conta/familia` });
     await ctx.email.send({ to: email, subject: 'Convite para a conta compartilhada no Fôlego', ...body }).catch(() => undefined);
   }
 }

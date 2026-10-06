@@ -38,7 +38,7 @@ export async function audienceSizes(ctx: Ctx) {
 
 // ---------- descadastro (link assinado por assinante; vale sem login) ----------
 const unsubToken = (ctx: Ctx, subscriberId: string) => `${subscriberId}.${hmac(ctx.config.secret, `unsub:${subscriberId}`).toString('base64url').slice(0, 32)}`;
-export const unsubscribeUrl = (ctx: Ctx, subscriberId: string) => `${ctx.config.publicUrl}/#/descadastrar/${unsubToken(ctx, subscriberId)}`;
+export const unsubscribeUrl = (ctx: Ctx, subscriberId: string) => `${ctx.config.publicUrl}/descadastrar#${unsubToken(ctx, subscriberId)}`;
 
 export async function unsubscribe(ctx: Ctx, token: string): Promise<void> {
   const [id, sig] = token.split('.');

@@ -192,7 +192,7 @@ export async function sendDueReminders(ctx: Ctx, opts: { log?: (e: Record<string
     const dueOn = iso(r.due_on);
     const days = Math.round((Date.parse(`${dueOn}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000);
     const when = days === 0 ? 'hoje' : days === 1 ? 'amanhã' : days < 0 ? `venceu há ${-days} dia(s)` : `em ${days} dias`;
-    const body = layout(`Lembrete: ${r.title}`, [`${r.title} vence ${when} (${new Date(`${dueOn}T12:00:00`).toLocaleDateString('pt-BR')}).${r.amount_cents ? ` Valor: ${formatBrl(num(r.amount_cents))}.` : ''}`, 'Quando pagar, marque como feito na aba Lembretes da sua conta.'], { label: 'Abrir meus lembretes', url: `${ctx.config.publicUrl}/#/conta/lembretes` });
+    const body = layout(`Lembrete: ${r.title}`, [`${r.title} vence ${when} (${new Date(`${dueOn}T12:00:00`).toLocaleDateString('pt-BR')}).${r.amount_cents ? ` Valor: ${formatBrl(num(r.amount_cents))}.` : ''}`, 'Quando pagar, marque como feito na aba Lembretes da sua conta.'], { label: 'Abrir meus lembretes', url: `${ctx.config.publicUrl}/conta/lembretes` });
     try {
       await ctx.email.send({ to: r.email, subject: `Lembrete: ${r.title} vence ${when}`, ...body });
       await ctx.db.query(`UPDATE app.reminders SET notified_for = due_on WHERE id = $1`, [r.id]);

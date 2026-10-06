@@ -30,7 +30,7 @@ export const optOutToken = (ctx: Ctx, email: string) => {
   const e = Buffer.from(email.trim().toLowerCase()).toString('base64url');
   return `r.${e}.${hmac(ctx.config.secret, `refopt:${e}`).toString('base64url').slice(0, 32)}`;
 };
-export const optOutUrl = (ctx: Ctx, email: string) => `${ctx.config.publicUrl}/#/descadastrar/${optOutToken(ctx, email)}`;
+export const optOutUrl = (ctx: Ctx, email: string) => `${ctx.config.publicUrl}/descadastrar#${optOutToken(ctx, email)}`;
 
 export async function referralOptOut(ctx: Ctx, token: string): Promise<boolean> {
   const [tag, e, sig] = token.split('.');
@@ -89,7 +89,7 @@ async function sendLeadMail(ctx: Ctx, to: string, who: string): Promise<void> {
       title: 'Como funciona',
       items: ['O diagnóstico inicial é **grátis** e leva cerca de 3 minutos', 'Você só paga, no Pix e uma vez só, **se gostar** do resultado completo', 'Seus dados ficam só pelo tempo necessário e você pode apagar quando quiser'],
     },
-    button: { label: 'Fazer meu diagnóstico grátis', url: `${ctx.config.publicUrl}/?ind=amigo#/` },
+    button: { label: 'Fazer meu diagnóstico grátis', url: `${ctx.config.publicUrl}/?ind=amigo` },
     closing: [`Você recebeu este e-mail porque ${name} informou o seu endereço. Se não quiser receber mais nada assim, é só usar o link abaixo: respeitamos na hora.`, 'Com carinho,\n**Equipe Fôlego**'],
     optOut: { label: 'Não quero receber indicações do Fôlego', url: optOutUrl(ctx, to) },
   });
@@ -99,7 +99,7 @@ async function sendLeadMail(ctx: Ctx, to: string, who: string): Promise<void> {
 async function sendSubscriberMail(ctx: Ctx, to: string, who: string, code: string): Promise<void> {
   if (!ctx.email) return;
   const name = who || 'Um amigo';
-  const link = `${ctx.config.publicUrl}/?ind=${code}#/conta`;
+  const link = `${ctx.config.publicUrl}/conta?ind=${code}`;
   const mail = brandLayout({
     preheader: `${name} está usando o Prumo e indicou para você.`,
     kicker: 'Uma indicação de amigo',
@@ -233,7 +233,7 @@ export async function overview(ctx: Ctx, subscriberId: string) {
     enabled: ctx.config.referralEnabled,
     percent: pct,
     code,
-    link: `${ctx.config.publicUrl}/?ind=${code}#/conta`,
+    link: `${ctx.config.publicUrl}/conta?ind=${code}`,
     invited: num(counts.rows[0]?.sent ?? 0),
     converted: num(counts.rows[0]?.converted ?? 0),
     credits: { available, applied: num(cr.rows[0]?.applied ?? 0) },
@@ -261,7 +261,7 @@ export async function notifyCredits(ctx: Ctx, opts: { log?: (e: Record<string, u
       kicker: 'Obrigado por indicar',
       title: name ? `${name}, uma indicação sua assinou o Prumo` : 'Uma indicação sua assinou o Prumo',
       paragraphs: [`Boa notícia! Um amigo que você indicou acabou de assinar. Como agradecimento, a sua **próxima fatura vem com ${c.percent}% de desconto**.`, `Você já acumula **${c.avail} ${Number(c.avail) === 1 ? 'mês' : 'meses'} de desconto**: cada indicação que assina vale um mês, um depois do outro. Não precisa fazer nada, o desconto entra sozinho na cobrança.`],
-      button: { label: 'Ver minhas indicações', url: `${ctx.config.publicUrl}/#/conta/indicar` },
+      button: { label: 'Ver minhas indicações', url: `${ctx.config.publicUrl}/conta/indicar` },
       closing: ['Continue indicando: quem você traz ganha um jeito mais calmo de cuidar do dinheiro, e você ganha desconto.', 'Com carinho,\n**Equipe Fôlego**'],
     });
     try {

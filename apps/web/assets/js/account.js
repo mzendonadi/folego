@@ -9,7 +9,7 @@ import { drawCardCheckout, billingHeader, cancelNotice } from './account-billing
 
 const card = (...c) => el('section', { class: 'card d-section' }, ...c.filter(Boolean));
 const TAB_IDS = TABS.map((t) => t.id);
-const hashFor = (id) => (id === 'coach' ? '#/conta' : `#/conta/${id}`);
+const hashFor = (id) => (id === 'coach' ? '/conta' : `/conta/${id}`);
 
 export function renderAccount(root, { api, tab: initialTab = null }) {
   let month = monthNow();
@@ -107,7 +107,7 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
   function drawPlans(acc) {
     const cards = PLANS.map((p) => {
       const btn = el('button', { class: 'btn btn-primary', type: 'button' }, `Assinar por ${brl(p.priceCents)}/mês`, icon('arrow-right'));
-      btn.addEventListener('click', () => drawCardCheckout(p, root, { api, before: 0, onBack: () => drawPlans(acc), onDone: boot }));
+      btn.addEventListener('click', () => drawCardCheckout(p, root, { api, before: 0, email: acc.email, onBack: () => drawPlans(acc), onDone: boot }));
       return el(
         'article', { class: 'script' },
         el('h3', {}, p.name), el('p', { class: 'muted' }, p.tagline),
@@ -211,7 +211,7 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
       reloadAccount: boot,
       startCheckout: (p) => {
         stopPix();
-        stopPix = drawCardCheckout(p, panel, { api, before: acc.subscription.periodEnd, onBack: () => showTab('plano'), onDone: boot });
+        stopPix = drawCardCheckout(p, panel, { api, before: acc.subscription.periodEnd, email: acc.email, onBack: () => showTab('plano'), onDone: boot });
       },
     };
 
@@ -227,7 +227,7 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
         if (on && !window.matchMedia('(min-width: 960px)').matches) tabbar.scrollTo({ left: Math.max(0, b.offsetLeft - 24), behavior: 'smooth' });
       });
       panel.setAttribute('aria-labelledby', `acc-tab-${id}`);
-      if (location.hash.startsWith('#/conta')) history.replaceState(history.state, '', hashFor(id));
+      if (location.pathname.startsWith('/conta')) history.replaceState(history.state, '', hashFor(id));
       panel.replaceChildren(el('p', { class: 'muted acc-loading', role: 'status' }, 'Carregando…'));
       try {
         if (NEEDS_MONTH.has(id)) ctx.data = await api.getMonth(month);

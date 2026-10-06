@@ -493,7 +493,7 @@ test('e-mail: manda o link, não grava o endereço, o link do e-mail abre o Mapa
   assert.equal(ok.status, 200);
   assert.equal(mailbox.sent.length, 1);
   assert.equal(mailbox.sent[0]!.to, 'pessoa@exemplo.com');
-  const url = /https?:\/\/\S+#\/acesso\/([A-Za-z0-9_-]+)/.exec(mailbox.sent[0]!.text);
+  const url = /https?:\/\/\S+\/acesso#([A-Za-z0-9_-]+)/.exec(mailbox.sent[0]!.text);
   assert.ok(url, 'o e-mail traz o link');
   // o endereço não foi parar em nenhuma tabela
   const leak = await db.query<{ n: string }>(`SELECT (SELECT count(*) FROM app.audit_log WHERE data::text ILIKE '%pessoa@exemplo%') + (SELECT count(*) FROM app.sessions WHERE ip_hash IS NULL AND false) AS n`);

@@ -138,7 +138,17 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
 
   // Rota inexistente: mesmo formato e idioma dos outros erros (o 404 padrão do framework vaza o texto em inglês).
-  app.setNotFoundHandler((_req, reply) => reply.status(404).send({ error: 'not_found', message: 'Não encontrado' }));
+  // Endereços limpos do site (/conta, /pagamento...) entregam a mesma página; o roteador do navegador escolhe a tela.
+  const SITE_PATH = /^\/(diagnostico|processando|resultado|pagamento|mapa|complemento|ferramentas|tradutor|guia|parceiros|conta|descadastrar|acesso)(\/[^?]*)?$/;
+  app.setNotFoundHandler((req, reply) => {
+    const path = req.url.split('?')[0] ?? '';
+    const send = (reply as unknown as { sendFile?: (f: string) => FastifyReply }).sendFile;
+    if (req.method === 'GET' && typeof send === 'function') {
+      if (SITE_PATH.test(path)) return send.call(reply, 'index.html');
+      if (/^\/gestao\/.+/.test(path)) return send.call(reply, 'gestao/index.html');
+    }
+    return reply.status(404).send({ error: 'not_found', message: 'Não encontrado' });
+  });
   // O caractere nulo (\u0000) quebra o Postgres: recusa na entrada, antes de chegar ao banco.
   app.addHook('preValidation', async (req) => {
     if (req.body !== undefined && req.body !== null && typeof req.body === 'object' && JSON.stringify(req.body).includes('\\u0000')) {

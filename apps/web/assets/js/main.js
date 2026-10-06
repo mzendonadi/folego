@@ -26,19 +26,19 @@ try {
 }
 
 const ROUTES = {
-  landing: '#/',
-  intake: '#/diagnostico',
-  processing: '#/processando',
-  preview: '#/resultado',
-  checkout: '#/pagamento',
-  delivery: '#/mapa',
-  addon: '#/complemento',
-  tools: '#/ferramentas',
-  translator: '#/tradutor',
-  guided: '#/guia',
-  partner: '#/parceiros',
-  account: '#/conta',
-  unsubscribe: '#/descadastrar',
+  landing: '/',
+  intake: '/diagnostico',
+  processing: '/processando',
+  preview: '/resultado',
+  checkout: '/pagamento',
+  delivery: '/mapa',
+  addon: '/complemento',
+  tools: '/ferramentas',
+  translator: '/tradutor',
+  guided: '/guia',
+  partner: '/parceiros',
+  account: '/conta',
+  unsubscribe: '/descadastrar',
 };
 const TITLES = {
   landing: 'Fôlego — organize suas dívidas e só pague se gostar',
@@ -65,16 +65,16 @@ let processingTimer = 0;
 let generatedTimer = 0;
 
 // ---------- roteamento ----------
-/** Endereço mostrado para cada tela. A página inicial é só o domínio, sem "#/" no final. */
-const urlOf = (view) => (view === 'landing' ? `${location.pathname}${location.search}` : ROUTES[view]);
-const isLandingHash = (hash) => hash === '' || hash === '#' || hash === '#/';
+/** Endereço mostrado para cada tela: caminho limpo (folego.online/conta), sem "#/". */
+const urlOf = (view) => (view === 'landing' ? `/${location.search}` : ROUTES[view]);
+const pathNow = () => location.pathname.replace(/\/+$/, '') || '/';
 
-function viewFromHash(hash) {
-  if (isLandingHash(hash)) return 'landing';
-  if (hash === ROUTES.account || hash.startsWith(`${ROUTES.account}/`)) return 'account'; // #/conta e #/conta/<aba>
-  if (hash.startsWith(`${ROUTES.unsubscribe}/`)) return 'unsubscribe'; // #/descadastrar/<assinatura>
-  if (hash === ROUTES.guided || hash.startsWith(`${ROUTES.guided}/`)) return 'guided'; // #/guia e #/guia/<tipo>
-  const found = Object.entries(ROUTES).find(([, h]) => h === hash);
+function viewFromPath(path) {
+  if (path === '/') return 'landing';
+  if (path === ROUTES.account || path.startsWith(`${ROUTES.account}/`)) return 'account'; // /conta e /conta/<aba>
+  if (path === ROUTES.unsubscribe) return 'unsubscribe'; // /descadastrar#<código> (o código fica no fragmento: não vai ao servidor)
+  if (path === ROUTES.guided || path.startsWith(`${ROUTES.guided}/`)) return 'guided'; // /guia e /guia/<tipo>
+  const found = Object.entries(ROUTES).find(([, p]) => p === path);
   return found ? found[0] : null;
 }
 
@@ -104,9 +104,7 @@ function show(view, { focus = true, scroll = true } = {}) {
 }
 
 function go(view) {
-  const hash = ROUTES[view];
-  const already = view === 'landing' ? isLandingHash(location.hash) : location.hash === hash;
-  if (!already) history.pushState({ view }, '', urlOf(view));
+  if (pathNow() !== ROUTES[view]) history.pushState({ view }, '', urlOf(view));
   route();
 }
 
@@ -201,13 +199,17 @@ async function openDelivery({ scrollTo = null } = {}) {
 }
 
 async function route() {
-  // Quem chega por um link com "#/" no final vê só o domínio na barra de endereço.
-  if (location.hash === '#/' || location.hash === '#') history.replaceState(history.state, '', urlOf('landing'));
-  if (location.hash.startsWith('#/acesso/')) {
-    const ok = await redeemLink(decodeURIComponent(location.hash.slice('#/acesso/'.length)));
+  // Links antigos com "#/" viram caminho limpo. Os códigos de acesso e de descadastro ficam no fragmento (não vão ao servidor).
+  const legacy = /^#\/(.*)$/.exec(location.hash);
+  if (legacy) {
+    const m = /^(acesso|descadastrar)\/(.+)$/.exec(legacy[1]);
+    history.replaceState(history.state, '', `/${m ? m[1] : legacy[1]}${location.search}${m ? `#${m[2]}` : ''}`);
+  } else if (location.hash === '#') history.replaceState(history.state, '', `${location.pathname}${location.search}`);
+  if (pathNow() === '/acesso') {
+    const ok = await redeemLink(decodeURIComponent(location.hash.slice(1)));
     if (!ok) return route();
   }
-  let view = viewFromHash(location.hash) ?? 'landing';
+  let view = viewFromPath(pathNow()) ?? 'landing';
   if ((view === 'delivery' || view === 'addon' || view === 'translator') && !state.paid) await restoreAccess();
   if (view === 'guided') {
     await restoreAccess();
@@ -217,8 +219,8 @@ async function route() {
   if (view === 'addon' && !state.paid && state.addonCodes[0] !== 'collection_translator' && !state.addonCodes[0].startsWith('guide_')) return replaceWith('landing');
   if (view === 'translator') await renderTranslatorView();
   if (view === 'partner') renderPartner($('#partner-root'));
-  if (view === 'unsubscribe') renderUnsubscribe($('#unsubscribe-root'), location.hash.split('/')[2] ?? '');
-  if (view === 'account') renderAccount($('#account-root'), { api, tab: location.hash.split('/')[2] ?? null });
+  if (view === 'unsubscribe') renderUnsubscribe($('#unsubscribe-root'), location.hash.slice(1));
+  if (view === 'account') renderAccount($('#account-root'), { api, tab: location.pathname.split('/')[2] ?? null });
   if (view === 'delivery' && state.paid && !$('#delivery-root').querySelector('.d-head')) {
     try {
       await openDelivery();
@@ -389,7 +391,7 @@ async function renderTranslatorView() {
 
 // Guias sob medida (#/guia e #/guia/<tipo>): formulário → prévia grátis → Pix → guia completo.
 async function renderGuidedView() {
-  const kind = location.hash.split('/')[2] ?? '';
+  const kind = location.pathname.split('/')[2] ?? '';
   const mine = state.guidedMine ?? [];
   const root = $('#guided-root');
   if (!GUIDES[kind]) {
@@ -583,6 +585,17 @@ function bindGlobalClicks() {
       return go(nav.dataset.nav);
     }
 
+    // Links internos (ex.: /conta): trocam de tela sem recarregar a página.
+    const link = target.closest('a[href^="/"]');
+    if (link && !link.target && !link.hasAttribute('download') && event.button === 0 && !(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)) {
+      const u = new URL(link.href, location.origin);
+      if (u.origin === location.origin && viewFromPath(u.pathname.replace(/\/+$/, '') || '/') !== null) {
+        event.preventDefault();
+        history.pushState({}, '', `${u.pathname}${u.search}${u.hash}`);
+        return route();
+      }
+    }
+
     const open = target.closest('[data-open]');
     if (open) {
       event.preventDefault();
@@ -601,7 +614,7 @@ function bindGlobalClicks() {
       if (node) {
         event.preventDefault();
         node.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' });
-        history.replaceState(history.state, '', `${location.pathname}${location.search}${current === 'landing' ? '' : ROUTES[current]}`);
+        history.replaceState(history.state, '', `${location.pathname}${location.search}`);
       }
     }
   });

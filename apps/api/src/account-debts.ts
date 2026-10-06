@@ -177,7 +177,7 @@ export async function sendWeeklyDigests(ctx: Ctx, opts: { log?: (e: Record<strin
       const focus = debts.debts.find((d) => d.id === debts.plan!.focusId);
       if (focus) lines.push(`Foco das dívidas: ${focus.name}, faltam ${formatBrl(focus.balanceCents)}. No ritmo atual, tudo quitado em ${debts.plan[debts.plan.recommended].months} meses.`);
     }
-    const body = layout('Seu resumo da semana', lines, { label: 'Abrir minha conta', url: `${ctx.config.publicUrl}/#/conta` }, { unsubscribeUrl: unsubscribeUrl(ctx, b.id) });
+    const body = layout('Seu resumo da semana', lines, { label: 'Abrir minha conta', url: `${ctx.config.publicUrl}/conta` }, { unsubscribeUrl: unsubscribeUrl(ctx, b.id) });
     try {
       await ctx.email.send({ to: b.email, subject: 'Seu resumo da semana no Fôlego', ...body, headers: { 'List-Unsubscribe': `<${unsubscribeUrl(ctx, b.id)}>` } });
       await ctx.db.query(`UPDATE app.subscribers SET weekly_digest_at = now() WHERE id = $1`, [b.id]);

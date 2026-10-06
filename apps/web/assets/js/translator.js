@@ -180,7 +180,7 @@ export function renderTranslator(root, ctx) {
     linkBtn.addEventListener('click', async () => {
       try {
         const { token } = await api.createAccessLink(orderId);
-        const url = `${location.origin}${location.pathname}#/acesso/${token}`;
+        const url = `${location.origin}/acesso#${token}`;
         const input = el('input', { class: 'input pix-code', type: 'text', readonly: true, value: url, 'aria-label': 'Seu link de acesso' });
         const copy = el('button', { class: 'btn btn-primary', type: 'button' }, icon('copy'), 'Copiar link');
         copy.addEventListener('click', async () => toast((await copyText(url)) ? 'Link copiado.' : 'Não consegui copiar.'));

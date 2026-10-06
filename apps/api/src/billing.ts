@@ -141,7 +141,7 @@ export async function handleBillingEvent(ctx: Ctx, event: BillingEvent): Promise
     await ctx.db.query(`UPDATE app.billing_profiles SET status = 'past_due', past_due_since = coalesce(past_due_since, now()) WHERE subscriber_id = $1`, [p.subscriber_id]);
     await audit(ctx.db, 'system', 'subscription_charge_refused', 'subscriber', p.subscriber_id);
     if (ctx.email) {
-      const body = layout('Não conseguimos cobrar o seu cartão', ['A mensalidade do Prumo não passou no cartão. Seu acesso continua até o fim do período já pago.', 'Para não perder o acesso, atualize o cartão pela cobrança que enviamos ao seu e-mail ou fale com a gente. Se você não quiser continuar, é só cancelar na sua conta.'], { label: 'Abrir o Prumo', url: `${ctx.config.publicUrl}/#/conta/plano` });
+      const body = layout('Não conseguimos cobrar o seu cartão', ['A mensalidade do Prumo não passou no cartão. Seu acesso continua até o fim do período já pago.', 'Para não perder o acesso, atualize o cartão pela cobrança que enviamos ao seu e-mail ou fale com a gente. Se você não quiser continuar, é só cancelar na sua conta.'], { label: 'Abrir o Prumo', url: `${ctx.config.publicUrl}/conta/plano` });
       await ctx.email.send({ to: p.email, subject: 'Prumo: não conseguimos cobrar o seu cartão', ...body }).catch(() => undefined);
     }
     return 'confirmed';
@@ -215,7 +215,7 @@ export function cancelEmail(ctx: Ctx, to: string, accessUntil: string): Promise<
     `Paramos a cobrança agora. Você continua com acesso ao Prumo até ${accessUntil} e pode baixar todos os seus dados (planilha e PDF) pela aba Plano até essa data.`,
     'Não devolvemos o valor do mês em andamento. Depois da data de encerramento, seus dados são apagados automaticamente.',
     'Mudou de ideia? Depois do fim do mês pago é só assinar de novo.',
-  ], { label: 'Baixar meus dados', url: `${ctx.config.publicUrl}/#/conta/plano` });
+  ], { label: 'Baixar meus dados', url: `${ctx.config.publicUrl}/conta/plano` });
   return ctx.email.send({ to, subject: 'Prumo: assinatura cancelada e como baixar seus dados', ...body }).catch(() => undefined);
 }
 

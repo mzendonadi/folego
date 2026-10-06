@@ -18,7 +18,10 @@ http.createServer(async (req, res) => {
     let file;
     if (url.pathname === '/__dev/axe.js') file = path.join(root, 'node_modules/axe-core/axe.min.js');
     else {
-      const clean = decodeURIComponent(url.pathname);
+      let clean = decodeURIComponent(url.pathname);
+      // Endereços limpos do site (/conta, /pagamento...) entregam o index.html, como o servidor real.
+      if (/^\/(diagnostico|processando|resultado|pagamento|mapa|complemento|ferramentas|tradutor|guia|parceiros|conta|descadastrar|acesso)(\/.*)?$/.test(clean)) clean = '/';
+      else if (/^\/gestao\/.+/.test(clean)) clean = '/gestao/';
       file = path.resolve(root, `.${clean === '/' ? '/index.html' : clean}`);
       if (!file.startsWith(root) || file.includes(`${path.sep}node_modules${path.sep}`) || file.includes(`${path.sep}scripts${path.sep}`)) {
         res.writeHead(404).end('not found');

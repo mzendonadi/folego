@@ -29,7 +29,7 @@ export async function contasTesteScreen() {
             const out = await api.codigoContaTeste(x.id);
             const d = drawer('Código de entrada');
             d.body.append(
-              el('p', { class: 'note note-amber' }, el('span', {}, `Vale ${out.minutes} minutos e só uma vez. No Prumo (folego.online/#/conta), digite ${out.email} e este código.`)),
+              el('p', { class: 'note note-amber' }, el('span', {}, `Vale ${out.minutes} minutos e só uma vez. No Prumo (folego.online/conta), digite ${out.email} e este código.`)),
               el('section', {}, el('h3', {}, out.email), el('div', { class: 'bo-secret' }, out.code)),
             );
           } catch (e) {
@@ -44,7 +44,7 @@ export async function contasTesteScreen() {
             draw();
             const d = drawer('Senha de entrada');
             d.body.append(
-              el('p', { class: 'note note-amber' }, el('span', {}, `Guarde agora, ela não aparece de novo. No Prumo (folego.online/#/conta), toque em "Conta de teste? Entrar com senha" e use ${x.email} com esta senha. Só funciona com a conta LIGADA.`)),
+              el('p', { class: 'note note-amber' }, el('span', {}, `Guarde agora, ela não aparece de novo. No Prumo (folego.online/conta), toque em "Conta de teste? Entrar com senha" e use ${x.email} com esta senha. Só funciona com a conta LIGADA.`)),
               el('section', {}, el('h3', {}, x.email), el('div', { class: 'bo-secret' }, out.password)),
             );
           } catch (e) {

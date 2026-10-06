@@ -536,7 +536,7 @@ export function renderGuided(root, kind, ctx) {
     link.addEventListener('click', async () => {
       try {
         const { token } = await ctx.api.createAccessLink(orderId);
-        const url = `${location.origin}${location.pathname}#/acesso/${token}`;
+        const url = `${location.origin}/acesso#${token}`;
         const box = el('input', { class: 'input pix-code', type: 'text', readonly: true, value: url, 'aria-label': 'Seu link de acesso' });
         linkOut.replaceChildren(el('div', { class: 'pix-code-row' }, box, copyBtn('Copiar link', url)));
       } catch {

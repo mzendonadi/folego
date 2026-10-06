@@ -314,7 +314,7 @@ export function renderDelivery(root, { input, diagnosis: d, items, generated, ex
     'dinheiro', 'Dinheiro esquecido',
     el('p', { class: 'section-sub' }, 'Antes de quitar dívida, vale conferir se existe dinheiro seu parado em bancos, FGTS, PIS/Pasep ou imposto. O guia monta o roteiro de onde procurar para o seu caso, com o passo a passo de cada fonte oficial.'),
     forgotten?.active
-      ? el('div', { class: 'd-actions no-print' }, el('a', { class: 'btn btn-primary', href: '#/guia/forgotten' }, 'Ver o guia (prévia grátis)', icon('arrow-right')), el('span', { class: 'fine' }, `${priceLabel('guide_forgotten')} por Pix, só se você gostar da prévia.`))
+      ? el('div', { class: 'd-actions no-print' }, el('a', { class: 'btn btn-primary', href: '/guia/forgotten' }, 'Ver o guia (prévia grátis)', icon('arrow-right')), el('span', { class: 'fine' }, `${priceLabel('guide_forgotten')} por Pix, só se você gostar da prévia.`))
       : null,
     el('p', { class: 'note note-amber' }, icon('alert'), el('span', {}, 'Ninguém pode cobrar para “liberar” seu dinheiro. Use só sites e aplicativos oficiais (.gov.br) e desconfie de mensagens que pedem pagamento.')),
   );

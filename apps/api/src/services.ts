@@ -766,7 +766,7 @@ export async function emailAccessLink(ctx: Ctx, sessionId: string, orderId: stri
   const sent = await ctx.db.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.audit_log WHERE action = 'access_link_emailed' AND actor = $1 AND occurred_at > now() - interval '1 day'`, [`session:${sessionId}`]);
   if (num(sent.rows[0]?.n ?? 0) >= 3) throw new AppError(429, 'too_many_emails', 'Você já pediu o link por e-mail algumas vezes hoje. Tente de novo amanhã ou copie o link na tela.');
   const { token, expiresAt } = await createAccessLink(ctx, sessionId, orderId);
-  const url = `${ctx.config.publicUrl}/#/acesso/${token}`;
+  const url = `${ctx.config.publicUrl}/acesso#${token}`;
   const until = new Date(expiresAt).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
   const body = layout(
     'Seu link de acesso ao Fôlego',

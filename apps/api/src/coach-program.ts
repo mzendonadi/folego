@@ -184,7 +184,7 @@ export async function sendWelcomes(ctx: Ctx, opts: { log?: (e: Record<string, un
       'Sua conta está ativa. Para tirar o máximo, faça só isto hoje (5 minutos):',
       `1. Abra a aba Coach e veja a sua nota de saúde financeira.\n2. Comece a jornada "${first}": as missões se confirmam sozinhas conforme você usa o Fôlego.\n3. Lance os gastos de hoje. Todo dia que você lança entra na sua sequência.`,
       'Toda semana o Coach traz 3 desafios novos, e você recebe um resumo por e-mail aos domingos.',
-    ], { label: 'Abrir o meu Coach', url: `${ctx.config.publicUrl}/#/conta` });
+    ], { label: 'Abrir o meu Coach', url: `${ctx.config.publicUrl}/conta` });
     try {
       await ctx.email.send({ to: b.email, subject: 'Sua conta no Fôlego está pronta: comece por aqui', ...body });
       await ctx.db.query(`UPDATE app.subscribers SET welcome_sent_at = now() WHERE id = $1`, [b.id]);

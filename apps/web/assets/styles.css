@@ -173,7 +173,7 @@ ul, ol { margin: 0; padding: 0; }
 .header-inner { display: flex; align-items: center; justify-content: space-between; gap: var(--s4); min-height: 68px; }
 .brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; color: var(--ink); }
 .brand:hover { color: var(--ink); }
-.brand-mark { width: 30px; height: 30px; color: var(--primary); }
+.brand-mark { width: 34px; height: 34px; flex: none; color: var(--primary); }
 .brand-dot { fill: var(--tone-ok); opacity: 0.9; }
 .brand-word { font-family: var(--font-display); font-weight: 600; font-size: 1.6rem; letter-spacing: -0.03em; }
 .header-nav { display: none; gap: var(--s5); }

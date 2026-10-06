@@ -89,9 +89,7 @@ export function renderCheckout(root, ctx) {
     const email = el('input', { class: 'input', id: 'co-email', type: 'email', autocomplete: 'email', maxlength: '200', placeholder: 'voce@exemplo.com', value: contact.email });
     const phone = el('input', { class: 'input', id: 'co-phone', type: 'tel', inputmode: 'tel', autocomplete: 'tel-national', maxlength: '15', placeholder: '(11) 91234-5678', value: contact.phone });
     phone.addEventListener('input', () => { phone.value = maskPhone(phone.value); });
-    email.setAttribute('aria-describedby', 'co-contact-hint');
     return el('div', { class: 'co-contact' },
-      el('p', { class: 'hint', id: 'co-contact-hint' }, 'Usamos para enviar o link de acesso ao seu Mapa e os avisos do pedido, e também para medir e melhorar nossos anúncios (compartilhamos com a Meta). Guardamos com criptografia e apagamos em até 7 dias se você não pagar, ou 30 dias depois do pagamento.'),
       el('div', { class: 'field-row' },
         el('div', { class: 'field' }, el('label', { for: 'co-email', class: 'label' }, 'E-mail'), email),
         el('div', { class: 'field' }, el('label', { for: 'co-phone', class: 'label' }, 'Celular com DDD'), phone)),

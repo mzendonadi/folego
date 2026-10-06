@@ -149,7 +149,7 @@ export function giftMail(ctx: Ctx, name: string, planName: string) {
         'O caminho até a **liberdade financeira** e um **plano de 90 dias** para começar hoje',
       ],
     },
-    button: { label: 'Abrir o meu Prumo', url: `${ctx.config.publicUrl}/#/conta` },
+    button: { label: 'Abrir o meu Prumo', url: `${ctx.config.publicUrl}/conta` },
     closing: [
       'Uma dica de quem já viu muita gente começar: leia **um capítulo por semana** e faça o exercício da caixa azul. Enquanto isso, o Prumo mostra o seu próximo passo todos os dias na aba Coach.',
       ...(referral ? [`Gostou do Fôlego? **Indique um amigo**: a cada indicação que assinar um plano, você ganha **${ctx.config.referralDiscountPct}% de desconto** na próxima fatura. Seu link está na aba "Indique e ganhe".`] : []),

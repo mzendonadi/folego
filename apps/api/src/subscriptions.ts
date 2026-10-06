@@ -444,7 +444,7 @@ export async function maintenance(ctx: Ctx, opts: { force?: boolean; log?: (e: R
     );
     for (const s of due.rows) {
       const name = planByCode(s.plan)?.name ?? s.plan;
-      const body = layout(`Seu plano ${name} vence em breve`, [`Seu acesso vai até ${new Date(s.end).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}. Para continuar, é só gerar um novo Pix na sua conta. Nada é cobrado sozinho.`, 'Se não quiser continuar, não precisa fazer nada.'], { label: 'Abrir minha conta', url: `${ctx.config.publicUrl}/#/conta` });
+      const body = layout(`Seu plano ${name} vence em breve`, [`Seu acesso vai até ${new Date(s.end).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}. Para continuar, é só gerar um novo Pix na sua conta. Nada é cobrado sozinho.`, 'Se não quiser continuar, não precisa fazer nada.'], { label: 'Abrir minha conta', url: `${ctx.config.publicUrl}/conta` });
       try {
         await ctx.email.send({ to: s.email, subject: `Seu plano ${name} vence em breve`, ...body });
         await ctx.db.query(`UPDATE app.subscriptions SET reminded_at = now() WHERE id = $1`, [s.id]);
