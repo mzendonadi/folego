@@ -30,11 +30,29 @@ function showAnnouncement(a) {
 
 export const site = { salesPaused: false };
 
+const CACHE_KEY = 'folego_catalog_v1';
+/** Aplica já o último catálogo conhecido (antes da resposta do servidor): o preço certo aparece sem piscar o valor de reserva. */
+export function applyCachedCatalog() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return;
+    applyCatalog(JSON.parse(raw));
+    bindStaticPrices();
+  } catch {
+    /* sem cache: segue com os valores de reserva até o servidor responder */
+  }
+}
+
 /** Busca preços e avisos. Espera no máximo 1,5 s (o site nunca fica travado por isso). */
 export async function loadCatalog() {
   try {
     const c = await Promise.race([api.getCatalog(), new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 4000))]);
     applyCatalog(c);
+    try {
+      localStorage.setItem(CACHE_KEY, JSON.stringify({ products: c.products, bundlePriceCents: c.bundlePriceCents }));
+    } catch {
+      /* sem armazenamento */
+    }
     site.salesPaused = Boolean(c.salesPaused);
     bindStaticPrices();
     // A vitrine de guias só aparece na página inicial quando o dono liga ao menos um guia.

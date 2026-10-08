@@ -237,7 +237,7 @@ test('adaptador Asaas: cria cliente + assinatura mensal no cartão sem dados de 
   }) as unknown as typeof fetch;
   const asaas = new AsaasGateway({ apiKey: 'k', baseUrl: 'https://api-sandbox.asaas.com/v3', pixKey: 'x', webhookToken: 'tok', fetchFn });
   const out = await asaas.createCardSubscription({ orderId: 'o1', subscriberId: 's1', email: 'a@b.com', name: 'Ana', planName: 'Ousado', valueCents: 3999, firstDueOn: '2026-10-03', cpf: '52998224725' });
-  assert.deepEqual(out, { providerCustomerId: 'cus_1', providerSubscriptionId: 'sub_1', providerPaymentId: 'pay_1', checkoutUrl: 'https://www.asaas.com/i/abc' });
+  assert.deepEqual(out, { providerCustomerId: 'cus_1', providerSubscriptionId: 'sub_1', providerPaymentId: 'pay_1', checkoutUrl: 'https://www.asaas.com/i/abc', returnsToSite: false });
   const subCall = calls.find((c) => c.url.endsWith('/subscriptions'))!;
   assert.equal(subCall.body.billingType, 'CREDIT_CARD');
   assert.equal(subCall.body.cycle, 'MONTHLY');
@@ -254,6 +254,36 @@ test('adaptador Asaas: cria cliente + assinatura mensal no cartão sem dados de 
   assert.deepEqual(asaas.parseWebhook(h, { id: 'e3', event: 'SUBSCRIPTION_DELETED', subscription: { id: 'sub_1' } }), { kind: 'billing', event: { providerEventId: 'e3', providerSubscriptionId: 'sub_1', type: 'subscription_ended' } });
   assert.deepEqual(asaas.parseWebhook(h, { id: 'e4', event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_4', pixQrCodeId: 'qr1' } }), { kind: 'payment', event: { providerEventId: 'e4', providerPaymentId: 'qr1' } }, 'o fluxo antigo de Pix continua entendido');
   assert.deepEqual(asaas.parseWebhook(h, { id: 'e5', event: 'PAYMENT_CREATED' }), { kind: 'ignore' });
+});
+
+test('Asaas: com o site cadastrado volta sozinho ao Prumo; sem site cadastrado, cai no modo "aba nova" e não insiste por 10 minutos', async () => {
+  const subBodies: any[] = [];
+  let siteCadastrado = true;
+  const fetchFn = (async (url: string, init: RequestInit) => {
+    const body = init.body ? JSON.parse(String(init.body)) : null;
+    if (url.endsWith('/customers')) return new Response(JSON.stringify({ id: 'cus_1' }), { status: 200 });
+    if (url.endsWith('/subscriptions')) {
+      subBodies.push(body);
+      if (body.callback && !siteCadastrado) return new Response(JSON.stringify({ errors: [{ code: 'invalid_object', description: 'Não há nenhum domínio configurado em sua conta.' }] }), { status: 400 });
+      return new Response(JSON.stringify({ id: 'sub_1' }), { status: 200 });
+    }
+    if (url.includes('/subscriptions/sub_1/payments')) return new Response(JSON.stringify({ data: [{ id: 'pay_1', invoiceUrl: 'https://www.asaas.com/i/abc' }] }), { status: 200 });
+    return new Response('{}', { status: 404 });
+  }) as unknown as typeof fetch;
+  const asaas = new AsaasGateway({ apiKey: 'k', baseUrl: 'https://api-sandbox.asaas.com/v3', pixKey: 'x', webhookToken: 'tok', fetchFn });
+  const input = { orderId: 'o1', subscriberId: 's1', email: 'a@b.com', name: 'Ana', planName: 'Ousado', valueCents: 3999, firstDueOn: '2026-10-03', cpf: '52998224725', successUrl: 'https://folego.online/conta/plano' };
+  const ok = await asaas.createCardSubscription(input);
+  assert.equal(ok.returnsToSite, true);
+  assert.deepEqual(subBodies[0].callback, { successUrl: 'https://folego.online/conta/plano', autoRedirect: true });
+  subBodies.length = 0;
+  siteCadastrado = false;
+  const plano = await asaas.createCardSubscription(input);
+  assert.equal(plano.returnsToSite, false, 'sem site cadastrado a assinatura sai sem retorno automático, mas sai');
+  assert.equal(subBodies.length, 2, 'tentou com retorno, o Asaas recusou, repetiu sem retorno');
+  assert.ok(!('callback' in subBodies[1]));
+  subBodies.length = 0;
+  await asaas.createCardSubscription(input);
+  assert.equal(subBodies.length, 1, 'nos 10 minutos seguintes nem tenta o retorno de novo');
 });
 
 test('checkout guarda nome, CPF e celular criptografados; backoffice mostra mascarado, revela com auditoria e marca pagamento iniciado', async () => {

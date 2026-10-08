@@ -38,6 +38,8 @@ export interface CardSubscriptionInput {
   valueCents: number;
   /** Primeira cobrança (yyyy-mm-dd). As seguintes caem no mesmo dia de cada mês. */
   firstDueOn: string;
+  /** Para onde o provedor devolve a pessoa depois de pagar (exige o site cadastrado na conta do Asaas; sem isso, cai no modo "aba nova"). */
+  successUrl?: string | undefined;
   /** CPF só com dígitos (o Asaas exige para cobrar no cartão). Não guardamos. */
   cpf?: string | undefined;
 }
@@ -49,6 +51,8 @@ export interface CardSubscription {
   providerPaymentId: string;
   /** Página segura do provedor onde a pessoa informa o cartão (nenhum dado de cartão passa pelo Fôlego). */
   checkoutUrl: string;
+  /** O provedor devolve a pessoa ao site depois de pagar (a tela pode seguir na mesma aba). */
+  returnsToSite?: boolean | undefined;
 }
 
 /**
@@ -177,6 +181,9 @@ export class AsaasGateway implements PaymentGateway {
     this.fetchFn = options.fetchFn ?? fetch;
   }
 
+  /** Até quando não tentamos o retorno automático (o Asaas recusou por falta de site cadastrado). */
+  private static returnBlockedUntil = 0;
+
   private async call(method: 'GET' | 'POST', path: string, body?: unknown): Promise<unknown> {
     let res: Response;
     try {
@@ -191,13 +198,13 @@ export class AsaasGateway implements PaymentGateway {
     }
     if (!res.ok) {
       // Nunca repassamos o corpo do erro ao cliente: pode citar dados da conta. O motivo vai só para o registro do servidor.
-      await this.logRefusal(method, path, res);
-      throw new AppError(502, 'gateway_error', 'O provedor de pagamento recusou o pedido. Tente de novo.');
+      const why = await this.logRefusal(method, path, res);
+      throw Object.assign(new AppError(502, 'gateway_error', 'O provedor de pagamento recusou o pedido. Tente de novo.'), { refusal: why });
     }
     return res.json();
   }
 
-  private async logRefusal(method: string, path: string, res: Response): Promise<void> {
+  private async logRefusal(method: string, path: string, res: Response): Promise<string[]> {
     let errors: string[] = [];
     try {
       const body = (await res.clone().json()) as { errors?: Array<{ code?: unknown; description?: unknown }> };
@@ -207,6 +214,7 @@ export class AsaasGateway implements PaymentGateway {
     }
     const route = path.replace(/\?.*$/, '').replace(/\/[A-Za-z0-9_-]{8,}/g, '/:id'); // sem ids no registro
     console.error(JSON.stringify({ level: 50, msg: 'asaas_erro', metodo: method, caminho: route, status: res.status, erros: errors }));
+    return errors;
   }
 
   async createPix(input: { orderId: string; amountCents: number; expiresAt: Date }): Promise<PixCharge> {
@@ -245,7 +253,7 @@ export class AsaasGateway implements PaymentGateway {
   async createCardSubscription(input: CardSubscriptionInput): Promise<CardSubscription> {
     const customer = (await this.call('POST', '/customers', { name: input.name, email: input.email, externalReference: input.subscriberId, ...(input.cpf ? { cpfCnpj: input.cpf } : {}) })) as { id?: unknown };
     if (typeof customer.id !== 'string') throw new AppError(502, 'gateway_error', 'Resposta inesperada do provedor de pagamento.');
-    const sub = (await this.call('POST', '/subscriptions', {
+    const body = {
       customer: customer.id,
       billingType: 'CREDIT_CARD',
       value: input.valueCents / 100,
@@ -253,12 +261,26 @@ export class AsaasGateway implements PaymentGateway {
       cycle: 'MONTHLY',
       description: `Prumo (Fôlego) - plano ${input.planName}`,
       externalReference: input.orderId,
-    })) as { id?: unknown };
+    };
+    // Volta ao site depois de pagar: o Asaas só aceita o retorno automático com o site cadastrado na conta. Se recusar por isso,
+    // seguimos sem retorno (a tela do Prumo espera e confirma sozinha) e só tentamos de novo daqui a 10 minutos.
+    const tryReturn = Boolean(input.successUrl) && Date.now() >= AsaasGateway.returnBlockedUntil;
+    let returnsToSite = false;
+    let sub: { id?: unknown };
+    try {
+      sub = (await this.call('POST', '/subscriptions', tryReturn ? { ...body, callback: { successUrl: input.successUrl, autoRedirect: true } } : body)) as { id?: unknown };
+      returnsToSite = tryReturn;
+    } catch (e) {
+      const why = (e as { refusal?: string[] }).refusal ?? [];
+      if (!tryReturn || !why.some((w) => /dom[ií]nio|domain/i.test(w))) throw e;
+      AsaasGateway.returnBlockedUntil = Date.now() + 10 * 60_000;
+      sub = (await this.call('POST', '/subscriptions', body)) as { id?: unknown };
+    }
     if (typeof sub.id !== 'string') throw new AppError(502, 'gateway_error', 'Resposta inesperada do provedor de pagamento.');
     const pays = (await this.call('GET', `/subscriptions/${encodeURIComponent(sub.id)}/payments?limit=1`)) as { data?: Array<{ id?: unknown; invoiceUrl?: unknown }> };
     const first = pays.data?.[0];
     if (!first || typeof first.id !== 'string' || typeof first.invoiceUrl !== 'string') throw new AppError(502, 'gateway_error', 'Resposta inesperada do provedor de pagamento.');
-    return { providerCustomerId: customer.id, providerSubscriptionId: sub.id, providerPaymentId: first.id, checkoutUrl: first.invoiceUrl };
+    return { providerCustomerId: customer.id, providerSubscriptionId: sub.id, providerPaymentId: first.id, checkoutUrl: first.invoiceUrl, returnsToSite };
   }
 
   async updateCardSubscriptionValue(providerSubscriptionId: string, valueCents: number): Promise<void> {

@@ -24,6 +24,8 @@ export interface CheckoutView {
   totalCents: number;
   plan: string;
   status: 'pending';
+  /** A pessoa volta sozinha ao Prumo depois de pagar (a tela pode seguir na mesma aba). */
+  returnsToSite: boolean;
 }
 
 /** Começa a assinatura mensal: registra o aceite dos termos, cria a assinatura no provedor e devolve a página do cartão. */
@@ -71,6 +73,7 @@ export async function startCardCheckout(ctx: Ctx, args: { subscriberId: string; 
       valueCents,
       firstDueOn: addDaysIso(new Date(), 0),
       cpf: args.cpf,
+      successUrl: `${ctx.config.publicUrl}/conta/plano`,
     });
   } catch (e) {
     await ctx.db.query(`UPDATE app.orders SET status = 'canceled' WHERE id = $1`, [orderId]);
@@ -89,7 +92,7 @@ export async function startCardCheckout(ctx: Ctx, args: { subscriberId: string; 
     await audit(q, `subscriber:${args.subscriberId}`, 'subscription_checkout_started', 'subscriber', args.subscriberId, { plan: plan.code, termsVersion: TERMS_VERSION, orderId });
   });
   await attribute(ctx, args.subscriberId, args.referralCode);
-  return { orderId, checkoutUrl: card.checkoutUrl, totalCents: valueCents, plan: plan.code, status: 'pending' };
+  return { orderId, checkoutUrl: card.checkoutUrl, totalCents: valueCents, plan: plan.code, status: 'pending', returnsToSite: Boolean(card.returnsToSite) };
 }
 
 /** Webhook de cobrança de uma assinatura que ainda não conhecemos como pagamento: registra a mensalidade (renovação). */

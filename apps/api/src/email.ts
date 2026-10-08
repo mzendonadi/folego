@@ -11,6 +11,8 @@ export interface EmailMessage {
   attachments?: Array<{ filename: string; content: Buffer; contentType: string }>;
 }
 
+import type { Queryable } from './db.ts';
+
 export interface EmailSender {
   readonly name: string;
   send(message: EmailMessage): Promise<void>;
@@ -38,6 +40,22 @@ export class ResendSender implements EmailSender {
       signal: AbortSignal.timeout(m.attachments?.length ? 30_000 : 10_000),
     });
     if (!res.ok) throw new Error(`Resend respondeu ${res.status}`);
+  }
+}
+
+/** Conta os e-mails enviados por dia (alerta de custo/limite no backoffice). Se a contagem falhar, o envio segue. */
+export class CountingSender implements EmailSender {
+  readonly name: string;
+  private readonly inner: EmailSender;
+  private readonly db: Queryable;
+  constructor(inner: EmailSender, db: Queryable) {
+    this.inner = inner;
+    this.db = db;
+    this.name = inner.name;
+  }
+  async send(m: EmailMessage): Promise<void> {
+    await this.inner.send(m);
+    await this.db.query(`INSERT INTO app.email_usage(day, sent) VALUES (current_date, 1) ON CONFLICT (day) DO UPDATE SET sent = app.email_usage.sent + 1`).catch(() => undefined);
   }
 }
 

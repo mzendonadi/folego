@@ -197,6 +197,94 @@ export function parseOfx(text: string): { entries: ImportedEntry[]; skipped: num
   return { entries, skipped };
 }
 
+// ---------------------------------------------------------------------------
+// Extrato em PDF: o texto sai do PDF no navegador (pdf.js) e este leitor transforma as linhas em lançamentos.
+// Entende os formatos mais comuns (data no começo da linha; valor com sinal, com "D"/"C", entre parênteses, com "-" no fim ou
+// sem sinal). Quando o valor não tem sinal, decide pela descrição (recebido, crédito, estorno... = entrada; o resto = saída).
+// ---------------------------------------------------------------------------
+const PDF_MONTHS: Record<string, number> = { jan: 1, fev: 2, mar: 3, abr: 4, mai: 5, jun: 6, jul: 7, ago: 8, set: 9, out: 10, nov: 11, dez: 12 };
+const PDF_MONEY = /(?<s1>[-+])?\s*(?:R\$)?\s*(?<s2>[-+])?\s*(?<par>\()?(?<num>\d{1,3}(?:\.\d{3})+,\d{2}|\d+,\d{2})\)?(?<trail>-)?(?:\s+(?<dc>DB|CR|D|C)(?![A-Za-zÀ-ú]))?/gi;
+const PDF_INCOME_WORDS = /recebid|receb\.|cr[eé]dito em conta|dep[oó]sito|sal[aá]rio|rendimento|estorno|reembolso|cashback|devolu|provento|resgate/i;
+const PDF_SKIP_DESC = /^(saldo|total|subtotal|limite|vencimento|pagamento m[ií]nimo|valor da fatura)/i;
+
+function pdfDate(line: string, refYear: number | null, now: Date): { iso: string; rest: string } | null {
+  let m: RegExpExecArray | null;
+  let d: number;
+  let mo: number;
+  let y: number | null = null;
+  let rest = '';
+  if ((m = /^(\d{2})[/.-](\d{2})[/.-](\d{4}|\d{2})\b/.exec(line))) {
+    d = Number(m[1]);
+    mo = Number(m[2]);
+    y = m[3]!.length === 2 ? 2000 + Number(m[3]) : Number(m[3]);
+  } else if ((m = /^(\d{4})-(\d{2})-(\d{2})\b/.exec(line))) {
+    y = Number(m[1]);
+    mo = Number(m[2]);
+    d = Number(m[3]);
+  } else if ((m = /^(\d{1,2})\s+(?:de\s+)?(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)[a-zç]*\.?(?:\s+(?:de\s+)?(\d{4}))?\b/i.exec(line))) {
+    d = Number(m[1]);
+    mo = PDF_MONTHS[m[2]!.toLowerCase()]!;
+    y = m[3] ? Number(m[3]) : null;
+  } else if ((m = /^(\d{2})[/.](\d{2})\b(?![/.]\d)/.exec(line))) {
+    d = Number(m[1]);
+    mo = Number(m[2]);
+  } else return null;
+  rest = line.slice(m[0].length).trim();
+  if (y === null) {
+    y = refYear ?? now.getFullYear();
+    // sem ano e no futuro (ex.: extrato de dezembro lido em janeiro): é do ano anterior
+    if (Date.UTC(y, mo - 1, d) > now.getTime() + 31 * 86_400_000) y -= 1;
+  }
+  const t = new Date(Date.UTC(y, mo - 1, d));
+  if (t.getUTCFullYear() !== y || t.getUTCMonth() !== mo - 1 || t.getUTCDate() !== d || y < 2000 || y > 2100) return null;
+  return { iso: t.toISOString().slice(0, 10), rest };
+}
+
+export function parsePdfExtract(text: string, now: Date = new Date()): { entries: ImportedEntry[]; skipped: number } {
+  const refYear = /\b\d{2}[/.-]\d{2}[/.-](20\d{2})\b/.exec(text)?.[1];
+  const ref = refYear ? Number(refYear) : null;
+  const entries: ImportedEntry[] = [];
+  let skipped = 0;
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.replace(/\s+/g, ' ').trim();
+    if (!line) continue;
+    const dated = pdfDate(line, ref, now);
+    if (!dated) continue;
+    // segunda data no começo (data do lançamento + data de efetivação)
+    let rest = dated.rest;
+    const second = pdfDate(rest, ref, now);
+    if (second) rest = second.rest;
+    if (PDF_SKIP_DESC.test(rest) || /\bsaldo\b/i.test(rest)) continue;
+    const tokens = [...rest.matchAll(PDF_MONEY)].filter((t) => t.groups?.num);
+    if (tokens.length === 0) {
+      skipped += 1;
+      continue;
+    }
+    const first = tokens[0]!;
+    const g = first.groups!;
+    const cents = Math.round(Number(g.num!.replace(/\./g, '').replace(',', '.')) * 100);
+    if (!Number.isFinite(cents) || cents === 0 || cents > 100_000_000_00) {
+      skipped += 1;
+      continue;
+    }
+    const dc = (g.dc ?? '').toUpperCase();
+    let note = rest;
+    for (const t of tokens) note = note.replace(t[0], ' ');
+    note = note
+      .replace(/\d{3}\.\d{3}\.\d{3}-\d{2}|\*{3}\.\d{3}\.\d{3}-\*{2}|\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/g, ' ')
+      .replace(/\d{6,}/g, ' ')
+      .replace(/\s+/g, ' ')
+      .replace(/^[-–:\s]+|[-–:\s]+$/g, '')
+      .trim();
+    let negative: boolean;
+    if (g.s1 === '-' || g.s2 === '-' || g.par || g.trail === '-' || dc === 'D' || dc === 'DB') negative = true;
+    else if (g.s1 === '+' || g.s2 === '+' || dc === 'C' || dc === 'CR') negative = false;
+    else negative = !PDF_INCOME_WORDS.test(note);
+    entries.push({ date: dated.iso, amountCents: negative ? -cents : cents, note: (note || 'Lançamento').slice(0, 120) });
+  }
+  return { entries, skipped };
+}
+
 export function parseExtract(text: string, filename = ''): { entries: ImportedEntry[]; skipped: number } {
   return /\.ofx$/i.test(filename) || /<OFX>/i.test(text) ? parseOfx(text) : parseCsvExtract(text);
 }

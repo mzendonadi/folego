@@ -12,7 +12,7 @@ import { renderAccount } from './account.js';
 import { renderUnsubscribe } from './unsubscribe.js';
 import { renderResumeBanner } from './banner.js';
 import * as api from './api.js';
-import { loadCatalog } from './prices.js';
+import { loadCatalog, applyCachedCatalog } from './prices.js';
 import { track } from './track.js';
 
 document.documentElement.classList.add('js');
@@ -656,6 +656,7 @@ function observeHero() {
 }
 
 function init() {
+  applyCachedCatalog();
   loadDraft();
   initIntake({ timeline: $('#timeline'), summary: $('#summary'), onComplete: onIntakeComplete, onStep: (id) => track('intake_step', { step: id }) });
   bindGlobalClicks();

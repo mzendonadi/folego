@@ -18,6 +18,9 @@ export const runtimeSchema = z.object({
   canceledPurgeDays: z.number().int().min(1).max(180),
   referralEnabled: z.boolean(),
   referralDiscountPct: z.number().int().min(0).max(50),
+  aiMonthlyCallsLimit: z.number().int().min(0).max(1_000_000),
+  emailDailyLimit: z.number().int().min(0).max(1_000_000),
+  emailMonthlyLimit: z.number().int().min(0).max(10_000_000),
 }).partial();
 export type RuntimePatch = z.infer<typeof runtimeSchema>;
 
@@ -34,6 +37,9 @@ export interface RuntimeSettings {
   canceledPurgeDays: number;
   referralEnabled: boolean;
   referralDiscountPct: number;
+  aiMonthlyCallsLimit: number;
+  emailDailyLimit: number;
+  emailMonthlyLimit: number;
 }
 
 export const currentSettings = (config: Config): RuntimeSettings => ({
@@ -49,6 +55,9 @@ export const currentSettings = (config: Config): RuntimeSettings => ({
   canceledPurgeDays: config.canceledPurgeDays,
   referralEnabled: config.referralEnabled,
   referralDiscountPct: config.referralDiscountPct,
+  aiMonthlyCallsLimit: config.aiMonthlyCallsLimit,
+  emailDailyLimit: config.emailDailyLimit,
+  emailMonthlyLimit: config.emailMonthlyLimit,
 });
 
 function apply(config: Config, patch: RuntimePatch): void {
@@ -64,6 +73,9 @@ function apply(config: Config, patch: RuntimePatch): void {
   if (patch.canceledPurgeDays !== undefined) config.canceledPurgeDays = patch.canceledPurgeDays;
   if (patch.referralEnabled !== undefined) config.referralEnabled = patch.referralEnabled;
   if (patch.referralDiscountPct !== undefined) config.referralDiscountPct = patch.referralDiscountPct;
+  if (patch.aiMonthlyCallsLimit !== undefined) config.aiMonthlyCallsLimit = patch.aiMonthlyCallsLimit;
+  if (patch.emailDailyLimit !== undefined) config.emailDailyLimit = patch.emailDailyLimit;
+  if (patch.emailMonthlyLimit !== undefined) config.emailMonthlyLimit = patch.emailMonthlyLimit;
 }
 
 const lastRefresh = new WeakMap<Config, number>();

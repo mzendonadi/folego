@@ -58,5 +58,21 @@ export async function deepHealth(ctx: Ctx): Promise<Health> {
   } catch {
     checks.disco = { ok: true, detail: 'não medido' };
   }
+  // Custos e limites: IA e e-mail. Acende com 80% de qualquer limite (o Monitor avisa por e-mail).
+  try {
+    const ai = await ctx.db.query<{ d: string; m: string }>(`SELECT count(*) FILTER (WHERE generated_at >= date_trunc('day', now()))::text AS d, count(*) FILTER (WHERE generated_at >= date_trunc('month', now()))::text AS m FROM app.deliverables WHERE generation_meta->>'source' = 'ai'`);
+    const em = await ctx.db.query<{ d: string; m: string }>(`SELECT coalesce(sum(sent) FILTER (WHERE day = current_date), 0)::text AS d, coalesce(sum(sent) FILTER (WHERE day >= date_trunc('month', now())::date), 0)::text AS m FROM app.email_usage`);
+    const c = ctx.config;
+    const uso: Array<[string, number, number]> = [
+      ['IA hoje', num(ai.rows[0]?.d ?? 0), c.aiMaxCallsPerDay],
+      ['IA no mês', num(ai.rows[0]?.m ?? 0), c.aiMonthlyCallsLimit],
+      ['e-mails hoje', num(em.rows[0]?.d ?? 0), c.emailDailyLimit],
+      ['e-mails no mês', num(em.rows[0]?.m ?? 0), c.emailMonthlyLimit],
+    ];
+    const perto = uso.filter(([, usado, teto]) => teto > 0 && usado >= teto * 0.8);
+    checks.custos = { ok: perto.length === 0, detail: uso.map(([n, u, t]) => `${n} ${u}/${t}`).join(' · ') + (perto.length ? ` — perto do limite: ${perto.map(([n]) => n).join(', ')}` : '') };
+  } catch {
+    checks.custos = { ok: true, detail: 'não medido' };
+  }
   return { ok: Object.values(checks).every((c) => c.ok), at: new Date().toISOString(), checks };
 }

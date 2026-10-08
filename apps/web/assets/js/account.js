@@ -15,6 +15,29 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
   let month = monthNow();
   let wantedTab = TAB_IDS.includes(initialTab) ? initialTab : 'coach';
 
+  // Voltou da página de pagamento do Asaas: o aviso do pagamento pode levar alguns segundos; esperamos aqui em vez de mostrar os planos.
+  function takePending() {
+    try {
+      const raw = sessionStorage.getItem('prumo_pagando');
+      sessionStorage.removeItem('prumo_pagando');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }
+  async function waitPayment(acc, pending) {
+    root.replaceChildren(card(el('h2', {}, 'Confirmando o seu pagamento…'), el('p', { class: 'pix-status', role: 'status' }, icon('clock'), el('span', {}, 'Leva só alguns segundos. Não precisa fazer nada.'))));
+    for (let i = 0; i < 40; i++) {
+      await new Promise((r) => setTimeout(r, 1500));
+      const now = await api.getAccount().catch(() => null);
+      if (now?.subscription?.active && now.subscription.periodEnd > (pending.before ?? 0)) {
+        toast('Assinatura ativada! Bem-vindo(a) ao Prumo.');
+        return now;
+      }
+    }
+    return acc;
+  }
+
   async function boot() {
     let acc;
     try {
@@ -22,6 +45,8 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
     } catch {
       return drawLogin();
     }
+    const pending = takePending();
+    if (pending && !(acc.subscription?.active && acc.subscription.periodEnd > (pending.before ?? 0))) acc = await waitPayment(acc, pending);
     if (!acc.subscription?.active) {
       const hh = await api.getHousehold().catch(() => null);
       return hh?.invite ? drawInvite(acc, hh) : drawPlans(acc);

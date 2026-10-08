@@ -10,7 +10,7 @@ import { viewPlano as viewPlanoBilling, viewPerfil } from './account-billing.js'
 import { viewIndicar } from './referral.js';
 import { viewCobrancas, viewCenarios } from './account-insight-views.js';
 import { viewContas } from './account-openfinance-views.js';
-import { PLANS, CATEGORIES, CATEGORY_LABEL, categorize, parseExtract } from '../vendor/engine.js';
+import { PLANS, CATEGORIES, CATEGORY_LABEL, categorize, parseExtract, parsePdfExtract } from '../vendor/engine.js';
 
 export const FEATURE_LABEL = { health: 'Nota de saúde financeira', debts: 'Dívidas com plano de quitação', reminders: 'Lembretes de contas por e-mail', ledger: 'Controle de gastos', import: 'Importar extrato', alerts: 'Alertas de limite', coach_limited: 'Treinador (3 dicas)', goals: 'Metas com aportes', coach: 'Treinador completo', simulator: 'Simulador de investimento', planner: 'Planejador com IA', household: 'Conta compartilhada com uma pessoa', recurring: 'Detector de assinaturas e cobranças recorrentes', scenarios: 'Simulador "e se...?" de cenários', ebook: 'eBook de presente no seu e-mail (50+ páginas)', journeys: 'Todas as jornadas do coach', market: 'Cenário econômico (Selic, inflação, CDI)', market_pro: 'Dólar e histórico de 12 meses' };
 
@@ -202,14 +202,11 @@ export function viewLancamentos(ctx) {
 
   let importBox = null;
   if (ctx.has('import')) {
-    const input = el('input', { type: 'file', accept: '.csv,.ofx,.txt', hidden: true, 'aria-label': 'Arquivo do extrato' });
-    const btn = el('button', { class: 'btn btn-secondary btn-sm', type: 'button' }, icon('list'), 'Importar extrato (CSV ou OFX)');
+    const input = el('input', { type: 'file', accept: '.csv,.ofx,.txt,.pdf', hidden: true, 'aria-label': 'Arquivo do extrato' });
+    const btn = el('button', { class: 'btn btn-secondary btn-sm', type: 'button' }, icon('list'), 'Importar extrato (CSV, OFX ou PDF)');
     btn.addEventListener('click', () => input.click());
-    input.addEventListener('change', async () => {
-      const file = input.files?.[0];
-      if (!file) return;
-      const { entries: parsed, skipped } = parseExtract(await file.text(), file.name);
-      if (parsed.length === 0) return toast('Não consegui ler nenhum lançamento desse arquivo.');
+    const previewBox = el('div', { class: 'import-preview', hidden: true });
+    async function doImport(parsed, skipped) {
       try {
         const res = await ctx.api.addEntries(parsed.map((x) => ({ ...x, source: 'import', category: categorize(x.note, x.amountCents), walletId: walletSel?.value || null })));
         toast(`${res.added} lançamentos importados${res.duplicates ? `, ${res.duplicates} repetidos ignorados` : ''}${skipped ? `, ${skipped} linhas não reconhecidas` : ''}.`);
@@ -218,8 +215,58 @@ export function viewLancamentos(ctx) {
         toast('Não consegui importar agora.');
       }
       input.value = '';
+    }
+    // PDF: mostra o que foi lido para a pessoa conferir antes de importar (o sinal entrada/saída é deduzido do texto do extrato).
+    function showPreview(parsed, skipped) {
+      const rows = parsed.slice(0, 200).map((x) => el('li', { class: 'entry-row' }, el('span', { class: 'entry-date muted' }, fmtDay(x.date)), el('span', { class: 'entry-note' }, x.note), el('strong', { class: `entry-amount ${x.amountCents < 0 ? 'neg' : 'pos'}` }, brl(x.amountCents))));
+      const ok = el('button', { class: 'btn btn-primary btn-sm', type: 'button' }, `Importar ${parsed.length} lançamentos`);
+      const no = el('button', { class: 'btn btn-quiet btn-sm', type: 'button' }, 'Cancelar');
+      ok.addEventListener('click', async () => {
+        ok.disabled = true;
+        previewBox.hidden = true;
+        await doImport(parsed, skipped);
+      });
+      no.addEventListener('click', () => {
+        previewBox.hidden = true;
+        previewBox.replaceChildren();
+        input.value = '';
+      });
+      previewBox.replaceChildren(
+        el('p', { class: 'fine' }, `Li ${parsed.length} lançamentos no PDF${skipped ? ` (${skipped} linhas não reconhecidas)` : ''}. Confira antes de importar: entradas e saídas são deduzidas do texto do extrato.${parsed.length > 200 ? ' Mostrando os 200 primeiros.' : ''}`),
+        el('ul', { class: 'entry-list' }, ...rows),
+        el('div', { class: 'button-row' }, ok, no),
+      );
+      previewBox.hidden = false;
+    }
+    input.addEventListener('change', async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      let parsed;
+      let skipped = 0;
+      try {
+        if (/\.pdf$/i.test(file.name) || file.type === 'application/pdf') {
+          toast('Lendo o PDF no seu aparelho…');
+          const { extractPdfText } = await import('../vendor/pdfread.js');
+          const { text } = await extractPdfText(await file.arrayBuffer(), 36);
+          ({ entries: parsed, skipped } = parsePdfExtract(text));
+          if (parsed.length === 0) {
+            input.value = '';
+            return toast('Não achei lançamentos nesse PDF. Se ele for uma foto ou estiver escaneado, baixe o extrato em CSV ou OFX no app do banco.');
+          }
+          return showPreview(parsed, skipped);
+        }
+        ({ entries: parsed, skipped } = parseExtract(await file.text(), file.name));
+      } catch {
+        input.value = '';
+        return toast('Não consegui ler esse arquivo.');
+      }
+      if (parsed.length === 0) {
+        input.value = '';
+        return toast('Não consegui ler nenhum lançamento desse arquivo.');
+      }
+      await doImport(parsed, skipped);
     });
-    importBox = el('div', { class: 'import-box no-print' }, input, btn, el('span', { class: 'fine' }, 'Baixe o extrato no app ou site do banco. Repetidos são ignorados.'));
+    importBox = el('div', { class: 'import-box no-print' }, input, btn, el('span', { class: 'fine' }, 'Aceita CSV, OFX e PDF. O PDF é lido no seu aparelho: o arquivo não é enviado. Repetidos são ignorados.'), previewBox);
   }
 
   const walletName = new Map(wallets.map((x) => [x.id, x.name]));

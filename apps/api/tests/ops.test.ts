@@ -44,6 +44,22 @@ test('saúde profunda: entrega parada há mais de 15 min acende o alerta', async
   assert.equal(h.checks.fila!.ok, false);
 });
 
+test('custos e limites: CountingSender conta os e-mails do dia e a saúde acende com 80% do limite', async () => {
+  const { CountingSender } = await import('../src/email.ts');
+  const inner = new MemorySender();
+  const counting = new CountingSender(inner, db);
+  const ctx = { db, config: { ...config, emailDailyLimit: 10 }, gateway: new FakeGateway(config.webhookSecret) };
+  for (let i = 0; i < 7; i++) await counting.send({ to: `x${i}@exemplo.com`, subject: 's', text: 't', html: '<p>t</p>' });
+  assert.equal(inner.sent.length, 7, 'o e-mail sai normalmente');
+  const before = await deepHealth(ctx);
+  assert.equal(before.checks.custos?.ok, true, '7 de 10 ainda está abaixo de 80%');
+  await counting.send({ to: 'y@exemplo.com', subject: 's', text: 't', html: '<p>t</p>' });
+  const after80 = await deepHealth(ctx);
+  assert.equal(after80.checks.custos?.ok, false, '8 de 10 = 80%: acende');
+  assert.match(after80.checks.custos!.detail, /e-mails hoje 8\/10/);
+  assert.match(after80.checks.custos!.detail, /perto do limite: e-mails hoje/);
+});
+
 test('turnstile: sem token falha, token ruim falha, token bom passa, Cloudflare fora não bloqueia', async () => {
   await assert.rejects(() => verifyTurnstile(config, undefined, '1.1.1.1'), /verificação/);
   const ruim = (async () => new Response(JSON.stringify({ success: false }))) as typeof fetch;

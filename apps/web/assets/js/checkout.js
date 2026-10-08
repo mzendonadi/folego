@@ -106,6 +106,7 @@ export function renderCheckout(root, ctx) {
       needContact ? contactFields() : null,
       el('button', { class: 'btn btn-primary btn-lg btn-block', type: 'button', id: 'gen-pix' }, `Gerar Pix de ${brl(total())}`, icon('arrow-right')),
       el('p', { class: 'fine' }, addon ? 'Pagamento único por Pix, sem renovação.' : 'Você só paga porque já viu o seu diagnóstico.'),
+      el('p', { class: 'fine' }, 'Dúvida ou problema no pagamento? Escreva para ', el('a', { class: 'link', href: 'mailto:suporte@folego.online' }, 'suporte@folego.online'), '.'),
     ].filter(Boolean));
     payCard.querySelector('#gen-pix').addEventListener('click', generate);
   }

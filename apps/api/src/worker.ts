@@ -6,7 +6,7 @@ import { createPgliteDb, createPostgresDb, ensureSchema } from './db.ts';
 import type { Db } from './db.ts';
 import { AsaasGateway, FakeGateway } from './gateway.ts';
 import type { PaymentGateway } from './gateway.ts';
-import { ConsoleSender, ResendSender } from './email.ts';
+import { ConsoleSender, CountingSender, ResendSender } from './email.ts';
 import { runWorker } from './generation/worker.ts';
 import { PluggyProvider } from './openfinance.ts';
 import { workerOptions } from './generation/setup.ts';
@@ -29,7 +29,8 @@ process.on('SIGINT', stop);
 process.on('SIGTERM', stop);
 
 const gateway: PaymentGateway = config.asaas ? new AsaasGateway(config.asaas) : new FakeGateway(config.webhookSecret);
-const email = config.email ? new ResendSender(config.email) : config.env !== 'production' ? new ConsoleSender() : undefined;
+const emailRaw = config.email ? new ResendSender(config.email) : config.env !== 'production' ? new ConsoleSender() : undefined;
+const email = emailRaw ? new CountingSender(emailRaw, db) : undefined;
 
 const opts = workerOptions(config, log);
 log({ evento: 'worker_iniciado', ia: opts.generator ? config.aiModel : 'desligada (modelos determinísticos)', tetoDiarioIA: config.aiMaxCallsPerDay, email: email ? email.name : 'NÃO configurado', pagamento: gateway.name });

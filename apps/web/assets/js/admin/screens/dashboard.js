@@ -136,7 +136,7 @@ export async function dashboardScreen(ctx) {
   return el('div', { class: 'bo-stack' }, head, saudeCard(saude), top, grid(2, funnel, aband), byDay, grid(2, products, methods), subs, profile, traffic, timing, ai);
 }
 
-const SAUDE = { banco: 'Banco de dados', worker: 'Worker (entregas em segundo plano)', fila: 'Fila de entregas', webhooks: 'Eventos de pagamento', ebook: 'Envio do e-book', backup: 'Backup', disco: 'Disco do servidor' };
+const SAUDE = { banco: 'Banco de dados', worker: 'Worker (entregas em segundo plano)', fila: 'Fila de entregas', webhooks: 'Eventos de pagamento', ebook: 'Envio do e-book', backup: 'Backup', disco: 'Disco do servidor', custos: 'Custos e limites (IA e e-mail)' };
 
 /** Semáforo do sistema: o mesmo que o monitor externo confere a cada 10 minutos (e avisa por e-mail se algo falhar). */
 function saudeCard(s) {

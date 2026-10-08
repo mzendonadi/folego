@@ -6,7 +6,7 @@ import { createPgliteDb, createPostgresDb, ensureSchema } from './db.ts';
 import { ensureDefaultEbook } from './ebook.ts';
 import type { Db } from './db.ts';
 import { AsaasGateway, FakeGateway } from './gateway.ts';
-import { ConsoleSender, ResendSender } from './email.ts';
+import { ConsoleSender, CountingSender, ResendSender } from './email.ts';
 import type { PaymentGateway } from './gateway.ts';
 import { PluggyProvider } from './openfinance.ts';
 import { purgeExpired } from './services.ts';
@@ -29,7 +29,8 @@ await ensureSchema(db);
 await ensureDefaultEbook(db).catch(() => false); // primeira subida: importa o eBook que vem com o sistema // banco vazio recebe o schema; migrações pendentes entram sempre (db/migrations)
 
 const gateway: PaymentGateway = config.asaas ? new AsaasGateway(config.asaas) : new FakeGateway(config.webhookSecret);
-const email = config.email ? new ResendSender(config.email) : (config.env !== 'production' && (config.leadsEnabled || config.subscriptionsEnabled) ? new ConsoleSender() : undefined);
+const emailRaw = config.email ? new ResendSender(config.email) : (config.env !== 'production' && (config.leadsEnabled || config.subscriptionsEnabled) ? new ConsoleSender() : undefined);
+const email = emailRaw ? new CountingSender(emailRaw, db) : undefined;
 // RATE_LIMITS=relaxed só vale fora de produção (popular dados de exemplo sem esbarrar nos limites por IP).
 const openFinance = config.openFinance ? new PluggyProvider(config.openFinance) : undefined;
 const app = await buildApp({ config, db, gateway, email, ...(openFinance ? { openFinance } : {}), rateLimits: config.env !== 'production' && process.env.RATE_LIMITS === 'relaxed' ? 'relaxed' : 'strict' });

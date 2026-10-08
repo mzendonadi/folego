@@ -72,6 +72,10 @@ export interface Config {
   metaPageView: boolean;
   /** Desconto (%) na próxima fatura por indicação que assina. */
   referralDiscountPct: number;
+  /** Alertas de custo: o card "Sistema saudável" acende com 80% de qualquer limite (a IA ainda para sozinha no teto diário). */
+  aiMonthlyCallsLimit: number;
+  emailDailyLimit: number;
+  emailMonthlyLimit: number;
 }
 
 const ASAAS_PRODUCTION_URL = 'https://api.asaas.com/v3';
@@ -145,5 +149,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     metaTestEventCode: env.META_TEST_EVENT_CODE ? env.META_TEST_EVENT_CODE : null,
     metaPageView: env.META_CAPI_PAGEVIEW === '1',
     referralDiscountPct: 10,
+    aiMonthlyCallsLimit: Number(env.AI_MAX_CALLS_PER_MONTH ?? 4000),
+    emailDailyLimit: Number(env.EMAIL_DAILY_LIMIT ?? 100),
+    emailMonthlyLimit: Number(env.EMAIL_MONTHLY_LIMIT ?? 3000),
   };
 }

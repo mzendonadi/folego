@@ -17,10 +17,10 @@ const MAX_PAGES = 12;
  * @param {ArrayBuffer} bytes
  * @returns {Promise<{ text: string, pages: number, truncated: boolean }>}
  */
-export async function extractPdfText(bytes) {
+export async function extractPdfText(bytes, maxPages = MAX_PAGES) {
   const task = getDocument({ data: bytes, isEvalSupported: false, useSystemFonts: false });
   const doc = await task.promise;
-  const pages = Math.min(doc.numPages, MAX_PAGES);
+  const pages = Math.min(doc.numPages, maxPages);
   const parts = [];
   for (let i = 1; i <= pages; i++) {
     const page = await doc.getPage(i);
@@ -41,5 +41,5 @@ export async function extractPdfText(bytes) {
   }
   await task.destroy();
   const text = parts.join('\n').replace(/\n{3,}/g, '\n\n').trim();
-  return { text, pages: doc.numPages, truncated: doc.numPages > MAX_PAGES };
+  return { text, pages: doc.numPages, truncated: doc.numPages > maxPages };
 }

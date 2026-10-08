@@ -108,13 +108,12 @@ export function drawCardCheckout(plan, mount, { api, onBack = null, onDone, befo
     el('div', { class: 'field' }, el('label', { for: 'co-phone', class: 'label' }, 'Celular com DDD (opcional)'), phoneInput, el('p', { class: 'hint' }, 'Só para avisos sobre a cobrança e suporte.')),
     el('div', { class: 'check' }, terms, el('label', { for: 'co-terms' }, 'Li e aceito os ', openTerms, ' e autorizo a cobrança mensal recorrente de ', brl(plan.priceCents), ' no meu cartão até eu cancelar.')),
     go,
+    el('p', { class: 'fine' }, 'Dúvida antes de assinar? Escreva para ', el('a', { class: 'link', href: 'mailto:suporte@folego.online' }, 'suporte@folego.online'), '.'),
   );
   mount.replaceChildren(body);
   go.addEventListener('click', async () => {
     // A página segura do provedor abre numa aba nova (aberta já no clique, para o navegador não bloquear) e esta tela
     // continua aqui, aguardando; quando o pagamento passa, ela mesma avança.
-    const win = window.open('', '_blank');
-    if (win) win.opener = null;
     go.disabled = true;
     go.textContent = 'Preparando o pagamento…';
     for (const n of [nameInput, cpfInput, phoneInput, terms]) n.disabled = true;
@@ -122,7 +121,6 @@ export function drawCardCheckout(plan, mount, { api, onBack = null, onDone, befo
     try {
       order = await api.createCheckout(plan.code, { name: nameInput.value.trim(), cpf: digits(cpfInput.value), ...(digits(phoneInput.value).length >= 10 ? { phone: digits(phoneInput.value) } : {}) });
     } catch (e) {
-      win?.close();
       for (const n of [nameInput, cpfInput, phoneInput, terms]) n.disabled = false;
       go.disabled = false;
       go.textContent = 'Continuar para o pagamento seguro';
@@ -130,15 +128,22 @@ export function drawCardCheckout(plan, mount, { api, onBack = null, onDone, befo
     }
     const demo = String(order.checkoutUrl).startsWith('DEMO-CARD');
     const status = el('p', { class: 'pix-status', role: 'status' }, icon('clock'), el('span', {}, 'Aguardando a confirmação do pagamento…'));
-    const reopen = el('a', { class: 'link', href: order.checkoutUrl, target: '_blank', rel: 'noopener noreferrer' }, 'Reabrir a página de pagamento');
     if (demo) {
-      win?.close();
       const demoBtn = el('button', { class: 'btn btn-secondary btn-block', type: 'button' }, 'Simular cartão aprovado');
       demoBtn.addEventListener('click', () => api.demoConfirmPayment(order.orderId).catch(() => {}));
       go.replaceWith(el('div', { class: 'demo-notice', role: 'note' }, icon('alert'), el('p', {}, el('strong', {}, 'Ambiente de demonstração. '), 'Nenhum cartão será cobrado.')), demoBtn, status);
+    } else if (order.returnsToSite) {
+      // O Asaas devolve a pessoa ao Prumo depois de pagar: seguimos na MESMA aba. Ao voltar, a conta espera a confirmação.
+      try {
+        sessionStorage.setItem('prumo_pagando', JSON.stringify({ plan: plan.code, before }));
+      } catch {
+        /* sem armazenamento: ao voltar, a conta confere sozinha de qualquer jeito */
+      }
+      go.replaceWith(status);
+      window.location.assign(order.checkoutUrl);
+      return;
     } else {
-      if (win && !win.closed) win.location.href = order.checkoutUrl;
-      go.replaceWith(status, win && !win.closed ? el('p', { class: 'fine' }, 'Concluiu o pagamento na outra aba? Esta tela confirma sozinha. ', reopen) : el('a', { class: 'btn btn-primary btn-lg btn-block', href: order.checkoutUrl, target: '_blank', rel: 'noopener noreferrer' }, 'Abrir o pagamento seguro', icon('arrow-right')));
+      go.replaceWith(status, el('a', { class: 'btn btn-primary btn-lg btn-block', href: order.checkoutUrl, target: '_blank', rel: 'noopener noreferrer' }, 'Abrir o pagamento seguro', icon('arrow-right')), el('p', { class: 'fine' }, 'Esta tela confirma sozinha quando o pagamento passar.'));
     }
     pollId = window.setInterval(async () => {
       const now = await api.getAccount().catch(() => null);
@@ -221,7 +226,7 @@ export function viewPlano(ctx, FEATURE_LABEL) {
       el('p', { class: 'muted' }, 'Tudo o que você lançou é seu. Baixe quando quiser, em planilha (abre no Excel e no Google Planilhas) ou em PDF. Se cancelar, o download continua liberado até o fim do mês já pago.'),
       exportButtons(ctx.api),
     ),
-    card(el('h2', {}, 'Conta'), el('p', { class: 'muted' }, acc.email), el('div', { class: 'button-row no-print' }, logoutBtn, deleteBtn)),
+    card(el('h2', {}, 'Conta'), el('p', { class: 'muted' }, acc.email), el('p', { class: 'fine' }, 'Precisa de ajuda? Escreva para ', el('a', { class: 'link', href: 'mailto:suporte@folego.online' }, 'suporte@folego.online'), '.'), el('div', { class: 'button-row no-print' }, logoutBtn, deleteBtn)),
   );
 }
 
