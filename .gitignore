@@ -27,3 +27,6 @@ deploy/nginx/cloudflare-ips.conf
 # Sistema
 .DS_Store
 Thumbs.db
+
+# Ambiente local de testes (banco de arquivo e dados de exemplo)
+.local-data/

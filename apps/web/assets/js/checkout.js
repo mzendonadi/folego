@@ -30,6 +30,9 @@ export function renderCheckout(root, ctx) {
   root.replaceChildren(summaryCard, payCard);
 
   const addon = ctx.addon?.codes ?? null;
+  // Tradutor e guias são atendimentos sem Mapa: é neste pagamento que pedimos o contato. Complementos do Mapa reaproveitam o que já foi informado.
+  const standalone = Boolean(addon && (addon[0] === 'collection_translator' || addon[0].startsWith('guide_')));
+  let needContact = !addon || standalone;
 
   // Valores lidos do catálogo na hora (o dono pode mudar); o servidor sempre recalcula o preço que vale.
   const MAP_CENTS = () => CATALOG.recovery_map.cents;
@@ -100,7 +103,7 @@ export function renderCheckout(root, ctx) {
     payCard.replaceChildren(...[
       el('h2', { id: 'co-pay-title' }, 'Gerar o código Pix'),
       el('p', { class: 'muted' }, addon ? 'Você gera o código, paga no app do seu banco e o item é liberado na hora.' : 'Você gera o código, paga no app do seu banco e o Mapa é liberado na hora.'),
-      addon ? null : contactFields(),
+      needContact ? contactFields() : null,
       el('button', { class: 'btn btn-primary btn-lg btn-block', type: 'button', id: 'gen-pix' }, `Gerar Pix de ${brl(total())}`, icon('arrow-right')),
       el('p', { class: 'fine' }, addon ? 'Pagamento único por Pix, sem renovação.' : 'Você só paga porque já viu o seu diagnóstico.'),
     ].filter(Boolean));
@@ -122,7 +125,7 @@ export function renderCheckout(root, ctx) {
     btn.disabled = true;
     btn.textContent = 'Gerando o Pix…';
     try {
-      const order = await ctx.api.createOrder({ caseId: ctx.caseId, products: codes(), ...(addon || !contact.email ? {} : { contact: { email: contact.email, phone: digitsOf(contact.phone) } }) });
+      const order = await ctx.api.createOrder({ caseId: ctx.caseId, products: codes(), ...(!needContact || !contact.email ? {} : { contact: { email: contact.email, phone: digitsOf(contact.phone) } }) });
       if (disposed) return;
       orderId = order.orderId;
       // Conta de teste ligada pelo dono: o servidor já confirmou o pedido, sem Pix e sem cobrança.
@@ -135,6 +138,11 @@ export function renderCheckout(root, ctx) {
     } catch (error) {
       btn.disabled = false;
       btn.textContent = `Gerar Pix de ${brl(total())}`;
+      if (error?.code === 'contact_required') {
+        needContact = true;
+        drawIntro();
+        return toast('Informe seu e-mail e celular para gerar o Pix.');
+      }
       toast(error?.code === 'sales_paused' || error?.code === 'product_unavailable' ? error.message : 'Não deu pra gerar o Pix agora. Tente de novo.');
     }
   }

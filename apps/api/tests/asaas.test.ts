@@ -161,6 +161,17 @@ test('token do webhook errado é recusado e eventos irrelevantes são ignorados 
   assert.equal(other.json().outcome, 'ignored');
 });
 
+test('Tradutor (caso sem Mapa) no Asaas: sem contato recusa com contact_required; com contato gera o Pix', async () => {
+  const c = client();
+  const tr = await c('POST', '/api/translations', { body: { text: 'Seu nome será negativado em 5 dias caso não regularize o débito de R$ 1.200,00.', acceptTerms: true } });
+  assert.equal(tr.status, 201, JSON.stringify(tr.json));
+  const sem = await c('POST', '/api/orders', { body: { caseId: tr.json.caseId, products: ['collection_translator'] }, headers: { 'idempotency-key': 'asaas-tradutor-01' } });
+  assert.equal(sem.status, 422);
+  assert.equal(sem.json.error, 'contact_required');
+  const com = await c('POST', '/api/orders', { body: { caseId: tr.json.caseId, products: ['collection_translator'], contact: { email: 'tr@exemplo.com', phone: '11912345678', adsConsent: true } }, headers: { 'idempotency-key': 'asaas-tradutor-02' } });
+  assert.equal(com.status, 201, JSON.stringify(com.json));
+});
+
 test('erro do provedor ao criar o Pix vira 502 sem vazar detalhes', async () => {
   const c = client();
   const created = await c('POST', '/api/cases', { body: validCase() });

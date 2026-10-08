@@ -21,6 +21,9 @@ document.documentElement.classList.add('js');
 try {
   const ind = new URLSearchParams(location.search).get('ind');
   if (ind && /^[a-z0-9]{8}$/i.test(ind)) localStorage.setItem('folego_ind', ind.toLowerCase());
+  // Clique vindo de anúncio da Meta (?fbclid=...): guardamos no formato fbc, que melhora a atribuição das conversões.
+  const fbclid = new URLSearchParams(location.search).get('fbclid');
+  if (fbclid && /^[A-Za-z0-9_-]{6,200}$/.test(fbclid)) localStorage.setItem('folego_fbc', `fb.1.${Date.now()}.${fbclid}`);
 } catch {
   /* sem armazenamento: a indicação por convite de e-mail continua valendo */
 }

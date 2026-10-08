@@ -22,7 +22,8 @@ let db: Db;
 if (config.databaseUrl) {
   db = createPostgresDb(config.databaseUrl);
 } else {
-  db = await createPgliteDb();
+  // PGLITE_DIR (só fora de produção): guarda os dados do ambiente local de testes numa pasta, para não sumirem ao reiniciar.
+  db = await createPgliteDb(config.env !== 'production' ? process.env.PGLITE_DIR : undefined);
 }
 await ensureSchema(db);
 await ensureDefaultEbook(db).catch(() => false); // primeira subida: importa o eBook que vem com o sistema // banco vazio recebe o schema; migrações pendentes entram sempre (db/migrations)

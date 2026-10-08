@@ -401,8 +401,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.post('/api/account/subscription-checkout', { config: { rateLimit: { max: 15 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => {
     const selfId = await requireSelf(req);
     await household.assertNotMember(ctx, selfId);
-    const { plan, acceptTerms, referralCode, cpf, name, phone, adsConsent } = checkoutSchema.parse(req.body);
-    return reply.status(201).send(await billing.startCardCheckout(ctx, { subscriberId: selfId, plan, acceptTerms, referralCode, cpf, name, phone, adsConsent }));
+    const { plan, acceptTerms, referralCode, cpf, name, phone, adsConsent, fbc } = checkoutSchema.parse(req.body);
+    return reply.status(201).send(await billing.startCardCheckout(ctx, { subscriberId: selfId, plan, acceptTerms, referralCode, cpf, name, phone, adsConsent, fbc, ip: clientIp(req), userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined }));
   });
   app.post('/api/account/subscription-cancel', async (req) => {
     const { cancel } = cancelSchema.parse(req.body);

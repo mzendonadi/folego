@@ -56,12 +56,12 @@ export function createPostgresDb(connectionString: string): Db {
   };
 }
 
-/** Banco em memória para desenvolvimento e testes. Não use em produção. */
-export async function createPgliteDb(): Promise<Db> {
+/** Banco para desenvolvimento e testes. Sem pasta, fica em memória; com pasta (ambiente local de testes), os dados persistem. Não use em produção. */
+export async function createPgliteDb(dataDir?: string): Promise<Db> {
   const { PGlite } = await import('@electric-sql/pglite');
   const { pgcrypto } = await import('@electric-sql/pglite/contrib/pgcrypto');
   const { citext } = await import('@electric-sql/pglite/contrib/citext');
-  const lite = new PGlite({ extensions: { pgcrypto, citext } });
+  const lite = new PGlite({ ...(dataDir ? { dataDir } : {}), extensions: { pgcrypto, citext } });
   const wrap = (client: { query: PGlite['query'] }): Queryable => ({
     async query<T>(sql: string, params: unknown[] = []) {
       const res = await client.query<T>(sql, params);

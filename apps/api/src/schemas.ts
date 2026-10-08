@@ -54,6 +54,7 @@ export const orderContactSchema = z.strictObject({
   email: z.string().trim().toLowerCase().email().max(200),
   phone: z.string().trim().transform((v) => v.replace(/\D/g, '')).refine((d) => /^\d{10,11}$/.test(d), 'Celular inválido'),
   adsConsent: z.boolean().default(true), // o aceite vem dos termos aceitos no diagnóstico; o campo não aparece mais na tela
+  fbc: z.string().regex(/^fb\.1\.\d{10,14}\.[A-Za-z0-9_-]{6,200}$/).optional(),
 });
 
 export const createOrderSchema = z.object({
@@ -126,7 +127,7 @@ export const cpfSchema = z.string().trim().transform((v) => v.replace(/[.\-\s]/g
   };
   return dv(9) === Number(d[9]) && dv(10) === Number(d[10]);
 }, 'CPF inválido');
-export const checkoutSchema = z.object({ plan: z.enum(['controle', 'ousado', 'desbravador']), acceptTerms: z.literal(true), cpf: cpfSchema.optional(), adsConsent: z.boolean().optional(), name: z.string().trim().min(5).max(100).regex(/\S+\s+\S+/, 'Informe nome e sobrenome').optional(), phone: z.string().trim().transform((v) => v.replace(/\D/g, '')).refine((d) => /^\d{10,11}$/.test(d), 'Celular inválido').optional(), referralCode: z.string().trim().toLowerCase().max(40).optional() });
+export const checkoutSchema = z.object({ plan: z.enum(['controle', 'ousado', 'desbravador']), acceptTerms: z.literal(true), cpf: cpfSchema.optional(), adsConsent: z.boolean().optional(), fbc: z.string().regex(/^fb\.1\.\d{10,14}\.[A-Za-z0-9_-]{6,200}$/).optional(), name: z.string().trim().min(5).max(100).regex(/\S+\s+\S+/, 'Informe nome e sobrenome').optional(), phone: z.string().trim().transform((v) => v.replace(/\D/g, '')).refine((d) => /^\d{10,11}$/.test(d), 'Celular inválido').optional(), referralCode: z.string().trim().toLowerCase().max(40).optional() });
 export const referralLeadSchema = z.object({ friendEmail: z.string().trim().toLowerCase().email().max(200), yourName: z.string().trim().min(2).max(40) });
 export const referralInviteSchema = z.object({ email: z.string().trim().toLowerCase().email().max(200) });
 export const creditAdjustSchema = z.object({ subscriberId: z.string().uuid(), delta: z.number().int().min(-12).max(12), reason: z.string().trim().min(3).max(200) });

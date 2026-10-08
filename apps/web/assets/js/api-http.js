@@ -42,8 +42,17 @@ export async function createCase(input) {
   return request('POST', '/cases', { body: { profile: input.profile, debts, acceptTerms: true }, headers: await guard() });
 }
 
+/** fbc do clique no anúncio (se houve), para a Meta atribuir a conversão. */
+const storedFbc = () => {
+  try {
+    return localStorage.getItem('folego_fbc') || undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 export async function createOrder({ caseId, products, contact }) {
-  return request('POST', '/orders', { body: { caseId, products, ...(contact ? { contact } : {}) }, headers: { 'idempotency-key': crypto.randomUUID() } });
+  return request('POST', '/orders', { body: { caseId, products, ...(contact ? { contact: { ...contact, ...(storedFbc() ? { fbc: storedFbc() } : {}) } } : {}) }, headers: { 'idempotency-key': crypto.randomUUID() } });
 }
 
 /** Já pagou neste navegador? O cookie de sessão diz; assim o Mapa reabre sem cadastro. */
@@ -271,7 +280,7 @@ export async function createCheckout(plan, data = {}) {
   } catch {
     referralCode = undefined;
   }
-  return request('POST', '/account/subscription-checkout', { body: { plan, acceptTerms: true, ...(data.cpf ? { cpf: data.cpf } : {}), ...(data.name ? { name: data.name } : {}), ...(data.phone ? { phone: data.phone } : {}), ...(referralCode && /^[a-z0-9]{8}$/.test(referralCode) ? { referralCode } : {}) } });
+  return request('POST', '/account/subscription-checkout', { body: { plan, acceptTerms: true, ...(data.cpf ? { cpf: data.cpf } : {}), ...(data.name ? { name: data.name } : {}), ...(storedFbc() ? { fbc: storedFbc() } : {}), ...(data.phone ? { phone: data.phone } : {}), ...(referralCode && /^[a-z0-9]{8}$/.test(referralCode) ? { referralCode } : {}) } });
 }
 export async function getExport() {
   return request('GET', '/account/export');
