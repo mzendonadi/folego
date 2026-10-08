@@ -20,7 +20,7 @@ on:
         description: 'O que fazer'
         required: true
         type: choice
-        options: [status, prontidao, lancar, endurecer, pagamentos, logs_api, instalar_rotinas, backup_agora, testar_restauracao, limpar_dados_de_teste]
+        options: [status, prontidao, lancar, endurecer, instalar_certificado, pagamentos, logs_api, instalar_rotinas, backup_agora, testar_restauracao, limpar_dados_de_teste]
       confirmar:
         description: 'Só para limpar_dados_de_teste: digite LIMPAR'
         required: false
@@ -60,12 +60,15 @@ jobs:
           PORT: ${{ vars.VPS_PORT }}
           USER_: ${{ vars.VPS_USER }}
           ACAO: ${{ inputs.acao || 'backup_agora' }}
+          CERT_PEM: ${{ secrets.ORIGIN_CERT_PEM }}
+          CERT_KEY: ${{ secrets.ORIGIN_CERT_KEY }}
         run: |
           SSH="ssh -i $HOME/.ssh/deploy_key -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=20 -p $PORT $USER_@$HOST"
           case "$ACAO" in
             status)               $SSH 'bash ~/folego/deploy/ops/status.sh' ;;
             prontidao)            $SSH 'bash ~/folego/deploy/ops/prontidao.sh' ;;
             lancar)               $SSH 'bash ~/folego/deploy/ops/lancar.sh' ;;
+            instalar_certificado) printf '%s\n' "$CERT_PEM" | $SSH 'umask 077; cat > /tmp/origin.pem.new'; printf '%s\n' "$CERT_KEY" | $SSH 'umask 077; cat > /tmp/origin.key.new'; $SSH 'bash ~/folego/deploy/ops/instalar-certificado.sh' ;;
             endurecer)            $SSH 'ss -ltn | grep -q ":22022 " || { echo "sshd nao escuta na 22022: abortado para nao trancar o acesso"; exit 1; }; sudo -n bash ~/folego/deploy/ops/endurecer-servidor.sh SIM' ;;
             pagamentos)           $SSH 'bash ~/folego/deploy/ops/pagamentos.sh' ;;
             logs_api)             $SSH "cd ~/folego/deploy && sudo docker compose logs --since 6h --no-log-prefix api 2>&1 | grep -E 'subscription-checkout|asaas_erro|gateway_|\"level\":(40|50)|\"statusCode\":[45][0-9][0-9]' | sed -E 's/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/***/g' | cut -c1-600 | tail -60" ;;
