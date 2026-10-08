@@ -11,10 +11,11 @@ CREATE TEMP TABLE _antes AS
   UNION ALL SELECT 'partners', count(*) FROM app.partners
   UNION ALL SELECT 'email_campaigns', count(*) FROM app.email_campaigns;
 
--- sessões de visitantes (cascata: casos, diagnósticos, dívidas...); a sessão do dono do backoffice fica
-DELETE FROM app.sessions WHERE admin_user_id IS NULL;
+-- Primeiro os dados que dependem de sessão (casos, pedidos...); depois as sessões de visitantes. A sessão do dono do backoffice fica.
+-- (Na ordem inversa o banco recusa: os casos ainda apontam para as sessões. Corrigido em 2026-10-08, ao rodar com dados reais.)
 TRUNCATE app.subscribers, app.orders, app.cases, app.funnel_events, app.events, app.lead_contacts, app.email_sends,
          app.login_codes, app.payment_events, app.payments, app.access_tokens, app.consents CASCADE;
+DELETE FROM app.sessions WHERE admin_user_id IS NULL;
 
 TRUNCATE app.referral_optout; -- pedidos de descadastro de teste (e-mails de quem não quer convite)
 
