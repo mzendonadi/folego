@@ -16,6 +16,11 @@ DELETE FROM app.sessions WHERE admin_user_id IS NULL;
 TRUNCATE app.subscribers, app.orders, app.cases, app.funnel_events, app.events, app.lead_contacts, app.email_sends,
          app.login_codes, app.payment_events, app.payments, app.access_tokens, app.consents CASCADE;
 
+TRUNCATE app.referral_optout; -- pedidos de descadastro de teste (e-mails de quem não quer convite)
+
+-- Contas de teste (demo) ficam DESLIGADAS: ligada, a conta libera produtos sem cobrança. O dono liga de novo no backoffice só para testar.
+UPDATE app.demo_accounts SET active = false;
+
 DO $$
 DECLARE r record;
 BEGIN
