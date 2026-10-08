@@ -240,49 +240,160 @@ function pdfDate(line: string, refYear: number | null, now: Date): { iso: string
   return { iso: t.toISOString().slice(0, 10), rest };
 }
 
-export function parsePdfExtract(text: string, now: Date = new Date()): { entries: ImportedEntry[]; skipped: number } {
-  const refYear = /\b\d{2}[/.-]\d{2}[/.-](20\d{2})\b/.exec(text)?.[1];
+/** Resultado da conferência do PDF: a soma dos lançamentos lidos bate com o que o próprio extrato informa (saldos ou totais)? */
+export interface PdfExtractCheck {
+  ok: boolean;
+  source: 'saldo' | 'totais';
+  expectedCents: number;
+  parsedCents: number;
+}
+
+const PDF_AMT = String.raw`[-+]?\s?(?:R\$\s?)?\(?\d{1,3}(?:\.\d{3})*,\d{2}\)?-?`;
+// [descrição] [marcador de coluna "-" ou nº de documento] VALOR [D/C] [SALDO [D/C]]
+const PDF_TAIL = new RegExp(String.raw`^(?<desc>.*?)(?:\s+(?<doc>-|\d{3,12}))?\s+(?<a1>${PDF_AMT})(?:\s+(?<d1>DB|CR|D|C)(?![A-Za-zÀ-ú]))?(?:\s+(?<a2>${PDF_AMT})(?:\s+(?<d2>DB|CR|D|C)(?![A-Za-zÀ-ú]))?)?$`, 'i');
+const PDF_NUM = /\d{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2}/;
+const PDF_HEADER = /^data\b.*\b(descri[cç][aã]o|hist[oó]rico|lan[cç]amentos?)\b.*\b(movimento|valor|d[eé]bito|cr[eé]dito|saldo)\b/i;
+const PDF_SECTION_END = /^(saldos? por per[ií]odo|comprovantes? de pagamento|compras com cart[aã]o|cr[eé]ditos contratados|lan[cç]amentos futuros|informa[cç][oõ]es complementares)/i;
+
+const centsOf = (s: string): number => Math.round(Number(PDF_NUM.exec(s)![0].replace(/\./g, '').replace(',', '.')) * 100);
+
+/**
+ * Lê o texto de um extrato em PDF. Funciona com extratos de uma linha por lançamento ("12/03 PIX ... -45,90") e com os que
+ * quebram o lançamento em várias linhas e só mostram a data uma vez por dia (ex.: Santander: descrição numa linha, valor em
+ * outra, sinal no fim do número). Só olha a tabela de movimentação (ignora comprovantes, resumos e tabelas repetidas) e
+ * CONFERE o resultado: soma dos lançamentos x saldo anterior/final (ou totais de créditos/débitos) que o próprio extrato traz.
+ */
+export function parsePdfExtract(text: string, now: Date = new Date()): { entries: ImportedEntry[]; skipped: number; check: PdfExtractCheck | null } {
+  const all = text.split(/\r?\n/).map((l) => l.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  // Ano do extrato: o "setembro/2026" do cabeçalho vale mais; senão, o ano que mais aparece nas datas completas (uma data solta
+  // do rodapé, como a versão do modelo do extrato, não decide)
+  const header = /\b(?:janeiro|fevereiro|mar[cç]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\s*\/\s*(20\d{2})\b/i.exec(text)?.[1];
+  const years = new Map<string, number>();
+  for (const y of text.matchAll(/\b\d{2}[/.-]\d{2}[/.-](20\d{2})\b/g)) years.set(y[1]!, (years.get(y[1]!) ?? 0) + 1);
+  const common = [...years.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+  const refYear = header ?? common;
   const ref = refYear ? Number(refYear) : null;
+
+  // só a tabela de movimentação (do cabeçalho "Data Descrição ... Valor" até o fim da tabela); sem cabeçalho, o texto todo
+  const start = all.findIndex((l) => PDF_HEADER.test(l));
+  let end = all.length;
+  if (start >= 0) {
+    const e = all.findIndex((l, i) => i > start && PDF_SECTION_END.test(l));
+    if (e > start) end = e;
+  }
+  const lines = start >= 0 ? all.slice(start, end) : all;
+
+  // estilo "menos no fim" (4.734,09-): então um "-" solto antes do número é só a coluna vazia do documento, não um sinal
+  const trailingStyle = (lines.join('\n').match(/\d,\d{2}-(?!\d)/g) ?? []).length >= 2;
+
   const entries: ImportedEntry[] = [];
   let skipped = 0;
-  for (const raw of text.split(/\r?\n/)) {
-    const line = raw.replace(/\s+/g, ' ').trim();
-    if (!line) continue;
-    const dated = pdfDate(line, ref, now);
-    if (!dated) continue;
-    // segunda data no começo (data do lançamento + data de efetivação)
-    let rest = dated.rest;
-    const second = pdfDate(rest, ref, now);
-    if (second) rest = second.rest;
-    if (PDF_SKIP_DESC.test(rest) || /\bsaldo\b/i.test(rest)) continue;
-    const tokens = [...rest.matchAll(PDF_MONEY)].filter((t) => t.groups?.num);
-    if (tokens.length === 0) {
-      skipped += 1;
+  let currentDate: string | null = null;
+  let pending: string[] = [];
+  let openDated = false; // começou um lançamento (linha com data) que ainda não achou o valor
+  const balances: Array<{ cents: number; at: number }> = [];
+
+  for (const raw of lines) {
+    if (PDF_HEADER.test(raw)) {
+      if (openDated) skipped += 1;
+      openDated = false;
+      pending = []; // cabeçalho repetido a cada página: descarta o que sobrou do rodapé
       continue;
     }
-    const first = tokens[0]!;
-    const g = first.groups!;
-    const cents = Math.round(Number(g.num!.replace(/\./g, '').replace(',', '.')) * 100);
+    let body = raw;
+    const dated = pdfDate(raw, ref, now);
+    if (dated) {
+      let rest = dated.rest;
+      const second = pdfDate(rest, ref, now);
+      if (second) rest = second.rest;
+      const hasAmount = PDF_TAIL.test(` ${rest}`);
+      // data que volta no tempo no meio de um lançamento ("15/09 Uber ..." detalhe da compra) não troca o dia corrente
+      const detail = currentDate !== null && pending.length > 0 && !hasAmount && dated.iso < currentDate;
+      if (!detail) {
+        if (openDated) {
+          skipped += 1; // o lançamento anterior nunca achou o valor
+          pending = [];
+        }
+        openDated = false;
+        currentDate = dated.iso;
+      }
+      body = rest;
+    }
+    if (!body) continue;
+    const m = PDF_TAIL.exec(` ${body}`);
+    if (!m) {
+      if (currentDate) {
+        pending.push(body);
+        if (pending.length > 3) pending.shift();
+        if (dated) openDated = true;
+      }
+      continue;
+    }
+    openDated = false;
+    const g = m.groups!;
+    const descHere = g.desc!.trim();
+    const label = descHere || pending.join(' ');
+    const a1 = g.a1!.trim();
+    const dc = (g.d1 ?? '').toUpperCase();
+    const trailMinus = /-\s*$/.test(a1);
+    const leadMinus = /^-/.test(a1);
+    const leadPlus = /^\+/.test(a1);
+    const explicitNeg = trailMinus || leadMinus || /^\(.*\)$/.test(a1.replace(/-$/, '')) || dc === 'D' || dc === 'DB' || (g.doc === '-' && !trailingStyle);
+    const explicitPos = leadPlus || dc === 'C' || dc === 'CR';
+    const cents = centsOf(a1);
+
+    // linha de saldo = a descrição COMEÇA com "saldo" ("SALDO EM 31/08", "Saldo anterior"); "JUROS SALDO UTILIZ" é um lançamento
+    if (/^(?:\(=\)\s*)?saldo\b/i.test(label)) {
+      balances.push({ cents: explicitNeg ? -cents : cents, at: entries.length }); // saldo anterior/final: serve para conferir, não é lançamento
+      pending = [];
+      continue;
+    }
+    if (PDF_SKIP_DESC.test(label) || !currentDate) {
+      pending = [];
+      continue;
+    }
     if (!Number.isFinite(cents) || cents === 0 || cents > 100_000_000_00) {
       skipped += 1;
+      pending = [];
       continue;
     }
-    const dc = (g.dc ?? '').toUpperCase();
-    let note = rest;
-    for (const t of tokens) note = note.replace(t[0], ' ');
+    let note = (descHere ? [...pending, descHere] : pending).join(' ');
     note = note
       .replace(/\d{3}\.\d{3}\.\d{3}-\d{2}|\*{3}\.\d{3}\.\d{3}-\*{2}|\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/g, ' ')
       .replace(/\d{6,}/g, ' ')
       .replace(/\s+/g, ' ')
       .replace(/^[-–:\s]+|[-–:\s]+$/g, '')
       .trim();
-    let negative: boolean;
-    if (g.s1 === '-' || g.s2 === '-' || g.par || g.trail === '-' || dc === 'D' || dc === 'DB') negative = true;
-    else if (g.s1 === '+' || g.s2 === '+' || dc === 'C' || dc === 'CR') negative = false;
-    else negative = !PDF_INCOME_WORDS.test(note);
-    entries.push({ date: dated.iso, amountCents: negative ? -cents : cents, note: (note || 'Lançamento').slice(0, 120) });
+    const negative = trailingStyle ? explicitNeg : explicitNeg || (!explicitPos && !PDF_INCOME_WORDS.test(note));
+    entries.push({ date: currentDate, amountCents: negative ? -cents : cents, note: (note || 'Lançamento').slice(0, 120) });
+    pending = [];
   }
-  return { entries, skipped };
+
+  if (openDated) skipped += 1;
+  // conferência com o que o extrato informa
+  const parsedCents = entries.reduce((s, e) => s + e.amountCents, 0);
+  let check: PdfExtractCheck | null = null;
+  const first = balances[0];
+  const last = balances[balances.length - 1];
+  if (entries.length > 0 && balances.length >= 2 && first && last && first.at === 0 && last.at === entries.length) {
+    const expectedCents = last.cents - first.cents;
+    check = { ok: expectedCents === parsedCents, source: 'saldo', expectedCents, parsedCents };
+  }
+  if (!check?.ok && entries.length > 0) {
+    const total = (re: RegExp) => {
+      const hit = all.map((l) => re.exec(l)).find(Boolean);
+      return hit ? centsOf(hit[1]!) : null;
+    };
+    const cred = total(/total de cr[eé]ditos\s+(\S+)$/i);
+    const deb = total(/total de d[eé]bitos\s+(\S+)$/i);
+    if (cred !== null && deb !== null) {
+      const sumPos = entries.filter((e) => e.amountCents > 0).reduce((s, e) => s + e.amountCents, 0);
+      const sumNeg = -entries.filter((e) => e.amountCents < 0).reduce((s, e) => s + e.amountCents, 0);
+      const ok = sumPos === cred && sumNeg === deb;
+      if (ok || !check) check = { ok, source: 'totais', expectedCents: cred - deb, parsedCents };
+    }
+  }
+  return { entries, skipped, check };
 }
 
 export function parseExtract(text: string, filename = ''): { entries: ImportedEntry[]; skipped: number } {

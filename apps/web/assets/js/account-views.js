@@ -206,25 +206,58 @@ export function viewLancamentos(ctx) {
     const btn = el('button', { class: 'btn btn-secondary btn-sm', type: 'button' }, icon('list'), 'Importar extrato (CSV, OFX ou PDF)');
     btn.addEventListener('click', () => input.click());
     const previewBox = el('div', { class: 'import-preview', hidden: true });
+    // Mês com mais lançamentos importados: depois de importar, a lista passa a mostrá-lo. (Um extrato de setembro lido em outubro
+    // ficava gravado, mas a tela continuava em outubro e parecia que nada tinha entrado.)
+    const dominantMonth = (list) => {
+      const n = new Map();
+      for (const x of list) n.set(x.date.slice(0, 7), (n.get(x.date.slice(0, 7)) ?? 0) + 1);
+      return [...n.entries()].sort((p, q) => q[1] - p[1])[0]?.[0] ?? null;
+    };
     async function doImport(parsed, skipped) {
       try {
-        const res = await ctx.api.addEntries(parsed.map((x) => ({ ...x, source: 'import', category: categorize(x.note, x.amountCents), walletId: walletSel?.value || null })));
-        toast(`${res.added} lançamentos importados${res.duplicates ? `, ${res.duplicates} repetidos ignorados` : ''}${skipped ? `, ${skipped} linhas não reconhecidas` : ''}.`);
+        let added = 0;
+        let duplicates = 0;
+        for (let i = 0; i < parsed.length; i += 400) {
+          const res = await ctx.api.addEntries(parsed.slice(i, i + 400).map((x) => ({ ...x, source: 'import', category: categorize(x.note, x.amountCents), walletId: walletSel?.value || null })));
+          added += res.added;
+          duplicates += res.duplicates ?? 0;
+        }
+        const month = dominantMonth(parsed);
+        if (added > 0 && month) ctx.month = month;
+        toast(`${added} lançamentos importados${added > 0 && month ? ` em ${monthLabel(month)}` : ''}${duplicates ? `, ${duplicates} repetidos ignorados` : ''}${skipped ? `, ${skipped} linhas não reconhecidas` : ''}.`);
         ctx.refresh();
       } catch {
         toast('Não consegui importar agora.');
       }
       input.value = '';
     }
-    // PDF: mostra o que foi lido para a pessoa conferir antes de importar (o sinal entrada/saída é deduzido do texto do extrato).
-    function showPreview(parsed, skipped) {
-      const rows = parsed.slice(0, 200).map((x) => el('li', { class: 'entry-row' }, el('span', { class: 'entry-date muted' }, fmtDay(x.date)), el('span', { class: 'entry-note' }, x.note), el('strong', { class: `entry-amount ${x.amountCents < 0 ? 'neg' : 'pos'}` }, brl(x.amountCents))));
+    // PDF: mostra o que foi lido, diz se a soma bate com o extrato e deixa desmarcar linhas antes de importar.
+    function showPreview(parsed, skipped, check) {
+      const chosen = new Set(parsed.map((_, i) => i));
       const ok = el('button', { class: 'btn btn-primary btn-sm', type: 'button' }, `Importar ${parsed.length} lançamentos`);
+      const refreshLabel = () => {
+        ok.textContent = `Importar ${chosen.size} lançamentos`;
+        ok.disabled = chosen.size === 0;
+      };
+      const rows = parsed.map((x, i) => {
+        const box = el('input', { type: 'checkbox', checked: true, 'aria-label': `Importar: ${x.note}` });
+        box.addEventListener('change', () => {
+          if (box.checked) chosen.add(i);
+          else chosen.delete(i);
+          refreshLabel();
+        });
+        return el('li', { class: 'entry-row' }, box, el('span', { class: 'entry-date muted' }, fmtDay(x.date)), el('span', { class: 'entry-note' }, x.note), el('strong', { class: `entry-amount ${x.amountCents < 0 ? 'neg' : 'pos'}` }, brl(x.amountCents)));
+      });
+      const verdict = check
+        ? check.ok
+          ? el('p', { class: 'note' }, icon('check'), el('span', {}, `Conferido com o extrato: a soma dos lançamentos fecha com ${check.source === 'saldo' ? 'o saldo anterior e o saldo final' : 'os totais de créditos e débitos'} (${brl(check.parsedCents)}).`))
+          : el('p', { class: 'error' }, icon('alert'), el('span', {}, `Atenção: a soma dos lançamentos lidos (${brl(check.parsedCents)}) não bate com o que o extrato informa (${brl(check.expectedCents)}). Pode ter ficado linha de fora ou sido lida errada: confira antes de importar.`))
+        : el('p', { class: 'fine' }, 'O PDF não traz saldos nem totais para conferir a soma. Confira as linhas antes de importar.');
       const no = el('button', { class: 'btn btn-quiet btn-sm', type: 'button' }, 'Cancelar');
       ok.addEventListener('click', async () => {
         ok.disabled = true;
         previewBox.hidden = true;
-        await doImport(parsed, skipped);
+        await doImport(parsed.filter((_, i) => chosen.has(i)), skipped);
       });
       no.addEventListener('click', () => {
         previewBox.hidden = true;
@@ -232,8 +265,9 @@ export function viewLancamentos(ctx) {
         input.value = '';
       });
       previewBox.replaceChildren(
-        el('p', { class: 'fine' }, `Li ${parsed.length} lançamentos no PDF${skipped ? ` (${skipped} linhas não reconhecidas)` : ''}. Confira antes de importar: entradas e saídas são deduzidas do texto do extrato.${parsed.length > 200 ? ' Mostrando os 200 primeiros.' : ''}`),
-        el('ul', { class: 'entry-list' }, ...rows),
+        el('p', { class: 'fine' }, `Li ${parsed.length} lançamentos no PDF${skipped ? ` (${skipped} linhas não reconhecidas)` : ''}. Desmarque o que não quiser importar.`),
+        verdict,
+        el('ul', { class: 'entry-list', style: 'max-height: 360px; overflow: auto' }, ...rows),
         el('div', { class: 'button-row' }, ok, no),
       );
       previewBox.hidden = false;
@@ -243,17 +277,18 @@ export function viewLancamentos(ctx) {
       if (!file) return;
       let parsed;
       let skipped = 0;
+      let check = null;
       try {
         if (/\.pdf$/i.test(file.name) || file.type === 'application/pdf') {
           toast('Lendo o PDF no seu aparelho…');
           const { extractPdfText } = await import('../vendor/pdfread.js');
           const { text } = await extractPdfText(await file.arrayBuffer(), 36);
-          ({ entries: parsed, skipped } = parsePdfExtract(text));
+          ({ entries: parsed, skipped, check } = parsePdfExtract(text));
           if (parsed.length === 0) {
             input.value = '';
             return toast('Não achei lançamentos nesse PDF. Se ele for uma foto ou estiver escaneado, baixe o extrato em CSV ou OFX no app do banco.');
           }
-          return showPreview(parsed, skipped);
+          return showPreview(parsed, skipped, check);
         }
         ({ entries: parsed, skipped } = parseExtract(await file.text(), file.name));
       } catch {

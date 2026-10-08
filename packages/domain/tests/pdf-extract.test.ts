@@ -52,6 +52,83 @@ test('PDF: data impossível e dezembro lido em janeiro (ano anterior)', () => {
 });
 
 test('PDF vazio ou sem lançamentos devolve lista vazia', () => {
-  assert.deepEqual(parsePdfExtract('', NOW), { entries: [], skipped: 0 });
+  assert.deepEqual(parsePdfExtract('', NOW), { entries: [], skipped: 0, check: null });
   assert.equal(parsePdfExtract('Apenas um texto qualquer\nsem datas', NOW).entries.length, 0);
+});
+
+const HOJE = new Date('2026-10-08T12:00:00Z'); // depois do extrato de setembro/2026
+// Extrato em várias linhas por lançamento (data só uma vez por dia, valor em outra linha, sinal no fim): o formato que
+// um leitor de "uma linha por lançamento" perde quase inteiro. Valores e nomes inventados.
+const EXTRATO_VARIAS_LINHAS = [
+  'EXTRATO CONSOLIDADO',
+  'setembro/2026',
+  'Extrato_Modelo - 27/11/2024',
+  'Resumo - setembro/2026',
+  '(=) Saldo de Conta Corrente em 31/08 500,00-',
+  '(+) Total de Créditos 1.800,00',
+  '(-) Total de Débitos 1.139,70',
+  'Conta Corrente',
+  'Movimentação',
+  'Data Descrição Nº Documento Movimento (R$) Saldo (R$)',
+  'SALDO EM 31/08 500,00-',
+  '01/09 TARIFA PACOTE SERVICOS',
+  'PERIODO: 01/08 A 31/08/26',
+  '- 38,70-',
+  'JUROS SALDO UTILIZ ATE LIMITE',
+  'PERIODO: 01/08 A 31/08/26',
+  '- 100,00- 638,70-',
+  '02/09 PIX RECEBIDO',
+  'FULANO DE TAL',
+  '- 1.500,00',
+  'PIX ENVIADO',
+  'CICLANO SOUZA',
+  '- 200,00- 661,30',
+  '03/09 PIX ENVIADO Beltrano Silva - 60,00- 601,30',
+  'COMPRA CARTAO DEB MC',
+  '03/09 Loja Exemplo',
+  '520861 41,00-',
+  'PIX RECEBIDO',
+  'EMPRESA EXEMPLO LTDA',
+  '442932 300,00 860,30',
+  'EXTRATO CONSOLIDADO',
+  'setembro/2026',
+  'Pagina: 3/5',
+  'Data Descrição Nº Documento Movimento (R$) Saldo (R$)',
+  '04/09 PAGAMENTO DE BOLETO',
+  'CONCESSIONARIA EXEMPLO',
+  '- 700,00- 160,30',
+  'SALDO EM 30/09 160,30',
+  'Saldos por Período',
+  'Comprovantes de Pagamento',
+  '09/09 INTERNET BANKING PIX CICLANO SOUZA 200,00',
+];
+
+test('PDF em várias linhas por lançamento (estilo Santander): lê tudo, usa o ano do cabeçalho e ignora tabelas repetidas', () => {
+  const { entries, skipped } = parsePdfExtract(EXTRATO_VARIAS_LINHAS.join('\n'), HOJE);
+  assert.equal(skipped, 0);
+  assert.deepEqual(entries.map((e) => [e.date, e.amountCents]), [
+    ['2026-09-01', -3870], ['2026-09-01', -10000], ['2026-09-02', 150000], ['2026-09-02', -20000],
+    ['2026-09-03', -6000], ['2026-09-03', -4100], ['2026-09-03', 30000], ['2026-09-04', -70000],
+  ]);
+  assert.match(entries[1]!.note, /^JUROS SALDO UTILIZ/, '"saldo" no meio da descrição não faz da linha um saldo');
+  assert.ok(entries.every((e) => !/PERIODO: 01\/08 A 31\/08\/26.*PERIODO/.test(e.note)));
+});
+
+test('PDF: a conferência com o saldo e com os totais do extrato fecha ao centavo', () => {
+  const { check } = parsePdfExtract(EXTRATO_VARIAS_LINHAS.join('\n'), HOJE);
+  assert.deepEqual(check, { ok: true, source: 'saldo', expectedCents: 66030, parsedCents: 66030 });
+});
+
+test('PDF: se uma linha ficar de fora, a conferência acusa a diferença (é o aviso de "não confie nesta leitura")', () => {
+  const semUma = EXTRATO_VARIAS_LINHAS.filter((l) => l !== '- 100,00- 638,70-');
+  const { entries, check } = parsePdfExtract(semUma.join('\n'), HOJE);
+  assert.ok(entries.length < 8);
+  assert.equal(check?.ok, false);
+  assert.equal(check!.expectedCents - check!.parsedCents, -10000, 'a diferença é exatamente o valor que faltou');
+});
+
+test('PDF: descrição que começa com data mas nunca ganha valor conta como linha não reconhecida', () => {
+  const { entries, skipped } = parsePdfExtract(['Data Descrição Valor', '10/03/2026 COMPRA SEM VALOR', 'rodapé qualquer', '11/03/2026 PIX ENVIADO -5,00'].join('\n'), NOW);
+  assert.equal(entries.length, 1);
+  assert.equal(skipped, 1);
 });
