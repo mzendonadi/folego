@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Endurecer o servidor do Fôlego — passo a passo</title>
+<style>
+  :root { --bg:#f6f4ef; --card:#fff; --ink:#1c2b24; --muted:#5a6a62; --brand:#1f6f54; --warn:#9a5b00; --warnbg:#fff3dc; --code:#0f1f19; --line:#dcd7cc; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#111815; --card:#18221d; --ink:#e8efe9; --muted:#9fb0a6; --brand:#5fc79c; --warn:#f2b24a; --warnbg:#2b2312; --code:#0a120e; --line:#2a3a31; } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  main { max-width:760px; margin:0 auto; padding:24px 16px 64px; }
+  h1 { font-size:1.7rem; line-height:1.2; margin:8px 0 6px; }
+  h2 { font-size:1.2rem; margin:0 0 8px; }
+  .lede { color:var(--muted); margin:0 0 20px; }
+  .step { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px; margin:16px 0; }
+  .step h2 span { display:inline-grid; place-items:center; width:28px; height:28px; border-radius:50%; background:var(--brand); color:#fff; font-size:.95rem; margin-right:8px; }
+  pre { background:var(--code); color:#d8f3e6; padding:12px 14px; border-radius:10px; overflow-x:auto; font:14px/1.5 ui-monospace,Consolas,monospace; margin:10px 0; }
+  .warn { background:var(--warnbg); color:var(--warn); border-radius:10px; padding:10px 12px; margin:12px 0; font-weight:600; }
+  svg { width:100%; height:auto; display:block; margin:12px 0; border-radius:10px; }
+  ul { padding-left:20px; } li { margin:4px 0; }
+  .fine { color:var(--muted); font-size:.9rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Endurecer o servidor do Fôlego</h1>
+  <p class="lede">Leva cerca de 10 minutos e não derruba o site. Você só cola um comando no <strong>console do painel da hospedagem</strong> (a janela preta do servidor), porque ele precisa de permissão de administrador (root), que o deploy automático não tem de propósito.</p>
+
+  <div class="step">
+    <h2>O que isso faz</h2>
+    <ul>
+      <li><strong>Atualizações de segurança</strong> automáticas do sistema.</li>
+      <li><strong>Fail2ban</strong>: bloqueia por 1 hora quem erra a entrada do servidor 4 vezes.</li>
+      <li><strong>Entrada só por chave</strong> (sem senha, sem usuário root) — só se o usuário de deploy já tiver chave, senão mantém a senha para você não ficar de fora.</li>
+      <li><strong>Firewall</strong>: só ficam abertas as portas 22022 (acesso), 80 e 443 (site).</li>
+    </ul>
+    <p class="fine">Não mexe no banco, nos containers nem nos dados. O site continua no ar o tempo todo.</p>
+  </div>
+
+  <div class="step">
+    <h2><span>1</span>Abra o console do servidor</h2>
+    <p>No painel da hospedagem (onde você contratou o VPS), entre no seu servidor e procure por <strong>Console</strong>, <strong>Acesso remoto</strong> ou <strong>Terminal</strong>. Os nomes variam, mas é um botão que abre uma tela preta no navegador.</p>
+    <svg viewBox="0 0 640 220" role="img" aria-label="Ilustração: painel da hospedagem com o botão Console">
+      <rect width="640" height="220" rx="12" fill="#eaf1ed"/>
+      <rect x="0" y="0" width="640" height="38" rx="12" fill="#1f6f54"/>
+      <text x="16" y="25" fill="#fff" font-size="15" font-family="sans-serif">Painel da hospedagem  ›  Meu VPS</text>
+      <rect x="24" y="62" width="592" height="64" rx="10" fill="#fff" stroke="#c9d6cf"/>
+      <text x="44" y="90" fill="#1c2b24" font-size="15" font-family="sans-serif" font-weight="700">Servidor do Fôlego</text>
+      <text x="44" y="110" fill="#34443c" font-size="13" font-family="sans-serif">Status: ligado</text>
+      <rect x="430" y="76" width="168" height="38" rx="8" fill="#1f6f54"/>
+      <text x="514" y="100" fill="#fff" font-size="14" font-family="sans-serif" text-anchor="middle">Abrir console</text>
+      <path d="M470 150 L512 124" stroke="#7a4700" stroke-width="3" fill="none" marker-end="url(#a)"/>
+      <defs><marker id="a" markerWidth="10" markerHeight="10" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#7a4700"/></marker></defs>
+      <text x="400" y="176" fill="#7a4700" font-size="14" font-family="sans-serif" font-weight="700">É aqui (o nome pode variar)</text>
+      <text x="24" y="206" fill="#34443c" font-size="12" font-family="sans-serif">Ilustração do que procurar. A tela real do seu painel pode ser diferente.</text>
+    </svg>
+  </div>
+
+  <div class="step">
+    <h2><span>2</span>Entre como administrador (root)</h2>
+    <p>O console pede o usuário e a senha. Use <strong>root</strong> e a senha do servidor que o painel mostra (ou que você definiu ao contratar). Se não souber, o painel tem a opção <strong>Redefinir senha do root</strong>.</p>
+    <svg viewBox="0 0 640 170" role="img" aria-label="Ilustração: tela de login do console">
+      <rect width="640" height="170" rx="12" fill="#0f1f19"/>
+      <text x="20" y="40" fill="#8fd6b3" font-size="15" font-family="monospace">vps-xxxx login: root</text>
+      <text x="20" y="70" fill="#8fd6b3" font-size="15" font-family="monospace">Password: ••••••••  (não aparece enquanto digita)</text>
+      <text x="20" y="110" fill="#d8f3e6" font-size="15" font-family="monospace">root@vps-xxxx:~#</text>
+      <text x="20" y="152" fill="#9fb0a6" font-size="12" font-family="sans-serif">Quando aparecer "root@..." com #, você está pronto.</text>
+    </svg>
+  </div>
+
+  <div class="step">
+    <h2><span>3</span>Cole o comando e aperte Enter</h2>
+    <pre>bash /home/codhubs/folego/deploy/ops/endurecer-servidor.sh SIM</pre>
+    <p>Dica: no console do navegador, colar costuma ser <strong>Ctrl+Shift+V</strong> (ou o botão "Colar" do painel). Aguarde de 1 a 3 minutos. Vão passar muitas linhas; é normal.</p>
+    <svg viewBox="0 0 640 190" role="img" aria-label="Ilustração: comando rodando no console">
+      <rect width="640" height="190" rx="12" fill="#0f1f19"/>
+      <text x="20" y="34" fill="#d8f3e6" font-size="14" font-family="monospace">root@vps-xxxx:~# bash .../endurecer-servidor.sh SIM</text>
+      <text x="20" y="62" fill="#9fb0a6" font-size="13" font-family="monospace">Reading package lists... Done</text>
+      <text x="20" y="84" fill="#9fb0a6" font-size="13" font-family="monospace">Setting up fail2ban ...</text>
+      <text x="20" y="106" fill="#9fb0a6" font-size="13" font-family="monospace">Firewall is active and enabled on system startup</text>
+      <text x="20" y="140" fill="#8fd6b3" font-size="14" font-family="monospace" font-weight="700">Pronto. Confira o acesso SSH em OUTRA janela...</text>
+      <text x="20" y="172" fill="#9fb0a6" font-size="12" font-family="sans-serif">Essa última frase é o sinal de que terminou.</text>
+    </svg>
+    <div class="warn">Se aparecer "AVISO: ... vazio; SSH por senha foi MANTIDO": está tudo bem, é uma proteção para você não ficar trancado para fora. Me avise e eu configuro a chave.</div>
+  </div>
+
+  <div class="step">
+    <h2><span>4</span>Confirme que continua tudo funcionando</h2>
+    <ul>
+      <li>Abra <strong>folego.online</strong> no navegador: o site deve carregar normalmente.</li>
+      <li>Me avise que terminou: eu rodo a verificação pelo GitHub (ação <em>status</em>) e confirmo que o acesso de deploy continua funcionando.</li>
+    </ul>
+  </div>
+
+  <div class="step">
+    <h2>Se algo der errado (voltar atrás)</h2>
+    <p>O console do painel nunca depende do firewall nem do SSH, então ele é a sua porta de segurança. No console, como root, cole:</p>
+    <pre>ufw disable
+rm -f /etc/ssh/sshd_config.d/99-folego.conf
+systemctl reload ssh || systemctl reload sshd</pre>
+    <p class="fine">Isso desliga o firewall e devolve a configuração de entrada ao que era antes. Os dados e o site não são afetados.</p>
+  </div>
+</main>
+</body>
+</html>
