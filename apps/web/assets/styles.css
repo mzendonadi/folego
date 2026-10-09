@@ -743,6 +743,17 @@ ul, ol { margin: 0; padding: 0; }
   .entry-row .entry-note { grid-area: note; } .entry-row .entry-amount { grid-area: amount; }
   .entry-row .entry-date { grid-area: date; } .entry-row .btn { grid-area: del; justify-self: end; } .entry-row select { grid-area: cat; }
 }
+/* Desktop: colunas de largura fixa. Com colunas "auto" cada linha calculava as suas e a categoria, o valor e a lixeira
+   ficavam em posições diferentes de uma linha para outra. Só vale acima de 620 px: o mobile não muda. */
+@media (min-width: 621px) {
+  .entry-row { grid-template-columns: 84px minmax(0, 1fr) 190px 124px 36px; column-gap: var(--s4); }
+  .entry-row .entry-note { min-width: 0; }
+  .entry-row select { width: 100%; min-width: 0; }
+  .entry-row .entry-amount { white-space: nowrap; }
+  .entry-row .btn { justify-self: end; }
+  /* conferência do PDF: a primeira coluna é a caixa de seleção */
+  .entry-row:has(> input[type="checkbox"]) { grid-template-columns: 24px 84px minmax(0, 1fr) 124px; }
+}
 #account-root { grid-template-columns: minmax(0, 1fr); } /* a barra de abas rola por dentro; sem isso o grid cresce até o tamanho das abas e corta a página no celular */
 #account-root > * { min-width: 0; }
 .acc-stack { grid-template-columns: minmax(0, 1fr); }
