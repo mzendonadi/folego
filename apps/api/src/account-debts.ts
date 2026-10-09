@@ -7,6 +7,7 @@ import { num, todaySaoPaulo } from './services.ts';
 import { buildPayoffPlan, formatBrl, monthOf, CATEGORIES, CATEGORY_LABEL } from './engine.ts';
 import type { AccountDebt } from './engine.ts';
 import { requireFeature } from './subscriptions.ts';
+import { isAllowedCategory } from './categories.ts';
 import { unsubscribeUrl } from './admin/campaigns.ts';
 
 const iso = (d: unknown): string => new Date(d as string).toISOString().slice(0, 10);
@@ -132,7 +133,7 @@ export async function monthLimits(ctx: Ctx, subscriberId: string, month: string)
 
 export async function setMonthLimit(ctx: Ctx, subscriberId: string, month: string, category: string, limitCents: number | null): Promise<void> {
   await requireFeature(ctx, subscriberId, 'alerts');
-  if (!(CATEGORIES as readonly string[]).includes(category) || category === 'renda') throw new AppError(422, 'invalid_category', 'Categoria inválida');
+  if (category === 'renda' || !(await isAllowedCategory(ctx.db, subscriberId, category))) throw new AppError(422, 'invalid_category', 'Categoria inválida');
   if (limitCents === null) await ctx.db.query(`DELETE FROM app.budget_months WHERE subscriber_id = $1 AND month = $2 AND category = $3`, [subscriberId, month, category]);
   else await ctx.db.query(`INSERT INTO app.budget_months(subscriber_id, month, category, limit_cents) VALUES ($1,$2,$3,$4) ON CONFLICT (subscriber_id, month, category) DO UPDATE SET limit_cents = EXCLUDED.limit_cents`, [subscriberId, month, category, limitCents]);
 }

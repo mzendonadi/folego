@@ -109,8 +109,15 @@ export async function deleteEntry(id) {
 export async function setEntryCategory(id, category) {
   return request('POST', `/account/entries/${id}/category`, { body: { category } });
 }
+/** Categorias próprias (além das 10 do sistema): criar e apagar (os lançamentos dela vão para "Outros"). */
+export async function createCategory(name) {
+  return request('POST', '/account/categories', { body: { name } });
+}
+export async function deleteCategory(name) {
+  return request('POST', '/account/categories/remove', { body: { name } });
+}
 export async function setLimit(category, limitCents) {
-  return request('POST', `/account/limits/${category}`, { body: { limitCents } });
+  return request('POST', `/account/limits/${encodeURIComponent(category)}`, { body: { limitCents } });
 }
 export async function saveGoal(goal) {
   return request('POST', '/account/goals', { body: goal });
@@ -232,7 +239,7 @@ export async function payDebt(id, body) {
   return request('POST', `/account/debts/${id}/payments`, { body });
 }
 export async function setMonthLimit(month, category, limitCents) {
-  return request('POST', `/account/budget/${month}/limits/${category}`, { body: { limitCents } });
+  return request('POST', `/account/budget/${month}/limits/${encodeURIComponent(category)}`, { body: { limitCents } });
 }
 export async function copyBudgetMonth(month) {
   return request('POST', `/account/budget/${month}/copy`);

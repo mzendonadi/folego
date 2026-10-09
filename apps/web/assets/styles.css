@@ -743,6 +743,20 @@ ul, ol { margin: 0; padding: 0; }
   .entry-row .entry-note { grid-area: note; } .entry-row .entry-amount { grid-area: amount; }
   .entry-row .entry-date { grid-area: date; } .entry-row .btn { grid-area: del; justify-self: end; } .entry-row select { grid-area: cat; }
 }
+/* Categorias próprias: o campo de nome entra no lugar do seletor e a lista de categorias fica recolhida abaixo do formulário. */
+.cat-new { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.cat-new .input { flex: 1 1 auto; min-width: 0; }
+.cat-new .btn { flex: none; }
+@media (max-width: 620px) { .entry-row .cat-new { grid-area: cat; } }
+.cat-manage { margin-top: var(--s4); border-top: 1px solid var(--line); padding-top: var(--s3); }
+.cat-manage summary { cursor: pointer; font-weight: 700; }
+.cat-manage .fine { margin: var(--s2) 0; }
+.cat-chips { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0; margin: var(--s3) 0; }
+.cat-chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 6px 4px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface, #fff); }
+.cat-chip-x { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--muted); cursor: pointer; }
+.cat-chip-x:hover { background: var(--line); color: var(--ink); }
+.cat-add { display: flex; gap: 8px; align-items: center; max-width: 420px; }
+.cat-add .input { flex: 1 1 auto; min-width: 0; }
 /* Desktop: colunas de largura fixa. Com colunas "auto" cada linha calculava as suas e a categoria, o valor e a lixeira
    ficavam em posições diferentes de uma linha para outra. Só vale acima de 620 px: o mobile não muda. */
 @media (min-width: 621px) {

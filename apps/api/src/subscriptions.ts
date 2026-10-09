@@ -12,6 +12,7 @@ import { audit, num, orderView, todaySaoPaulo } from './services.ts';
 import type { Queryable } from './db.ts';
 import { ownedWalletId, walletOverdraftAlerts } from './account-extras.ts';
 import { monthLimits } from './account-debts.ts';
+import { createCustomCategory, customCategories, deleteCustomCategory, isAllowedCategory } from './categories.ts';
 import { markMissionDone } from './coach-program.ts';
 import { billingView, CARD_GRACE_DAYS } from './billing.ts';
 import { isDemoSubscriber } from './demo.ts';
@@ -232,7 +233,7 @@ export async function addEntries(ctx: Ctx, subscriberId: string, entries: NewEnt
   let duplicates = 0;
   await ctx.db.tx(async (q) => {
     for (const e of entries) {
-      const category = e.category && (CATEGORIES as readonly string[]).includes(e.category) ? e.category : categorize(e.note, e.amountCents);
+      const category = e.category && (await isAllowedCategory(q, subscriberId, e.category)) ? e.category : categorize(e.note, e.amountCents);
       if (e.source === 'import') {
         const dup = await q.query(`SELECT 1 FROM app.ledger_entries WHERE subscriber_id = $1 AND occurred_on = $2 AND amount_cents = $3 AND note = $4 LIMIT 1`, [subscriberId, e.date, e.amountCents, e.note]);
         if (dup.rows.length > 0) {
@@ -256,7 +257,7 @@ export async function deleteEntry(ctx: Ctx, subscriberId: string, id: string): P
 
 export async function setEntryCategory(ctx: Ctx, subscriberId: string, id: string, category: string): Promise<void> {
   await requireFeature(ctx, subscriberId, 'ledger');
-  if (!(CATEGORIES as readonly string[]).includes(category)) throw new AppError(422, 'invalid_category', 'Categoria inválida');
+  if (!(await isAllowedCategory(ctx.db, subscriberId, category))) throw new AppError(422, 'invalid_category', 'Categoria inválida');
   const r = await ctx.db.query(`UPDATE app.ledger_entries SET category = $3 WHERE id = $1 AND subscriber_id = $2`, [id, subscriberId, category]);
   if (r.rowCount === 0) throw notFound();
 }
@@ -351,14 +352,31 @@ export async function monthView(ctx: Ctx, subscriberId: string, month: string) {
     entries: inMonth.map((e) => ({ ...e, walletId: walletOf.get(e.id as string) ?? null })),
     summary: summarizeMonth(entries, limits, month),
     limits,
+    customCategories: await customCategories(ctx.db, subscriberId),
     goals,
     alerts: [...(await walletOverdraftAlerts(ctx, subscriberId)), ...buildAlerts(entries, limits, goals, monthOf(today) === month ? today : `${month}-28`)],
   };
 }
 
+/** Categorias próprias da pessoa (as do sistema são fixas e já vêm no site). */
+export async function listCategories(ctx: Ctx, subscriberId: string): Promise<{ custom: string[] }> {
+  await requireFeature(ctx, subscriberId, 'ledger');
+  return { custom: await customCategories(ctx.db, subscriberId) };
+}
+
+export async function addCategory(ctx: Ctx, subscriberId: string, name: string): Promise<{ name: string }> {
+  await requireFeature(ctx, subscriberId, 'ledger');
+  return { name: await createCustomCategory(ctx.db, subscriberId, name) };
+}
+
+export async function removeCategory(ctx: Ctx, subscriberId: string, name: string): Promise<{ moved: number }> {
+  await requireFeature(ctx, subscriberId, 'ledger');
+  return { moved: await deleteCustomCategory(ctx.db, subscriberId, name) };
+}
+
 export async function setLimit(ctx: Ctx, subscriberId: string, category: string, limitCents: number | null): Promise<void> {
   await requireFeature(ctx, subscriberId, 'alerts');
-  if (!(CATEGORIES as readonly string[]).includes(category) || category === 'renda') throw new AppError(422, 'invalid_category', 'Categoria inválida');
+  if (category === 'renda' || !(await isAllowedCategory(ctx.db, subscriberId, category))) throw new AppError(422, 'invalid_category', 'Categoria inválida');
   if (limitCents === null) await ctx.db.query(`DELETE FROM app.budget_limits WHERE subscriber_id = $1 AND category = $2`, [subscriberId, category]);
   else await ctx.db.query(`INSERT INTO app.budget_limits(subscriber_id, category, limit_cents) VALUES ($1,$2,$3) ON CONFLICT (subscriber_id, category) DO UPDATE SET limit_cents = EXCLUDED.limit_cents`, [subscriberId, category, limitCents]);
 }

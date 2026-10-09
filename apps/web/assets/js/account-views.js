@@ -40,6 +40,98 @@ export const TABS = [
 const card = (...c) => el('section', { class: 'card d-section' }, ...c.filter(Boolean));
 const cap = (t) => t.charAt(0).toUpperCase() + t.slice(1);
 const monthNow = () => new Date().toISOString().slice(0, 7);
+// ---------- categorias: as do sistema + as que a pessoa cria ----------
+const catLabel = (c) => CATEGORY_LABEL[c] ?? c;
+const catList = (ctx) => [...CATEGORIES, ...(ctx.data?.customCategories ?? [])];
+const NEW_CAT = '__nova__';
+const CAT_SUGGESTIONS = ['Cartão de crédito', 'Parcela de financiamento', 'Assinaturas e streaming', 'Pets', 'Viagem', 'Presentes', 'Impostos e taxas', 'Investimentos'];
+const catId = (c) => `lim-${c.replace(/[^A-Za-z0-9]/g, '_')}`;
+
+/** Campo para criar uma categoria na hora. Entra no lugar do seletor (mesma célula da grade), então cabe no desktop e no mobile. */
+function categoryEditor(ctx, { onCreated, onCancel }) {
+  const listId = `cat-sug-${Math.random().toString(36).slice(2, 8)}`;
+  const taken = new Set(catList(ctx).map((c) => catLabel(c).toLowerCase()));
+  const suggestions = el('datalist', { id: listId }, ...CAT_SUGGESTIONS.filter((s) => !taken.has(s.toLowerCase())).map((s) => el('option', { value: s })));
+  const input = el('input', { class: 'input input-sm', type: 'text', maxlength: '30', placeholder: 'Nome da categoria', 'aria-label': 'Nome da nova categoria', list: listId, autocomplete: 'off' });
+  const ok = el('button', { class: 'btn btn-primary btn-sm icon-btn', type: 'button', 'aria-label': 'Criar categoria' }, icon('check'));
+  const no = el('button', { class: 'btn btn-quiet btn-sm icon-btn', type: 'button', 'aria-label': 'Cancelar' }, icon('x'));
+  const box = el('div', { class: 'cat-new' }, input, ok, no, suggestions);
+  async function save() {
+    const name = input.value.trim();
+    if (name.length < 2) return toast('Digite o nome da categoria (mínimo 2 letras).');
+    ok.disabled = true;
+    try {
+      const r = await ctx.api.createCategory(name);
+      if (!(ctx.data.customCategories ?? []).includes(r.name)) ctx.data.customCategories = [...(ctx.data.customCategories ?? []), r.name];
+      await onCreated(r.name);
+    } catch (e) {
+      ok.disabled = false;
+      toast(e?.message || 'Não consegui criar a categoria agora.');
+    }
+  }
+  ok.addEventListener('click', save);
+  no.addEventListener('click', onCancel);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      save();
+    } else if (e.key === 'Escape') onCancel();
+  });
+  window.setTimeout(() => input.focus(), 0);
+  return box;
+}
+
+/** "Minhas categorias": criar e apagar. Recolhido por padrão, para não pesar no formulário. */
+function categoryManager(ctx) {
+  const custom = ctx.data.customCategories ?? [];
+  const chips = custom.map((name) => {
+    const rm = el('button', { class: 'cat-chip-x', type: 'button', 'aria-label': `Apagar a categoria ${name}` }, icon('x'));
+    rm.addEventListener('click', async () => {
+      if (!(await confirmDialog({ title: `Apagar "${name}"?`, text: 'Os lançamentos dessa categoria passam para "Outros" e o limite dela é removido.', confirmLabel: 'Apagar', danger: true }))) return;
+      try {
+        const r = await ctx.api.deleteCategory(name);
+        toast(`Categoria apagada. ${r.moved} lançamento(s) foram para Outros.`);
+        ctx.refresh();
+      } catch (e) {
+        toast(e?.message || 'Não consegui apagar agora.');
+      }
+    });
+    return el('li', { class: 'cat-chip' }, el('span', {}, name), rm);
+  });
+  const input = el('input', { class: 'input input-sm', type: 'text', maxlength: '30', placeholder: 'Ex.: Cartão de crédito', 'aria-label': 'Nome da nova categoria' });
+  const btn = el('button', { class: 'btn btn-secondary btn-sm', type: 'button' }, icon('plus'), 'Criar');
+  async function create() {
+    const name = input.value.trim();
+    if (name.length < 2) return toast('Digite o nome da categoria (mínimo 2 letras).');
+    btn.disabled = true;
+    try {
+      const r = await ctx.api.createCategory(name);
+      toast(`Categoria "${r.name}" criada.`);
+      ctx.refresh();
+    } catch (e) {
+      btn.disabled = false;
+      toast(e?.message || 'Não consegui criar a categoria agora.');
+    }
+  }
+  btn.addEventListener('click', create);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      create();
+    }
+  });
+  const box = el(
+    'details', { class: 'cat-manage no-print' },
+    el('summary', {}, `Minhas categorias${custom.length ? ` (${custom.length})` : ''}`),
+    el('p', { class: 'fine' }, 'Crie categorias além das padrão, como "Cartão de crédito" ou "Parcela de financiamento". Elas aparecem em cada lançamento e no Orçamento.'),
+    chips.length ? el('ul', { class: 'cat-chips' }, ...chips) : null,
+    el('div', { class: 'cat-add' }, input, btn),
+  );
+  if (ctx.catOpen) box.open = true;
+  box.addEventListener('toggle', () => { ctx.catOpen = box.open; });
+  return box;
+}
+
 const monthLabel = (m) => cap(new Date(`${m}-01T12:00:00`).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }));
 const shiftMonth = (m, delta) => {
   const [y, mo] = m.split('-').map(Number);
@@ -172,12 +264,29 @@ export function viewLancamentos(ctx) {
   const amount = moneyInput({ id: 'lc-valor', ariaLabel: 'Valor' });
   const date = el('input', { class: 'input', id: 'lc-data', type: 'date', value: ctx.month === monthNow() ? new Date().toISOString().slice(0, 10) : `${ctx.month}-01` });
   const note = el('input', { class: 'input', id: 'lc-desc', type: 'text', maxlength: '120', placeholder: 'Ex.: mercado, salário, farmácia' });
+  // Categoria: "Automática" (o sistema adivinha pelo texto) ou uma escolhida; dá para criar uma nova ali mesmo.
+  const catSel = el('select', { class: 'input', id: 'lc-categoria', 'aria-label': 'Categoria' }, el('option', { value: '' }, 'Automática (pelo texto)'), ...catList(ctx).map((c) => el('option', { value: c }, catLabel(c))), el('option', { value: NEW_CAT }, '＋ Nova categoria…'));
+  catSel.addEventListener('change', () => {
+    if (catSel.value !== NEW_CAT) return;
+    catSel.value = '';
+    const editor = categoryEditor(ctx, {
+      onCreated: async (name) => {
+        catSel.insertBefore(el('option', { value: name }, name), catSel.lastElementChild);
+        catSel.value = name;
+        editor.replaceWith(catSel);
+        toast(`Categoria "${name}" criada.`);
+      },
+      onCancel: () => editor.replaceWith(catSel),
+    });
+    catSel.replaceWith(editor);
+  });
   const addBtn = el('button', { class: 'btn btn-primary', type: 'submit' }, icon('plus'), 'Adicionar');
   const form = el(
     'form', { class: 'entry-form' },
     el('div', { class: 'field' }, el('span', { class: 'label' }, 'Tipo'), seg),
     el('div', { class: 'field' }, el('label', { class: 'label', for: 'lc-valor' }, 'Valor (R$)'), amount.input),
     el('div', { class: 'field' }, el('label', { class: 'label', for: 'lc-data' }, 'Data'), date),
+    el('div', { class: 'field' }, el('label', { class: 'label', for: 'lc-categoria' }, 'Categoria'), catSel),
     el('div', { class: 'field field-wide' }, el('label', { class: 'label', for: 'lc-desc' }, 'Descrição'), note),
     walletSel ? el('div', { class: 'field' }, el('label', { class: 'label', for: 'lc-carteira' }, 'Carteira'), walletSel) : null,
     addBtn,
@@ -190,7 +299,7 @@ export function viewLancamentos(ctx) {
     addBtn.disabled = true;
     const text = note.value.trim() || (kind.value === 'gasto' ? 'Gasto' : 'Entrada');
     try {
-      await ctx.api.addEntries([{ date: date.value, amountCents: kind.value === 'gasto' ? -cents : cents, note: text, walletId: walletSel?.value || null }]);
+      await ctx.api.addEntries([{ date: date.value, amountCents: kind.value === 'gasto' ? -cents : cents, note: text, walletId: walletSel?.value || null, ...(catSel.value && catSel.value !== NEW_CAT ? { category: catSel.value } : {}) }]);
       toast('Lançamento adicionado.');
       ctx.month = date.value.slice(0, 7);
       ctx.refresh();
@@ -316,8 +425,28 @@ export function viewLancamentos(ctx) {
         toast('Não consegui remover agora.');
       }
     });
-    const cat = el('select', { class: 'input input-sm', 'aria-label': `Categoria de ${x.note}` }, ...CATEGORIES.map((c) => el('option', { value: c, selected: c === x.category }, CATEGORY_LABEL[c])));
-    cat.addEventListener('change', () => ctx.api.setEntryCategory(x.id, cat.value).then(() => toast('Categoria atualizada.')).catch(() => toast('Não consegui salvar a categoria.')));
+    const options = catList(ctx);
+    if (!options.includes(x.category)) options.push(x.category);
+    let current = x.category;
+    const cat = el('select', { class: 'input input-sm', 'aria-label': `Categoria de ${x.note}` }, ...options.map((c) => el('option', { value: c, selected: c === x.category }, catLabel(c))), el('option', { value: NEW_CAT }, '＋ Nova categoria…'));
+    cat.addEventListener('change', () => {
+      if (cat.value === NEW_CAT) {
+        // criar na hora: o campo de nome entra no lugar do seletor
+        cat.value = current;
+        const editor = categoryEditor(ctx, {
+          onCreated: async (name) => {
+            await ctx.api.setEntryCategory(x.id, name);
+            toast(`Categoria "${name}" criada e aplicada.`);
+            ctx.refresh();
+          },
+          onCancel: () => editor.replaceWith(cat),
+        });
+        cat.replaceWith(editor);
+        return;
+      }
+      current = cat.value;
+      ctx.api.setEntryCategory(x.id, cat.value).then(() => toast('Categoria atualizada.')).catch(() => toast('Não consegui salvar a categoria.'));
+    });
     return el(
       'li', { class: 'entry-row' },
       el('span', { class: 'entry-date muted' }, fmtDay(x.date)),
@@ -330,7 +459,7 @@ export function viewLancamentos(ctx) {
 
   return el(
     'div', { class: 'acc-stack' },
-    card(el('h2', {}, 'Novo lançamento'), form, importBox),
+    card(el('h2', {}, 'Novo lançamento'), form, categoryManager(ctx), importBox),
     card(monthNav(ctx), rows.length > 0 ? el('ul', { class: 'entries' }, ...rows) : empty('Nenhum lançamento neste mês', 'Adicione acima ou importe o extrato do banco.')),
   );
 }
@@ -350,10 +479,10 @@ export function viewOrcamento(ctx) {
     }
   });
   const spentBy = Object.fromEntries(d.summary.byCategory.map((c) => [c.category, c.cents]));
-  const rows = CATEGORIES.filter((c) => c !== 'renda').map((c) => {
+  const rows = [...CATEGORIES.filter((c) => c !== 'renda'), ...(d.customCategories ?? [])].map((c) => {
     const limit = d.limits[c] ?? null;
     const spent = spentBy[c] ?? 0;
-    const field = moneyInput({ id: `lim-${c}`, ariaLabel: `Limite mensal de ${CATEGORY_LABEL[c]}`, value: limit, placeholder: 'sem limite', small: true });
+    const field = moneyInput({ id: catId(c), ariaLabel: `Limite mensal de ${catLabel(c)}`, value: limit, placeholder: 'sem limite', small: true });
     field.input.addEventListener('change', async () => {
       const cents = field.cents();
       try {
@@ -368,8 +497,8 @@ export function viewOrcamento(ctx) {
     const over = limit !== null && spent > limit;
     return el(
       'li', { class: 'budget-row' },
-      el('div', { class: 'budget-top' }, el('label', { class: 'label', for: `lim-${c}` }, CATEGORY_LABEL[c]), field.input),
-      el('div', { class: 'budget-bottom' }, progress(limit ? (spent / limit) * 100 : 0, `${CATEGORY_LABEL[c]}: gasto do mês em relação ao limite`, { over }), el('span', { class: `fine ${over ? 'neg' : ''}` }, limit ? `${brl(spent)} de ${brl(limit)}` : spent > 0 ? `${brl(spent)} gastos, sem limite` : 'sem gastos')),
+      el('div', { class: 'budget-top' }, el('label', { class: 'label', for: catId(c) }, catLabel(c)), field.input),
+      el('div', { class: 'budget-bottom' }, progress(limit ? (spent / limit) * 100 : 0, `${catLabel(c)}: gasto do mês em relação ao limite`, { over }), el('span', { class: `fine ${over ? 'neg' : ''}` }, limit ? `${brl(spent)} de ${brl(limit)}` : spent > 0 ? `${brl(spent)} gastos, sem limite` : 'sem gastos')),
     );
   });
   return card(

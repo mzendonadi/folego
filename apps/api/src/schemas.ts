@@ -147,6 +147,7 @@ const entrySchema = z.strictObject({
 });
 export const addEntriesSchema = z.object({ entries: z.array(entrySchema).min(1).max(500) });
 export const setCategorySchema = z.object({ category: z.string().max(30) });
+export const categoryNameSchema = z.strictObject({ name: z.string().trim().min(2).max(30) });
 const signedCents = z.number().int().min(-10_000_000_000).max(10_000_000_000);
 export const walletSchema = z.strictObject({
   name: z.string().trim().min(1).max(40),

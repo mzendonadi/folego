@@ -34,7 +34,7 @@ import { publicCatalog } from './admin/manage.ts';
 import * as redo from './redo.ts';
 import * as demoAccounts from './demo.ts';
 import { refreshRuntime } from './runtime.ts';
-import { accessSchema, addEntriesSchema, cancelSchema, contributionSchema, createCaseSchema, entryWalletSchema, accountDebtSchema, accountDebtPatchSchema, debtPaymentSchema, monthLimitSchema, plannerSchema, objectiveSchema, inviteSchema, checkoutSchema, profileSchema, referralLeadSchema, referralInviteSchema, recurringDecisionSchema, reminderPatchSchema, reminderSchema, walletSchema, walletPatchSchema, createOrderSchema, emailLinkSchema, emailOnlySchema, goalSchema, incomeInterviewSchema, leadSchema, loginCodeSchema, newPartnerSchema, partnerLoginSchema, partnerStatusSchema, setCategorySchema, setLimitSchema, simulateSchema, subscriptionOrderSchema, toggleIncomeTaskSchema, translationSchema, guidedSchema, uuidParam, monthParam } from './schemas.ts';
+import { accessSchema, addEntriesSchema, cancelSchema, contributionSchema, createCaseSchema, entryWalletSchema, accountDebtSchema, accountDebtPatchSchema, debtPaymentSchema, monthLimitSchema, plannerSchema, objectiveSchema, inviteSchema, checkoutSchema, profileSchema, referralLeadSchema, referralInviteSchema, recurringDecisionSchema, reminderPatchSchema, reminderSchema, walletSchema, walletPatchSchema, createOrderSchema, emailLinkSchema, emailOnlySchema, goalSchema, incomeInterviewSchema, leadSchema, loginCodeSchema, newPartnerSchema, partnerLoginSchema, partnerStatusSchema, setCategorySchema, categoryNameSchema, setLimitSchema, simulateSchema, subscriptionOrderSchema, toggleIncomeTaskSchema, translationSchema, guidedSchema, uuidParam, monthParam } from './schemas.ts';
 import { EngineInputError } from './engine.ts';
 import { GUIDED_KINDS } from './guided.ts';
 import * as openFinance from './openfinance.ts';
@@ -462,6 +462,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     await sub.setEntryCategory(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id), setCategorySchema.parse(req.body).category);
     return { ok: true };
   });
+  // Categorias próprias (além das 10 do sistema): listar, criar e apagar (os lançamentos dela vão para "Outros").
+  app.get('/api/account/categories', async (req) => sub.listCategories(ctx, await requireSubscriber(req)));
+  app.post('/api/account/categories', { config: { rateLimit: { max: 30 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => reply.status(201).send(await sub.addCategory(ctx, await requireSubscriber(req), categoryNameSchema.parse(req.body).name)));
+  app.post('/api/account/categories/remove', { config: { rateLimit: { max: 30 * scale, timeWindow: '10 minutes' } } }, async (req) => sub.removeCategory(ctx, await requireSubscriber(req), categoryNameSchema.parse(req.body).name));
   app.post('/api/account/limits/:category', async (req) => {
     await sub.setLimit(ctx, await requireSubscriber(req), (req.params as { category: string }).category, setLimitSchema.parse(req.body).limitCents);
     return { ok: true };
