@@ -2,6 +2,7 @@
 import { el, icon, toast } from '../dom.js';
 import { api, ApiError } from './api.js';
 import { loading, errorBox, drawer } from './ui.js';
+import { createBell } from './bell.js';
 
 const MENU = [
   { id: 'painel', label: 'Painel', icon: 'chart', perm: ['dashboard'], load: () => import('./screens/dashboard.js').then((m) => m.dashboardScreen) },
@@ -11,6 +12,7 @@ const MENU = [
   { id: 'contas-teste', label: 'Contas de teste', icon: 'users', perm: ['assinaturas'], load: () => import('./screens/contas-teste.js').then((m) => m.contasTesteScreen) },
   { id: 'jornada', label: 'Jornada e funil', icon: 'route', perm: ['jornada', 'dashboard'], load: () => import('./screens/jornada.js').then((m) => m.jornadaScreen) },
   { id: 'parcerias', label: 'Parcerias', icon: 'link', perm: ['parcerias'], load: () => import('./screens/parcerias.js').then((m) => m.parceriasScreen) },
+  { id: 'chatbot', label: 'Chatbot', icon: 'chat', perm: ['chatbot'], load: () => import('./screens/chatbot.js').then((m) => m.chatbotScreen) },
   { id: 'produtos', label: 'Produtos e preços', icon: 'tag', perm: ['precos'], load: () => import('./screens/produtos.js').then((m) => m.produtosScreen) },
   { id: 'indicacoes', label: 'Indicações', icon: 'users', perm: ['marketing', 'assinaturas'], load: () => import('./screens/indicacoes.js').then((m) => m.indicacoesScreen) },
   { id: 'marketing', label: 'Marketing', icon: 'megaphone', perm: ['marketing'], load: () => import('./screens/marketing.js').then((m) => m.marketingScreen) },
@@ -35,6 +37,7 @@ function loginCard(title, lead, message, ...children) {
 }
 
 function drawLogin(message = '') {
+  bell.stop();
   const email = el('input', { class: 'input', id: 'bo-email', type: 'email', autocomplete: 'username', required: true });
   const password = el('input', { class: 'input', id: 'bo-password', type: 'password', autocomplete: 'current-password', required: true });
   const send = el('button', { class: 'btn btn-primary btn-block', type: 'submit' }, 'Continuar');
@@ -116,6 +119,14 @@ function currentRoute() {
 }
 
 let navOpen = false;
+// Um sino só para a sessão toda: a casca é redesenhada a cada troca de tela, o sino é movido para o novo cabeçalho.
+const bell = createBell({
+  goto: (id) => {
+    if (!allowedMenu().some((m) => m.id === id)) return;
+    history.pushState(null, '', `/gestao/${id}`);
+    onRouteChange();
+  },
+});
 function drawShell() {
   const route = currentRoute();
   if (!route) {
@@ -134,7 +145,8 @@ function drawShell() {
     toggle.setAttribute('aria-expanded', String(navOpen));
   });
   const content = el('main', { class: 'bo-content', id: 'bo-content', tabindex: '-1' });
-  root.replaceChildren(el('div', { class: 'bo-shell' }, sidebar, el('div', { class: 'bo-main' }, el('header', { class: 'bo-top' }, toggle, el('h1', { id: 'bo-title' }, route.label)), content)));
+  root.replaceChildren(el('div', { class: 'bo-shell' }, sidebar, el('div', { class: 'bo-main' }, el('header', { class: 'bo-top' }, toggle, el('h1', { id: 'bo-title' }, route.label), bell.el), content)));
+  bell.start();
   document.title = `${route.label} — Backoffice Fôlego`;
   renderScreen(route, content);
 }
@@ -170,6 +182,7 @@ function logoutButton() {
   const b = el('button', { class: 'btn btn-quiet btn-sm', type: 'button' }, icon('logout'), 'Sair');
   b.addEventListener('click', async () => {
     await api.logout().catch(() => {});
+    bell.stop();
     me = null;
     drawLogin();
   });

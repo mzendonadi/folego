@@ -12,6 +12,7 @@ import { renderPartner } from './partner.js';
 import { renderAccount } from './account.js';
 import { renderUnsubscribe } from './unsubscribe.js';
 import { renderResumeBanner } from './banner.js';
+import { initChat } from './chat.js';
 import * as api from './api.js';
 import { loadCatalog, applyCachedCatalog } from './prices.js';
 import { track } from './track.js';
@@ -746,7 +747,10 @@ function init() {
   observeReveal();
   observeHero();
   // O convite a parceiros só aparece se o recurso está ligado neste servidor.
-  api.getFeatures().then((f) => document.querySelectorAll('[data-partner-banner]').forEach((n) => { n.hidden = !f?.leads; })).catch(() => undefined);
+  api.getFeatures().then((f) => {
+    document.querySelectorAll('[data-partner-banner]').forEach((n) => { n.hidden = !f?.leads; });
+    if (f?.chatbot) initChat(); // botão flutuante da Fôlia: landing e Prumo
+  }).catch(() => undefined);
   window.addEventListener('popstate', route);
   window.addEventListener('hashchange', route);
   // Preços e aviso do site vêm do servidor (espera no máximo 1,5 s) antes do primeiro desenho.

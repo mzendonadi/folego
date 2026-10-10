@@ -136,7 +136,7 @@ export function partnersManager(ctx, { onChange }) {
   }
 
   function editPartnerDrawer(p) {
-    const d = drawer(`Editar ${p.legalName}`);
+    const d = drawer(`Editar ${p.tradeName ?? p.legalName}`);
     const legalName = text('Razão social', { maxlength: '200', value: p.legalName });
     const tradeName = text('Nome fantasia', { maxlength: '120', value: p.tradeName ?? '' });
     const phone = text('Telefone', { maxlength: '60', value: p.phone ?? '' });
@@ -183,7 +183,7 @@ export function partnersManager(ctx, { onChange }) {
   }
 
   function campaignDrawer(p, c) {
-    const d = drawer(c ? `Editar campanha: ${c.name}` : `Nova campanha de ${p.legalName}`);
+    const d = drawer(c ? `Editar campanha: ${c.name}` : `Nova campanha de ${p.tradeName ?? p.legalName}`);
     const form = campaignForm(c ?? {}, c ? `ec${c.id.slice(0, 6)}` : 'nc');
     const status = c ? select(Object.entries(CAMPAIGN_STATUS).map(([k, [l]]) => [k, l]), c.status, 'Situação da campanha') : null;
     const save = el('button', { class: 'btn btn-primary', type: 'button' }, c ? 'Salvar campanha' : 'Criar campanha');
@@ -272,12 +272,12 @@ export function partnersManager(ctx, { onChange }) {
     addCamp.addEventListener('click', () => campaignDrawer(p, null));
     const toggle = el('button', { class: 'btn btn-quiet btn-sm', type: 'button' }, p.status === 'active' ? 'Suspender' : 'Reativar');
     toggle.addEventListener('click', async () => {
-      if (p.status === 'active' && !(await confirmDialog({ title: `Suspender ${p.legalName}?`, text: 'Ele deixa de aparecer como destino do envio e perde o acesso ao portal. O histórico fica guardado.', confirmLabel: 'Suspender' }))) return;
+      if (p.status === 'active' && !(await confirmDialog({ title: `Suspender ${p.tradeName ?? p.legalName}?`, text: 'Ele deixa de aparecer como destino do envio e perde o acesso ao portal. O histórico fica guardado.', confirmLabel: 'Suspender' }))) return;
       act(() => api.editarParceiro(p.id, { status: p.status === 'active' ? 'suspended' : 'active' }), p.status === 'active' ? 'Parceiro suspenso.' : 'Parceiro reativado.');
     });
     const del = el('button', { class: 'btn btn-quiet btn-sm', type: 'button' }, icon('trash'), 'Excluir');
     del.addEventListener('click', async () => {
-      if (!(await confirmDialog({ title: `Excluir ${p.legalName}?`, text: p.sent > 0 ? 'Este parceiro já recebeu contatos, então não pode ser excluído: suspenda para manter o histórico.' : 'Isso apaga o parceiro, o acesso ao portal e as campanhas. Não dá para desfazer.', confirmLabel: 'Excluir', danger: true }))) return;
+      if (!(await confirmDialog({ title: `Excluir ${p.tradeName ?? p.legalName}?`, text: p.sent > 0 ? 'Este parceiro já recebeu contatos, então não pode ser excluído: suspenda para manter o histórico.' : 'Isso apaga o parceiro, o acesso ao portal e as campanhas. Não dá para desfazer.', confirmLabel: 'Excluir', danger: true }))) return;
       act(() => api.excluirParceiro(p.id), 'Parceiro excluído.');
     });
     const camps = p.campaigns.map((c) => {
@@ -309,7 +309,7 @@ export function partnersManager(ctx, { onChange }) {
     return el(
       'article', { class: `bo-partner${p.status === 'active' ? '' : ' is-off'}` },
       el('header', { class: 'bo-head-line' }, el('h3', {}, p.tradeName ?? p.legalName), badge(sl, st), badge(PARTNER_CATEGORY[p.category] ?? p.category, 'muted')),
-      el('p', { class: 'fine muted' }, `${p.tradeName ? `${p.legalName} · ` : ''}CNPJ ${formatCnpj(p.cnpj)} · portal: ${p.portalEmail ?? '—'} · cadastrado em ${dt(p.createdAt)} · ${p.sent} contato(s) enviado(s), ${p.reached} com retorno`),
+      el('p', { class: 'fine muted' }, `${p.tradeName ? `${p.tradeName ?? p.legalName} · ` : ''}CNPJ ${formatCnpj(p.cnpj)} · portal: ${p.portalEmail ?? '—'} · cadastrado em ${dt(p.createdAt)} · ${p.sent} contato(s) enviado(s), ${p.reached} com retorno`),
       el('p', { class: 'bo-deals-line' }, el('strong', {}, `${p.deals.count} contrato(s) fechado(s)`), ` · ${brl(p.deals.volumeCents)} em contratos · comissão a receber `, el('strong', {}, brl(p.deals.commissionDueCents)), ` · já recebida ${brl(p.deals.commissionPaidCents)}`),
       el('div', { class: 'bo-partner-camps' }, ...(camps.length ? camps : [el('p', { class: 'fine muted' }, 'Sem campanha: crie uma para poder enviar contatos.')])),
       el('div', { class: 'bo-actions' }, contracts, edit, addCamp, toggle, del),

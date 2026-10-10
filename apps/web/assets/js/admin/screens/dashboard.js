@@ -133,7 +133,7 @@ export async function dashboardScreen(ctx) {
 
   const ai = card('Uso de IA', kpis(kpi('Escritas pela IA', int(d.ai.ai)), kpi('Pelo modelo fixo', int(d.ai.template)), kpi('Tokens de entrada', int(d.ai.inputTokens)), kpi('Tokens de saída', int(d.ai.outputTokens))), el('p', { class: 'fine' }, 'Compare os tokens com o custo da sua conta Anthropic para saber quanto a IA custa por entrega.'));
 
-  return el('div', { class: 'bo-stack' }, head, saudeCard(saude), top, grid(2, funnel, aband), byDay, grid(2, products, methods), subs, profile, traffic, timing, ai);
+  return el('div', { class: 'bo-stack' }, head, top, grid(2, funnel, aband), byDay, grid(2, products, methods), subs, profile, traffic, timing, ai, saudeCard(saude));
 }
 
 const SAUDE = { banco: 'Banco de dados', worker: 'Worker (entregas em segundo plano)', fila: 'Fila de entregas', webhooks: 'Eventos de pagamento', ebook: 'Envio do e-book', backup: 'Backup', disco: 'Disco do servidor', custos: 'Custos e limites (IA e e-mail)' };

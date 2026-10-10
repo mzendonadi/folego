@@ -15,9 +15,9 @@ export type SentFilter = 'todos' | 'nao_enviados' | 'enviados';
 /** Parceiros ativos e as campanhas ativas deles (destinos possíveis do envio manual). */
 export async function dispatchTargets(ctx: Ctx) {
   const r = await ctx.db.query<{ partner_id: string; legal_name: string; category: string; campaign_id: string; campaign: string; consent_category: string; price: string }>(
-    `SELECT p.id AS partner_id, p.legal_name, p.category, c.id AS campaign_id, c.name AS campaign, c.consent_category, c.price_per_lead_cents::text AS price
+    `SELECT p.id AS partner_id, coalesce(nullif(trim(p.trade_name), ''), p.legal_name) AS legal_name, p.category, c.id AS campaign_id, c.name AS campaign, c.consent_category, c.price_per_lead_cents::text AS price
        FROM app.partners p JOIN app.partner_campaigns c ON c.partner_id = p.id AND c.status = 'active'
-      WHERE p.status = 'active' ORDER BY p.legal_name, c.name`,
+      WHERE p.status = 'active' ORDER BY 2, c.name`,
   );
   const map = new Map<string, { partnerId: string; name: string; category: string; campaigns: { id: string; name: string; consentCategory: string; priceCents: number }[] }>();
   for (const x of r.rows) {
@@ -47,7 +47,7 @@ export async function contactsWithDispatch(ctx: Ctx, o: { category?: string | un
   const total = await ctx.db.query<{ n: string }>(`SELECT count(*)::text AS n ${base}`, params);
   const r = await ctx.db.query<{ case_id: string; created_at: Date; scope: { categories?: string[] }; uf: string | null; employment_type: string | null; net_income_cents: string | null; debt_total_cents: string | null; has_overdue: boolean | null; sent: { partnerId: string; partner: string; status: string; at: string }[] | null }>(
     `SELECT v.case_id, v.created_at, v.scope, c.uf::text AS uf, c.employment_type, c.net_income_cents, c.debt_total_cents, c.has_overdue,
-            (SELECT json_agg(json_build_object('partnerId', p.id, 'partner', p.legal_name, 'status', d.status, 'at', d.created_at) ORDER BY d.created_at)
+            (SELECT json_agg(json_build_object('partnerId', p.id, 'partner', coalesce(nullif(trim(p.trade_name), ''), p.legal_name), 'status', d.status, 'at', d.created_at) ORDER BY d.created_at)
                FROM app.lead_deliveries d JOIN app.partners p ON p.id = d.partner_id WHERE d.case_id = v.case_id) AS sent
        ${base} ORDER BY v.created_at DESC LIMIT ${PAGE} OFFSET ${page * PAGE}`,
     params,
@@ -141,7 +141,7 @@ export async function deliveriesOverview(ctx: Ctx, o: { partnerId?: string | und
   }
   const sum = await ctx.db.query<{ status: string; n: string; cents: string }>(`SELECT d.status, count(*)::text AS n, coalesce(sum(d.price_cents), 0)::text AS cents FROM app.lead_deliveries d WHERE ${where.join(' AND ')} GROUP BY d.status`, params);
   const rows = await ctx.db.query<{ id: string; case_id: string; status: string; created_at: Date; delivered_at: Date | null; attempts: number; last_response_code: number | null; price_cents: string; partner: string; campaign: string; category: string; uf: string | null; employment: string | null }>(
-    `SELECT d.id, d.case_id, d.status, d.created_at, d.delivered_at, d.attempts, d.last_response_code, d.price_cents, p.legal_name AS partner, c.name AS campaign, c.consent_category AS category,
+    `SELECT d.id, d.case_id, d.status, d.created_at, d.delivered_at, d.attempts, d.last_response_code, d.price_cents, coalesce(nullif(trim(p.trade_name), ''), p.legal_name) AS partner, c.name AS campaign, c.consent_category AS category,
             lp.uf, lp.employment_type AS employment
        FROM app.lead_deliveries d JOIN app.partners p ON p.id = d.partner_id JOIN app.partner_campaigns c ON c.id = d.campaign_id LEFT JOIN app.lead_profiles lp ON lp.case_id = d.case_id
       WHERE ${where.join(' AND ')} ORDER BY d.created_at DESC LIMIT ${PAGE} OFFSET ${page * PAGE}`,

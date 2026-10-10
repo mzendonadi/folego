@@ -29,6 +29,7 @@ import * as accountData from './account-data.ts';
 import * as referrals from './referrals.ts';
 import * as insights from './insights.ts';
 import { verifyTurnstile, turnstileEnabled } from './turnstile.ts';
+import * as chatbot from './chatbot.ts';
 import { deepHealth } from './health.ts';
 import { eventSchema, recordEvent } from './admin/events.ts';
 import { publicCatalog } from './admin/manage.ts';
@@ -300,7 +301,19 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     return sendContact(ctx, contactSchema.parse(req.body));
   });
 
-  app.get('/api/features', async () => ({ email: Boolean(deps.email), leads: config.leadsEnabled, subscriptions: config.subscriptionsEnabled && Boolean(deps.email), referrals: config.referralEnabled && Boolean(deps.email), openFinance: Boolean(deps.openFinance), turnstileSiteKey: turnstileEnabled(config) ? config.turnstileSiteKey : null }));
+  // Chatbot (Fôlia): celular com DDD e e-mail obrigatórios para abrir a conversa. Limites por IP; a conversa tem token próprio de 24 h.
+  app.post('/api/chat/start', { config: { rateLimit: { max: 8 * scale, timeWindow: '10 minutes' } } }, async (req) => {
+    await verifyTurnstile(config, req.headers['x-turnstile'], clientIp(req));
+    return chatbot.startChat(ctx, chatbot.startSchema.parse(req.body));
+  });
+  const chatToken = (req: { headers: Record<string, unknown> }) => {
+    const h = String(req.headers.authorization ?? '');
+    return h.startsWith('Bearer ') ? h.slice(7) : undefined;
+  };
+  app.get('/api/chat/history', { config: { rateLimit: { max: 30 * scale, timeWindow: '1 minute' } } }, async (req) => chatbot.chatHistory(ctx, chatToken(req)));
+  app.post('/api/chat/message', { config: { rateLimit: { max: 12 * scale, timeWindow: '1 minute' } } }, async (req) => chatbot.chatMessage(ctx, chatToken(req), chatbot.messageSchema.parse(req.body).text));
+
+  app.get('/api/features', async () => ({ chatbot: true,email: Boolean(deps.email), leads: config.leadsEnabled, subscriptions: config.subscriptionsEnabled && Boolean(deps.email), referrals: config.referralEnabled && Boolean(deps.email), openFinance: Boolean(deps.openFinance), turnstileSiteKey: turnstileEnabled(config) ? config.turnstileSiteKey : null }));
 
 
   // Manda o link de acesso por e-mail. O endereço é usado para enviar e descartado (não é gravado).

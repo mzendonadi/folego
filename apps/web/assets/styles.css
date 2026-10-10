@@ -1634,3 +1634,111 @@ body[data-route="partner"] #view-partner .tools-layout { display: block; max-wid
 /* Campo que sobra sozinho na última linha fica centralizado, com a mesma largura de uma coluna. */
 .form-std .field-solo { grid-column: 1 / -1; justify-self: center; width: 100%; }
 @media (min-width: 640px) { .form-std .field-solo { width: calc(50% - var(--s4) / 2); } }
+
+/* ===== Cartões de indicador: um padrão só (backoffice, Prumo e portal do parceiro) =====
+   Grade: ocupa a largura toda e reparte os cartões por igual; o nº de colunas segue a quantidade de cartões (4 em 4, 3 em 3...)
+   e cai sozinho para menos colunas em telas estreitas (2 no celular). Todos os cartões da fila têm a mesma altura.
+   Cartão: rótulo numa linha só (a fonte encolhe com a largura do cartão, nunca quebra no computador), número centralizado
+   e subtítulo alinhado numa linha reservada, mesmo quando o cartão não tem subtítulo. O ":not(#c)" garante que este padrão
+   vence as regras antigas espalhadas pelo arquivo. */
+:is(.bo-kpis, .stats, .indicators, .cc-stats, .pt-metrics, .pt-minis):not(#c) {
+  --gap: var(--s3); --minw: 150px; --w: 4;
+  display: grid; align-items: stretch; gap: var(--gap); overflow: visible;
+  grid-auto-flow: row; grid-auto-columns: auto;
+  grid-template-columns: repeat(auto-fit, minmax(max(var(--minw), calc((100% - (var(--w) - 1) * var(--gap)) / var(--w))), 1fr));
+}
+:is(.bo-kpis, .stats, .indicators, .cc-stats, .pt-metrics, .pt-minis):not(#c):has(> :nth-child(1):last-child) { --w: 1; }
+:is(.bo-kpis, .stats, .indicators, .cc-stats, .pt-metrics, .pt-minis):not(#c):has(> :nth-child(2):last-child) { --w: 2; }
+:is(.bo-kpis, .stats, .indicators, .cc-stats, .pt-metrics, .pt-minis):not(#c):has(> :nth-child(3):last-child) { --w: 3; }
+:is(.bo-kpis, .stats, .indicators, .cc-stats, .pt-metrics, .pt-minis):not(#c):has(> :nth-child(5):last-child) { --w: 3; }
+:is(.bo-kpis, .stats, .indicators, .cc-stats, .pt-metrics, .pt-minis):not(#c):has(> :nth-child(6):last-child) { --w: 3; }
+:is(.bo-kpis, .stats, .indicators, .cc-stats, .pt-metrics, .pt-minis):not(#c):has(> :nth-child(9):last-child) { --w: 3; }
+:is(.bo-kpis, .stats, .indicators, .cc-stats, .pt-metrics, .pt-minis):not(#c):has(> :nth-child(10):last-child) { --w: 5; }
+@media (max-width: 1100px) {
+  :is(.bo-kpis, .stats, .indicators, .cc-stats, .pt-metrics, .pt-minis):not(#c):has(> :nth-child(4):last-child) { --w: 2; }
+}
+@media (max-width: 559px) {
+  :is(.bo-kpis, .stats, .indicators, .cc-stats, .pt-metrics, .pt-minis):not(#c) { --minw: 136px; --w: 2 !important; }
+  :is(.bo-kpis, .stats, .indicators, .cc-stats, .pt-metrics, .pt-minis):not(#c) > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+}
+
+:is(.bo-kpi, .stat, .indicator, .cc-stat, .pt-metric, .pt-mini):not(#c):not(.is-locked) {
+  container-type: inline-size;
+  display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(1.4rem, auto) auto minmax(1.3rem, auto);
+  align-content: start; justify-items: stretch; gap: 4px; min-width: 0; min-height: 0; padding: 14px 12px; text-align: center;
+}
+:is(.bo-kpi-label, .stat dt, .indicator:not(.is-locked) > :first-child, .cc-stat-label, .pt-metric-label, .pt-mini-label):not(#c) {
+  display: block; margin: 0; max-width: 100%; text-align: center; line-height: 1.35; font-weight: 700; color: var(--muted);
+  font-size: clamp(0.72rem, 5.4cqi, 0.875rem); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+:is(.bo-kpi-value, .stat dd, .indicator-value, .cc-stat strong, .pt-metric-value, .pt-mini strong):not(#c) {
+  display: block; margin: 0; text-align: center; font-family: var(--font-display); font-weight: 560; line-height: 1.15;
+  font-size: clamp(1.15rem, 10cqi, 1.85rem); font-variant-numeric: tabular-nums; overflow-wrap: anywhere;
+}
+:is(.bo-kpi-sub, .pt-metric-sub, .pt-mini-sub, .indicator:not(.is-locked) > :nth-child(3)):not(#c) {
+  display: block; margin: 0; text-align: center; font-size: 0.8125rem; line-height: 1.35; color: var(--muted); text-wrap: balance; overflow-wrap: anywhere;
+}
+.pt-metric.is-accent:not(#c) :is(.pt-metric-label, .pt-metric-sub) { color: var(--mint-ink); }
+
+/* ===== Chat da Fôlia (landing e Prumo): botão flutuante + janela ===== */
+.fl-chat { position: fixed; right: max(16px, env(safe-area-inset-right)); bottom: max(16px, env(safe-area-inset-bottom)); z-index: 60; display: grid; justify-items: end; gap: 12px; }
+body[data-route="partner"] .fl-chat, body[data-route="unsubscribe"] .fl-chat, body[data-route="checkout"] .fl-chat, body[data-route="addon"] .fl-chat { display: none; }
+.fl-chat-fab { display: inline-flex; align-items: center; gap: 0; height: 58px; min-width: 58px; padding: 0 14px; border: 0; border-radius: 999px; background: var(--primary); color: var(--primary-ink); font: inherit; font-weight: 700; cursor: pointer; box-shadow: var(--shadow); transition: background-color 0.2s var(--ease), gap 0.25s var(--ease), padding 0.25s var(--ease), transform 0.2s var(--ease); }
+.fl-chat-fab:hover { background: var(--primary-hover); }
+.fl-chat-fab:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.fl-chat-fab:active { transform: scale(0.97); }
+.fl-chat-fab svg { flex: none; }
+.fl-chat-fab-text { max-width: 0; overflow: hidden; white-space: nowrap; transition: max-width 0.3s var(--ease); }
+.fl-chat-fab.is-hint, .fl-chat-fab:focus-visible { gap: 10px; padding: 0 20px 0 14px; }
+.fl-chat-fab.is-hint .fl-chat-fab-text, .fl-chat-fab:focus-visible .fl-chat-fab-text { max-width: 180px; }
+@media (hover: hover) { .fl-chat-fab:hover { gap: 10px; padding: 0 20px 0 14px; } .fl-chat-fab:hover .fl-chat-fab-text { max-width: 180px; } }
+.fl-chat-panel { position: relative; display: flex; flex-direction: column; width: min(392px, calc(100vw - 32px)); height: min(620px, calc(100dvh - 120px)); border: 1px solid var(--line); border-radius: 20px; background: var(--surface); color: var(--ink); box-shadow: 0 24px 60px -24px rgba(19, 35, 29, 0.45); overflow: hidden; }
+.fl-chat-panel[hidden] { display: none; }
+.fl-chat-head { display: flex; align-items: center; gap: 12px; padding: 14px 14px 14px 16px; background: var(--primary); color: var(--primary-ink); }
+.fl-chat-avatar { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 999px; background: rgba(246, 243, 236, 0.16); flex: none; }
+.fl-chat-who { display: grid; gap: 1px; min-width: 0; flex: 1; }
+.fl-chat-who strong { font-family: var(--font-display); font-size: 1.15rem; font-weight: 600; line-height: 1.2; }
+.fl-chat-who span { font-size: 0.8125rem; opacity: 0.88; }
+.fl-chat-close { display: grid; place-items: center; width: 44px; height: 44px; border: 0; border-radius: 999px; background: transparent; color: inherit; cursor: pointer; }
+.fl-chat-close:hover { background: rgba(246, 243, 236, 0.16); }
+.fl-chat-close:focus-visible { outline: 3px solid var(--primary-ink); outline-offset: -3px; }
+.fl-chat-body { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.fl-chat-log { flex: 1; min-height: 0; overflow-y: auto; display: grid; align-content: start; gap: 10px; padding: 16px; overscroll-behavior: contain; }
+.fl-msg { max-width: 88%; padding: 10px 14px; border-radius: 16px; line-height: 1.45; }
+.fl-msg p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.fl-msg-bot { justify-self: start; background: var(--sunken); color: var(--ink); border-bottom-left-radius: 4px; }
+.fl-msg-me { justify-self: end; background: var(--primary); color: var(--primary-ink); border-bottom-right-radius: 4px; }
+.fl-typing { display: inline-flex; gap: 5px; padding: 14px 16px; }
+.fl-typing span { width: 7px; height: 7px; border-radius: 999px; background: var(--muted); animation: fl-dot 1.1s ease-in-out infinite; }
+.fl-typing span:nth-child(2) { animation-delay: 0.15s; }
+.fl-typing span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes fl-dot { 0%, 60%, 100% { opacity: 0.35; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) { .fl-typing span { animation: none; opacity: 0.7; } .fl-chat-fab, .fl-chat-fab-text { transition: none; } }
+.fl-chat-chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 16px 10px; }
+.fl-chip { padding: 9px 14px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--ink); font: inherit; font-size: 0.875rem; cursor: pointer; }
+.fl-chip:hover { background: var(--mint); border-color: var(--primary); }
+.fl-chip:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.fl-chat-form { display: flex; align-items: flex-end; gap: 8px; padding: 12px 16px 8px; border-top: 1px solid var(--line); }
+.fl-chat-input { flex: 1; min-width: 0; max-height: 110px; resize: none; padding: 11px 14px; border: 1px solid var(--field); border-radius: 16px; background: var(--surface); color: var(--ink); font: inherit; font-size: 1rem; line-height: 1.35; }
+.fl-chat-input:focus-visible { outline: 3px solid var(--focus); outline-offset: 1px; }
+.fl-chat-send { display: grid; place-items: center; flex: none; width: 46px; height: 46px; border: 0; border-radius: 999px; background: var(--primary); color: var(--primary-ink); cursor: pointer; }
+.fl-chat-send:hover { background: var(--primary-hover); }
+.fl-chat-send:disabled { opacity: 0.5; cursor: default; }
+.fl-chat-send:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.fl-chat-note { margin: 0; padding: 0 16px 12px; text-align: center; font-size: 0.75rem; color: var(--muted); }
+.fl-chat-wait { margin: 0; padding: 24px; text-align: center; color: var(--muted); }
+.fl-chat-start { display: grid; gap: 12px; align-content: start; padding: 20px 20px 8px; overflow-y: auto; min-height: 0; }
+.fl-chat-start h2 { margin: 0; font-family: var(--font-display); font-size: 1.5rem; font-weight: 560; line-height: 1.2; }
+.fl-chat-lead { margin: 0; color: var(--ink-2); line-height: 1.45; }
+.fl-chat-consent { display: flex; align-items: flex-start; gap: 10px; font-size: 0.875rem; line-height: 1.4; color: var(--ink-2); }
+.fl-chat-consent input { flex: none; width: 20px; height: 20px; margin-top: 1px; accent-color: var(--primary); }
+@media (max-width: 560px) {
+  .fl-chat-panel { position: fixed; inset: 0; width: auto; height: 100dvh; border: 0; border-radius: 0; }
+  .fl-chat.is-open .fl-chat-fab { display: none; }
+}
+@media (max-width: 559px) {
+  /* No celular o rótulo pode ocupar duas linhas; a linha é reservada em todos os cartões, então os números seguem alinhados. */
+  :is(.bo-kpi-label, .stat dt, .indicator:not(.is-locked) > :first-child, .cc-stat-label, .pt-metric-label, .pt-mini-label):not(#c) {
+    display: flex; align-items: center; justify-content: center; min-height: 2.4em; white-space: normal; text-overflow: clip; line-height: 1.2; text-wrap: balance;
+  }
+}

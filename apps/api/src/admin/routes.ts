@@ -16,6 +16,8 @@ import * as campaigns from './campaigns.ts';
 import * as access from './access.ts';
 import * as demo from '../demo.ts';
 import * as dispatch from './dispatch.ts';
+import * as chatbot from '../chatbot.ts';
+import { computeAlerts, markAlertsSeen } from './alerts.ts';
 import * as customers from './customers.ts';
 import * as manage from './manage.ts';
 import * as marketing from './marketing.ts';
@@ -525,5 +527,44 @@ export function registerGestao(app: FastifyInstance, deps: AdminRouteDeps): void
     const a = await admin(req, 'marketing');
     await marketing.deletePlan(ctx, a, idParam((req.params as { id: string }).id));
     return reply.status(204).send();
+  });
+
+  // ---------- sino de alertas (cada pessoa vê só o que as suas permissões alcançam) ----------
+  app.get(`${P}/alertas`, async (req) => {
+    const a = await admin(req);
+    const alerts = await computeAlerts(ctx, a);
+    return { alerts, unseen: alerts.filter((x) => !x.seen).length };
+  });
+  app.post(`${P}/alertas/vistos`, async (req) => {
+    const a = await admin(req);
+    const body = z.strictObject({ keys: z.array(z.string().max(80)).max(100).optional() }).parse(req.body ?? {});
+    await markAlertsSeen(ctx, a, body.keys);
+    const alerts = await computeAlerts(ctx, a);
+    return { alerts, unseen: alerts.filter((x) => !x.seen).length };
+  });
+
+  // ---------- chatbot: leads, conversas, conversão e retomada de contato ----------
+  app.get(`${P}/chatbot/resumo`, async (req) => {
+    await admin(req, 'chatbot');
+    const q = z.object({ dias: z.coerce.number().int().min(1).max(3650).default(30) }).parse(req.query);
+    return chatbot.chatMetrics(ctx, q.dias);
+  });
+  app.get(`${P}/chatbot/contatos`, async (req) => {
+    await admin(req, 'chatbot');
+    const q = z.object({ status: z.string().max(20).optional(), origem: z.string().max(20).optional(), busca: z.string().max(80).optional(), pagina: z.coerce.number().int().min(0).max(1000).default(0) }).parse(req.query);
+    return chatbot.listLeads(ctx, { status: q.status, origin: q.origem, q: q.busca, page: q.pagina });
+  });
+  app.get(`${P}/chatbot/contatos/:id`, async (req) => {
+    await admin(req, 'chatbot');
+    return chatbot.leadDetail(ctx, idParam((req.params as { id: string }).id));
+  });
+  app.patch(`${P}/chatbot/contatos/:id`, async (req) => {
+    const a = await admin(req, 'chatbot');
+    return chatbot.patchLead(ctx, a.id, idParam((req.params as { id: string }).id), chatbot.leadPatchSchema.parse(req.body));
+  });
+  app.post(`${P}/chatbot/contatos/:id/anotacao`, async (req) => {
+    const a = await admin(req, 'chatbot');
+    const b = z.strictObject({ text: z.string().trim().min(2).max(1000) }).parse(req.body);
+    return chatbot.teamNote(ctx, a.id, idParam((req.params as { id: string }).id), b.text);
   });
 }
