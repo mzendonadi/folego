@@ -7,9 +7,9 @@ import { viewWhatsapp } from './partner-wa.js';
 
 const TABS = [
   ['painel', 'Painel', 'chart'],
+  ['base', 'Minha base', 'list'],
   ['folego', 'Contatos do Fôlego', 'check'],
   ['whatsapp', 'WhatsApp', 'chat'],
-  ['base', 'Minha base', 'list'],
   ['contratos', 'Contratos', 'card'],
   ['importar', 'Importar planilha', 'plus'],
 ];

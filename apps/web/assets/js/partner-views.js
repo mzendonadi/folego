@@ -110,36 +110,70 @@ export function openDealModal(ctx, opts) {
 const titleCase = (s) => String(s).toLowerCase().replace(/(^|\s)(\p{L})/gu, (m, a, b) => a + b.toUpperCase());
 
 // ---------------------------------------------------------------------------------------------------------------------
+const nf = (v) => Number(v).toLocaleString('pt-BR');
+const pctFmt = (v) => `${Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`;
+const deltaText = (cur, prev) => (prev > 0 ? `${cur >= prev ? '+' : ''}${Math.round(((cur - prev) / prev) * 100)}% sobre o mês anterior` : cur > 0 ? 'primeiros contratos do período' : 'ainda sem contratos neste mês');
+const mini = (label, value, sub) => el('div', { class: 'pt-mini' }, el('span', { class: 'pt-mini-label' }, label), el('strong', {}, value), sub ? el('span', { class: 'pt-mini-sub' }, sub) : null);
+
+/** Painel: visão ampla de TODA a operação do parceiro (base própria + contatos do Fôlego + contratos + WhatsApp + equipe). */
 export async function viewPainel(ctx) {
   const s = await ctx.call('GET', '/partner/summary');
-  const f = s.folego;
+  const o = s.overview;
   const d = s.deals;
-  const maxMonth = Math.max(1, ...s.months.map((m) => m.volumeCents));
-  const stageTotal = Math.max(1, s.base.total);
+  const w = o.whatsapp;
   const camp = s.campaigns[0];
+  const maxMonth = Math.max(1, ...s.months.map((m) => m.volumeCents));
+  const funnelTotal = Math.max(1, Object.values(o.funnel).reduce((a, b) => a + b, 0));
   const dueBtn = el('button', { class: 'btn btn-secondary btn-sm', type: 'button' }, 'Ver agora');
   dueBtn.addEventListener('click', () => ctx.go('base', { due: true }));
-  return el('div', { class: 'pt-stack' },
-    head(ctx.profile.tradeName ? `Olá, equipe ${titleCase(ctx.profile.tradeName).replace(/\s+(Intermediacoes|Intermediações)$/, '')}` : 'Olá', 'O resumo do que está andando, do que precisa de ação hoje e do que já virou contrato.'),
-    el('div', { class: 'pt-metrics' },
-      metric('Contatos do Fôlego', String(f.received), `${f.pending} aguardando seu primeiro contato`),
-      metric('Contratos fechados', String(d.folego.count + d.propria.count), `${brl(d.folego.volumeCents + d.propria.volumeCents)} em contratos`),
-      metric('Conversão dos contatos do Fôlego', `${f.conversionPct.toLocaleString('pt-BR')}%`, `${f.converted} de ${f.received} viraram contrato`),
-      metric('Comissão do Fôlego a pagar', brl(d.folego.commissionDueCents), camp ? `${pctText(camp.commissionBps)} sobre cada contrato do Fôlego` : 'sobre os contratos do Fôlego', 'is-accent')),
+  const goWa = el('button', { class: 'btn btn-secondary btn-sm', type: 'button' }, w.connected ? 'Abrir conversas' : 'Conectar o WhatsApp');
+  goWa.addEventListener('click', () => ctx.go('whatsapp'));
+  const originRow = (label, base, folego, total) => el('tr', {}, el('td', {}, label), el('td', {}, base), el('td', {}, folego), el('td', {}, el('strong', {}, total)));
+  const byO = o.deals.byOrigin;
+  return el('div', { class: 'pt-stack pt-painel' },
+    head(ctx.profile.tradeName ? `Olá, equipe ${titleCase(ctx.profile.tradeName).replace(/\s+(Intermediacoes|Intermediações)$/, '')}` : 'Olá', 'A operação inteira num só lugar: contatos, conversão, contratos, WhatsApp e equipe, somando a sua base e o que vem do Fôlego.'),
+    el('div', { class: 'pt-metrics four' },
+      metric('Contatos na operação', nf(o.contacts.total), `${nf(o.contacts.base)} na base · ${nf(o.contacts.folego)} do Fôlego`),
+      metric('Contratos fechados', nf(o.deals.count), `ticket médio ${brl(o.deals.avgTicketCents)}`),
+      metric('Volume contratado', brl(o.deals.volumeCents), `este mês ${brl(o.deals.thisMonth.volumeCents)}`),
+      metric('Conversão geral', pctFmt(o.conversion.overallPct), `${nf(o.funnel.fechado)} de ${nf(o.contacts.total)} contatos`, 'is-accent')),
+    el('div', { class: 'pt-metrics four' },
+      metric('Margem livre em aberto', brl(o.marginOpen.cents), `${nf(o.marginOpen.count)} contatos ainda sem contrato`),
+      metric('Retornos para hoje', nf(s.base.dueToday), 'da sua base, de hoje ou atrasados'),
+      metric('WhatsApp: não lidas', nf(w.unread), w.connected ? `${nf(w.open)} ${w.open === 1 ? 'conversa aberta' : 'conversas abertas'}` : 'WhatsApp ainda não conectado'),
+      metric('Comissão do Fôlego a pagar', brl(d.folego.commissionDueCents), camp ? `${pctText(camp.commissionBps)} sobre contratos do Fôlego` : 'sobre contratos do Fôlego', 'is-accent')),
     s.base.dueToday > 0 ? el('div', { class: 'pt-alert' }, icon('alert'), el('span', {}, `${s.base.dueToday} contato(s) da sua base com retorno marcado para hoje ou antes.`), dueBtn) : null,
     el('div', { class: 'pt-cols' },
-      section('Sua base por etapa', `${s.base.total.toLocaleString('pt-BR')} contatos importados de planilhas`,
-        s.base.total === 0 ? empty('Nenhum contato na base ainda', 'Importe sua planilha para organizar o trabalho por etapa.') : el('ul', { class: 'pt-funnel' }, ...STAGE_ORDER.map((k) => {
-          const n = s.base.byStage[k] ?? 0;
-          return el('li', {}, el('span', {}, STAGE[k]), el('div', { class: 'pt-bar' }, el('i', { class: `st-${k}`, style: `width:${Math.max(n ? 2 : 0, Math.round((n / stageTotal) * 100))}%` })), el('strong', {}, n.toLocaleString('pt-BR')));
+      section('Funil da operação', `${nf(o.contacts.total)} contatos, base própria e Fôlego somados`,
+        o.contacts.total === 0 ? empty('Nenhum contato ainda', 'Importe a sua planilha ou aguarde contatos do Fôlego.') : el('ul', { class: 'pt-funnel' }, ...STAGE_ORDER.map((k) => {
+          const n = o.funnel[k] ?? 0;
+          return el('li', {}, el('span', {}, STAGE[k]), el('div', { class: 'pt-bar' }, el('i', { class: `st-${k}`, style: `width:${Math.max(n ? 2 : 0, Math.round((n / funnelTotal) * 100))}%` })), el('strong', {}, `${nf(n)} · ${pctFmt((n / funnelTotal) * 100)}`));
         }))),
-      section('Contratos por mês', 'Valor fechado nos últimos meses',
+      section('Contratos por mês', deltaText(o.deals.thisMonth.volumeCents, o.deals.prevMonth.volumeCents),
         s.months.length === 0 ? empty('Nenhum contrato ainda', 'Quando você registrar o primeiro contrato, ele aparece aqui.') : el('ol', { class: 'pt-months' }, ...s.months.map((m) => el('li', {}, el('span', { class: 'pt-month-v' }, brl(m.volumeCents).replace(',00', '')), el('span', { class: 'pt-month-bar', style: `height:${Math.max(6, Math.round((m.volumeCents / maxMonth) * 100))}%`, title: `${m.count} contrato(s)` }), el('span', { class: 'pt-month-l' }, monthLabel(m.month)))))),
     ),
-    section('Comissão do Fôlego', 'O que é devido ao Fôlego sobre contratos fechados com contatos que ele enviou.',
-      el('div', { class: 'pt-split' },
-        metric('A pagar', brl(d.folego.commissionDueCents), `sobre ${brl(d.folego.volumeCents)} contratados`),
-        metric('Já pago', brl(d.folego.commissionPaidCents), 'baixado pelo Fôlego'))),
+    el('div', { class: 'pt-cols' },
+      section('Origem dos contatos', 'Quanto cada origem entrega',
+        el('div', { class: 'pt-table-wrap' }, el('table', { class: 'pt-table pt-table-fixed' },
+          el('thead', {}, el('tr', {}, ...['', 'Base própria', 'Fôlego', 'Total'].map((h) => el('th', { scope: 'col' }, h)))),
+          el('tbody', {},
+            originRow('Contatos', nf(o.contacts.base), nf(o.contacts.folego), nf(o.contacts.total)),
+            originRow('Contratos', nf(byO.propria.count), nf(byO.folego.count), nf(o.deals.count)),
+            originRow('Volume', brl(byO.propria.volumeCents), brl(byO.folego.volumeCents), brl(o.deals.volumeCents)),
+            originRow('Conversão', pctFmt(o.conversion.basePct), pctFmt(o.conversion.folegoPct), pctFmt(o.conversion.overallPct)))))),
+      section('WhatsApp, últimos 30 dias', w.connected ? 'Atendimento e disparos pelo número oficial' : 'Conecte o número para atender e vender pelo WhatsApp',
+        w.connected ? el('div', { class: 'pt-minis' },
+          mini('Conversas', nf(w.threads), w.open === 1 ? '1 aberta' : `${nf(w.open)} abertas`), mini('Não lidas', nf(w.unread)), mini('Enviadas', nf(w.sent30), `${nf(w.broadcasts30)} disparo(s)`),
+          mini('Recebidas', nf(w.received30)), mini('Taxa de resposta', pctFmt(w.replyPct), 'de quem recebeu mensagem'), mini('Taxa de leitura', pctFmt(w.readPct), 'das entregues'))
+          : empty('WhatsApp ainda não conectado', 'Em poucos minutos você recebe e envia mensagens por aqui.'),
+        el('div', { class: 'pt-actions' }, goWa))),
+    el('div', { class: 'pt-cols' },
+      section('Atividade da equipe, 30 dias', 'Registros feitos nas fichas dos contatos',
+        el('div', { class: 'pt-minis three' }, mini('Ligações', nf(o.activity30.calls)), mini('WhatsApp registrados', nf(o.activity30.whatsapp)), mini('Anotações', nf(o.activity30.notes)))),
+      section('Comissão do Fôlego', 'Devida ao Fôlego sobre contratos fechados com contatos que ele enviou',
+        el('div', { class: 'pt-minis two' },
+          mini('A pagar', brl(d.folego.commissionDueCents), `sobre ${brl(d.folego.volumeCents)} contratados`),
+          mini('Já pago', brl(d.folego.commissionPaidCents), 'baixado pelo Fôlego')))),
   );
 }
 

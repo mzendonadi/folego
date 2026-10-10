@@ -246,6 +246,22 @@ test('contatos do Fôlego: entrega só no portal, contrato com comissão em %, b
   assert.equal(sum.json.folego.converted, 1);
   assert.equal(sum.json.deals.folego.commissionDueCents, 457_500);
 
+  // visão consolidada: base própria (50 importados) + Fôlego (1), contratos das duas origens
+  const ov = sum.json.overview;
+  assert.deepEqual(ov.contacts, { total: 51, base: 50, folego: 1 });
+  assert.equal(ov.deals.count, 2);
+  assert.equal(ov.deals.volumeCents, 5_050_000);
+  assert.equal(ov.deals.avgTicketCents, 2_525_000);
+  assert.equal(ov.deals.byOrigin.folego.count, 1);
+  assert.equal(ov.deals.byOrigin.propria.count, 1);
+  assert.equal(ov.funnel.fechado, 2, 'a base fechada e o contato do Fôlego convertido somam no funil único');
+  assert.equal(ov.funnel.novo + ov.funnel.em_contato + ov.funnel.proposta + ov.funnel.fechado + ov.funnel.sem_interesse, 51);
+  assert.equal(ov.conversion.overallPct, 3.9);
+  assert.equal(ov.conversion.folegoPct, 100);
+  assert.ok(ov.marginOpen.cents > 0, 'margem livre dos contatos ainda em aberto');
+  assert.equal(ov.whatsapp.connected, false);
+  assert.equal(ov.activity30.calls, 1);
+
   // corrigir o valor recalcula a comissão com o % congelado na entrega
   const fix = await admin('PATCH', `/api/partner/deals/${deal.json.id}`, { headers: auth, body: { amountCents: 3_000_000 } });
   assert.equal(fix.status, 200, JSON.stringify(fix.json));

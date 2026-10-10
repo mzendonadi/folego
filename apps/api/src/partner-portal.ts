@@ -470,7 +470,77 @@ export async function summary(ctx: Ctx, partnerId: string) {
   const D = (o: string) => deals.rows.find((x) => x.origin === o);
   const received = (L.delivered ?? 0) + (L.contacted ?? 0) + (L.converted ?? 0);
   const folego = D('folego');
+
+  // Visão consolidada de TODA a operação do parceiro (base própria + contatos do Fôlego + contratos + WhatsApp), não só do que vem do Fôlego.
+  const [months2, margin, wa, activity] = await Promise.all([
+    ctx.db.query<{ m: string; n: string; volume: string }>(
+      `SELECT to_char(date_trunc('month', signed_on), 'YYYY-MM') AS m, count(*)::text AS n, coalesce(sum(amount_cents),0)::text AS volume
+         FROM app.partner_deals WHERE partner_id = $1 AND status = 'fechado' AND signed_on >= date_trunc('month', current_date) - interval '1 month' GROUP BY 1`,
+      [partnerId],
+    ),
+    ctx.db.query<{ cents: string; n: string }>(
+      `SELECT coalesce(sum(available_margin_cents),0)::text AS cents, count(*) FILTER (WHERE available_margin_cents > 0)::text AS n
+         FROM app.partner_contacts WHERE partner_id = $1 AND stage IN ('novo','em_contato','proposta')`,
+      [partnerId],
+    ),
+    ctx.db.query<{ connected: boolean; threads: string; unread: string; open_n: string; opted: string; sent: string; received: string; delivered: string; read: string; contacted: string; replied: string; broadcasts: string }>(
+      `SELECT EXISTS (SELECT 1 FROM app.wa_accounts WHERE partner_id = $1) AS connected,
+              (SELECT count(*) FROM app.wa_threads WHERE partner_id = $1)::text AS threads,
+              (SELECT coalesce(sum(unread_n),0) FROM app.wa_threads WHERE partner_id = $1)::text AS unread,
+              (SELECT count(*) FROM app.wa_threads WHERE partner_id = $1 AND state = 'aberta')::text AS open_n,
+              (SELECT count(*) FROM app.wa_threads WHERE partner_id = $1 AND opted_out)::text AS opted,
+              (SELECT count(*) FROM app.wa_messages WHERE partner_id = $1 AND direction = 'out' AND status <> 'falhou' AND status <> 'fila' AND created_at > now() - interval '30 days')::text AS sent,
+              (SELECT count(*) FROM app.wa_messages WHERE partner_id = $1 AND direction = 'in' AND created_at > now() - interval '30 days')::text AS received,
+              (SELECT count(*) FROM app.wa_messages WHERE partner_id = $1 AND direction = 'out' AND status IN ('entregue','lida') AND created_at > now() - interval '30 days')::text AS delivered,
+              (SELECT count(*) FROM app.wa_messages WHERE partner_id = $1 AND direction = 'out' AND status = 'lida' AND created_at > now() - interval '30 days')::text AS read,
+              (SELECT count(DISTINCT thread_id) FROM app.wa_messages WHERE partner_id = $1 AND direction = 'out' AND author <> 'sistema' AND status <> 'falhou' AND created_at > now() - interval '30 days')::text AS contacted,
+              (SELECT count(DISTINCT m.thread_id) FROM app.wa_messages m WHERE m.partner_id = $1 AND m.direction = 'in' AND m.created_at > now() - interval '30 days'
+                  AND EXISTS (SELECT 1 FROM app.wa_messages o WHERE o.thread_id = m.thread_id AND o.direction = 'out' AND o.author <> 'sistema' AND o.created_at < m.created_at))::text AS replied,
+              (SELECT count(*) FROM app.wa_broadcasts WHERE partner_id = $1 AND created_at > now() - interval '30 days')::text AS broadcasts`,
+      [partnerId],
+    ),
+    ctx.db.query<{ kind: string; n: string }>(`SELECT kind, count(*)::text AS n FROM app.partner_events WHERE partner_id = $1 AND created_at > now() - interval '30 days' GROUP BY kind`, [partnerId]),
+  ]);
+  const baseTotal = Object.values(B).reduce((s, n) => s + n, 0);
+  const folegoTotal = received + (L.rejected ?? 0);
+  const contactsTotal = baseTotal + folegoTotal;
+  const dealCount = deals.rows.reduce((s, x) => s + num(x.n), 0);
+  const dealVolume = deals.rows.reduce((s, x) => s + num(x.volume), 0);
+  const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 1000) / 10 : 0);
+  const month = (ym: string) => {
+    const r = months2.rows.find((x) => x.m === ym);
+    return { count: num(r?.n ?? 0), volumeCents: num(r?.volume ?? 0) };
+  };
+  const today = todaySaoPaulo();
+  const prevYm = new Date(Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)) - 2, 1)).toISOString().slice(0, 7);
+  const W = wa.rows[0]!;
+  const ev = Object.fromEntries(activity.rows.map((x) => [x.kind, num(x.n)])) as Record<string, number>;
+  const overview = {
+    contacts: { total: contactsTotal, base: baseTotal, folego: folegoTotal },
+    // Funil único: etapas da base própria somadas ao andamento dos contatos do Fôlego (novo, contatado, contrato, descartado).
+    funnel: {
+      novo: (B.novo ?? 0) + (L.delivered ?? 0),
+      em_contato: (B.em_contato ?? 0) + (L.contacted ?? 0),
+      proposta: B.proposta ?? 0,
+      fechado: (B.fechado ?? 0) + (L.converted ?? 0),
+      sem_interesse: (B.sem_interesse ?? 0) + (L.rejected ?? 0),
+    },
+    conversion: { overallPct: pct((B.fechado ?? 0) + (L.converted ?? 0), contactsTotal), basePct: pct(B.fechado ?? 0, baseTotal), folegoPct: pct(L.converted ?? 0, folegoTotal) },
+    deals: {
+      count: dealCount, volumeCents: dealVolume, avgTicketCents: dealCount ? Math.round(dealVolume / dealCount) : 0,
+      thisMonth: month(today.slice(0, 7)), prevMonth: month(prevYm),
+      byOrigin: { folego: { count: num(folego?.n ?? 0), volumeCents: num(folego?.volume ?? 0) }, propria: { count: num(D('propria')?.n ?? 0), volumeCents: num(D('propria')?.volume ?? 0) } },
+    },
+    marginOpen: { cents: num(margin.rows[0]?.cents ?? 0), count: num(margin.rows[0]?.n ?? 0) },
+    whatsapp: {
+      connected: W.connected, threads: num(W.threads), unread: num(W.unread), open: num(W.open_n), optedOut: num(W.opted),
+      sent30: num(W.sent), received30: num(W.received), broadcasts30: num(W.broadcasts),
+      replyPct: pct(Math.min(num(W.replied), num(W.contacted)), num(W.contacted)), readPct: pct(num(W.read), num(W.delivered)),
+    },
+    activity30: { calls: ev.ligacao ?? 0, whatsapp: ev.whatsapp ?? 0, notes: ev.nota ?? 0 },
+  };
   return {
+    overview,
     folego: { received, pending: L.delivered ?? 0, contacted: L.contacted ?? 0, converted: L.converted ?? 0, discarded: L.rejected ?? 0, conversionPct: received ? Math.round(((L.converted ?? 0) / received) * 1000) / 10 : 0 },
     base: { total: Object.values(B).reduce((s, n) => s + n, 0), byStage: B, dueToday: num(next.rows[0]?.n ?? 0) },
     deals: {
