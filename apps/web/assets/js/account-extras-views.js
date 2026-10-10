@@ -3,7 +3,7 @@ import { el, icon, toast } from './dom.js';
 import { brl, percentToBps } from './format.js';
 import { moneyInput } from './money.js';
 import { confirmDialog } from './confirm.js';
-import { mapBanner } from './account-map-banner.js';
+import { mapBanner, partnerPrompt } from './account-map-banner.js';
 
 const card =(...c) => el('section', { class: 'card d-section' }, ...c.filter(Boolean));
 const fmtDate = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString('pt-BR');
@@ -342,6 +342,7 @@ export function viewDividas(ctx) {
     planBox,
     card(el('h2', {}, 'Nova dívida'), el('p', { class: 'muted' }, 'Cadastre o que você deve. O saldo cai a cada pagamento registrado, e o pagamento entra nos seus lançamentos como gasto em "Dívidas".'), form),
     card(el('h2', {}, 'Suas dívidas'), rows.length ? el('ul', { class: 'entries' }, ...rows) : el('p', { class: 'muted' }, 'Nenhuma dívida cadastrada ainda.')),
+    partnerPrompt(ctx),
   );
 }
 

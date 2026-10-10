@@ -133,6 +133,34 @@ async function viaErApi(f: typeof fetch): Promise<Row[]> {
   return [{ date: spToday(), value: body.rates.BRL }];
 }
 
+/** Bolsas pelo mundo: índice, praça e o símbolo da fonte pública (Yahoo Finance, fechamento diário). */
+export const EXCHANGES = {
+  ibov: { name: 'Ibovespa', place: 'B3 · Brasil', symbol: '^BVSP' },
+  nasdaq: { name: 'Nasdaq Composite', place: 'Nasdaq · EUA', symbol: '^IXIC' },
+  nyse: { name: 'NYSE Composite', place: 'NYSE · EUA', symbol: '^NYA' },
+  sse: { name: 'SSE Composite', place: 'Xangai · China', symbol: '000001.SS' },
+  euronext: { name: 'Euronext 100', place: 'Euronext · Europa', symbol: '^N100' },
+} as const;
+export type ExchangeCode = keyof typeof EXCHANGES;
+const MARKET_CODES = ['selic', 'ipca12', 'cdi', 'usd'];
+
+/** Fechamento diário de um índice (Yahoo Finance, sem chave). Dia = o do pregão na praça do índice. */
+async function viaYahoo(f: typeof fetch, symbol: string): Promise<Row[]> {
+  const res = await f(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1y&interval=1d`, { signal: AbortSignal.timeout(15_000), headers: { accept: 'application/json', 'user-agent': 'Mozilla/5.0 (compatible; Folego/1.0; +https://folego.online)' } });
+  if (!res.ok) throw new Error(`yahoo_http_${res.status}`);
+  const body = (await res.json()) as { chart?: { result?: Array<{ meta?: { gmtoffset?: number }; timestamp?: number[]; indicators?: { quote?: Array<{ close?: Array<number | null> }> } }> } };
+  const r = body.chart?.result?.[0];
+  const ts = r?.timestamp ?? [];
+  const close = r?.indicators?.quote?.[0]?.close ?? [];
+  const off = r?.meta?.gmtoffset ?? 0;
+  const byDay = new Map<string, number>();
+  ts.forEach((t, i) => {
+    const v = close[i];
+    if (typeof v === 'number' && Number.isFinite(v) && v > 0 && Number.isFinite(t)) byDay.set(new Date((t + off) * 1000).toISOString().slice(0, 10), v);
+  });
+  return [...byDay.entries()].map(([date, value]) => ({ date, value }));
+}
+
 /**
  * Cada série é independente e tem plano B: o Banco Central é a fonte oficial; se ele não responder (rede, certificado ou
  * bloqueio do provedor da VPS), usamos o espelho público equivalente. `errors` guarda o motivo de cada tentativa.
@@ -140,7 +168,7 @@ async function viaErApi(f: typeof fetch): Promise<Row[]> {
 export async function refreshMarket(ctx: Ctx, opts: { fetchFn?: typeof fetch; force?: boolean; log?: (e: Record<string, unknown>) => void } = {}): Promise<number> {
   if (!opts.force) {
     // "Fresco" = todas as séries têm dado recente; se alguma faltar, tenta de novo (no máximo a cada 30 min).
-    const last = await ctx.db.query<{ n: string; fresh: string }>(`SELECT count(DISTINCT code)::text AS n, count(DISTINCT code) FILTER (WHERE fetched_at > now() - make_interval(hours => ${REFRESH_HOURS}))::text AS fresh FROM app.market_indicators`);
+    const last = await ctx.db.query<{ n: string; fresh: string }>(`SELECT count(DISTINCT code)::text AS n, count(DISTINCT code) FILTER (WHERE fetched_at > now() - make_interval(hours => ${REFRESH_HOURS}))::text AS fresh FROM app.market_indicators WHERE code = ANY($1::text[])`, [MARKET_CODES]);
     if (num(last.rows[0]?.fresh ?? 0) >= Object.keys(SERIES).length) return 0;
     const st = await marketStatus(ctx);
     if (st && Date.now() - Date.parse(st.at) < 30 * 60_000 && num(last.rows[0]?.n ?? 0) > 0) return 0;
@@ -184,6 +212,18 @@ export async function refreshMarket(ctx: Ctx, opts: { fetchFn?: typeof fetch; fo
       opts.log?.({ evento: 'mercado_falhou', serie: code, motivo: run.errors[code] });
     }
   }
+  // Bolsas: fonte própria, falha de uma não derruba as outras nem os indicadores acima.
+  for (const code of Object.keys(EXCHANGES) as ExchangeCode[]) {
+    try {
+      const rows = await viaYahoo(f, EXCHANGES[code].symbol);
+      if (rows.length === 0) throw new Error('formato_inesperado');
+      for (const r of rows) await ctx.db.query(`INSERT INTO app.market_indicators(code, ref_date, value) VALUES ($1,$2,$3) ON CONFLICT (code, ref_date) DO UPDATE SET value = EXCLUDED.value, fetched_at = now()`, [code, r.date, r.value]);
+      run.saved += rows.length;
+    } catch (e) {
+      run.errors[code] = `yahoo: ${reason(e)}`;
+      opts.log?.({ evento: 'mercado_falhou', serie: code, motivo: run.errors[code] });
+    }
+  }
   await ctx.db.query(`DELETE FROM app.market_indicators WHERE ref_date < current_date - 800`);
   await saveStatus(ctx, run);
   return run.saved;
@@ -192,7 +232,7 @@ export async function refreshMarket(ctx: Ctx, opts: { fetchFn?: typeof fetch; fo
 let lastLazy = 0;
 /** Chamado pela API quando alguém abre o Cenário econômico e ainda não há dado (ou ele está velho): não depende só do worker. */
 export async function refreshIfNeeded(ctx: Ctx): Promise<void> {
-  const r = await ctx.db.query<{ n: string; fresh: string }>(`SELECT count(DISTINCT code)::text AS n, count(DISTINCT code) FILTER (WHERE fetched_at > now() - interval '36 hours')::text AS fresh FROM app.market_indicators`);
+  const r = await ctx.db.query<{ n: string; fresh: string }>(`SELECT count(DISTINCT code)::text AS n, count(DISTINCT code) FILTER (WHERE fetched_at > now() - interval '36 hours')::text AS fresh FROM app.market_indicators WHERE code = ANY($1::text[])`, [MARKET_CODES]);
   if (num(r.rows[0]?.fresh ?? 0) >= 3) return;
   if (Date.now() - lastLazy < 5 * 60_000) return;
   lastLazy = Date.now();
@@ -200,6 +240,41 @@ export async function refreshIfNeeded(ctx: Ctx): Promise<void> {
 }
 
 interface Point { date: string; value: number }
+
+export interface ExchangeView {
+  code: ExchangeCode;
+  name: string;
+  place: string;
+  /** Pontos do índice no último fechamento; nulo quando não há dado ou o plano não inclui. */
+  value: number | null;
+  asOf: string | null;
+  /** Variação no último pregão e em 3 meses, em %. */
+  dayPct: number | null;
+  threeMonthsPct: number | null;
+  history: Point[];
+}
+
+/** Bolsas do mundo (último fechamento, variação do dia e de 3 meses, e uma linha semanal para o gráfico). */
+export async function loadExchanges(ctx: Ctx): Promise<ExchangeView[]> {
+  const out: ExchangeView[] = [];
+  for (const code of Object.keys(EXCHANGES) as ExchangeCode[]) {
+    const r = await ctx.db.query<{ ref_date: Date | string; value: string }>(`SELECT ref_date, value FROM app.market_indicators WHERE code = $1 ORDER BY ref_date DESC LIMIT 260`, [code]);
+    const s = r.rows.map((x) => ({ date: new Date(x.ref_date as string).toISOString().slice(0, 10), value: num(x.value) })).reverse();
+    const last = s[s.length - 1];
+    const prev = s[s.length - 2];
+    const target = last ? Date.parse(`${last.date}T00:00:00Z`) - 90 * 86_400_000 : 0;
+    const old = [...s].reverse().find((p) => Date.parse(`${p.date}T00:00:00Z`) <= target);
+    const pct = (a: number, b: number) => Math.round(((a - b) / b) * 10_000) / 100;
+    out.push({
+      code, name: EXCHANGES[code].name, place: EXCHANGES[code].place,
+      value: last?.value ?? null, asOf: last?.date ?? null,
+      dayPct: last && prev ? pct(last.value, prev.value) : null,
+      threeMonthsPct: last && old ? pct(last.value, old.value) : null,
+      history: s.filter((_, i) => i % 5 === 0 || i === s.length - 1),
+    });
+  }
+  return out;
+}
 
 async function series(ctx: Ctx, code: Code, limit: number): Promise<Point[]> {
   const r = await ctx.db.query<{ ref_date: Date | string; value: string }>(`SELECT ref_date, value FROM app.market_indicators WHERE code = $1 ORDER BY ref_date DESC LIMIT $2`, [code, limit]);
@@ -221,7 +296,7 @@ export async function loadIndicators(ctx: Ctx): Promise<{ indicators: Indicators
     const b = ago(s, days);
     return a !== null && b !== null ? Math.round((a - b) * 10000) / 10000 : null;
   };
-  const upd = await ctx.db.query<{ at: Date | null }>(`SELECT max(fetched_at) AS at FROM app.market_indicators`);
+  const upd = await ctx.db.query<{ at: Date | null }>(`SELECT max(fetched_at) AS at FROM app.market_indicators WHERE code = ANY($1::text[])`, [MARKET_CODES]);
   return {
     indicators: { selicPct: last(selic), ipca12Pct: last(ipca), cdiPct: last(cdi), usdBrl: last(usd), selicTrend: trend(selic, 90), ipcaTrend: trend(ipca, 90), usdTrend: trend(usd, 90) },
     updatedAt: upd.rows[0]?.at ? new Date(upd.rows[0].at).toISOString() : null,

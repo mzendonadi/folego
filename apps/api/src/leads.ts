@@ -66,7 +66,16 @@ export async function leadState(ctx: Ctx, caseId: string, diagnosis: Diagnosis, 
   return { enabled: true, available: categories.length > 0, categories, estimatedSavingsCents: diagnosis.refinance.suitabilityOk ? diagnosis.refinance.estimatedSavingsCents : 0, active };
 }
 
-const normalizePhone = (raw: string): string | null => {
+/** Estado do formulário de parceiro para um diagnóstico (pago ou não): a prévia grátis usa isto para mostrar o convite. */
+export async function leadStateFor(ctx: Ctx, sessionId: string, caseId: string): Promise<LeadState> {
+  if (!ctx.config.leadsEnabled) return { enabled: false, available: false, categories: [], estimatedSavingsCents: 0, active: null };
+  await ownedCase(ctx.db, sessionId, caseId);
+  const c = await loadCase(ctx, caseId);
+  if (!c.diagnosis) return { enabled: false, available: false, categories: [], estimatedSavingsCents: 0, active: null };
+  return leadState(ctx, caseId, c.diagnosis, c.inputs.debts ?? []);
+}
+
+const normalizePhone =(raw: string): string | null => {
   let d = raw.replace(/\D/g, '');
   if (d.startsWith('55') && d.length > 11) d = d.slice(2);
   return /^[1-9]{2}9?\d{8}$/.test(d) ? d : null;
@@ -95,9 +104,8 @@ export interface LeadInput {
 
 export async function submitLead(ctx: Ctx, args: { sessionId: string; caseId: string; ipHash: Buffer | null; userAgent: string | null; input: LeadInput }): Promise<{ partners: number }> {
   if (!ctx.config.leadsEnabled) throw notFound();
+  // Vale também para quem só fez o diagnóstico grátis: os dados do perfil já vieram do formulário do diagnóstico (nada é pedido de novo, só nome e telefone).
   await ownedCase(ctx.db, args.sessionId, args.caseId);
-  const ent = await ctx.db.query(`SELECT 1 FROM app.entitlements WHERE case_id = $1 AND product_code = 'recovery_map' AND expires_at > now()`, [args.caseId]);
-  if (ent.rows.length === 0) throw new AppError(403, 'no_access', 'Disponível só depois do Mapa');
   const c = await loadCase(ctx, args.caseId);
   const debts = c.inputs.debts ?? [];
   if (!c.diagnosis) throw new AppError(409, 'not_ready', 'O Mapa ainda está sendo preparado');

@@ -267,6 +267,7 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
       if (location.pathname.startsWith('/conta')) history.replaceState(history.state, '', hashFor(id));
       panel.replaceChildren(el('p', { class: 'muted acc-loading', role: 'status' }, 'Carregando…'));
       try {
+        if (ctx.leadsOn === undefined) ctx.leadsOn = Boolean((await api.getFeatures().catch(() => ({}))).leads); // convite a parceiros só se o recurso está ligado
         if (NEEDS_MONTH.has(id)) ctx.data = await api.getMonth(month);
         if (id === 'lancamentos') ctx.wallets = await ctx.api.getWallets().catch(() => null);
         if (id === 'coach') ctx.overview = await api.getCoachOverview();
@@ -280,7 +281,11 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
           [ctx.debts, ctx.mapOffer] = await Promise.all([ctx.api.getDebts(ctx.debtExtra ?? 0), ctx.api.getMapOffer().catch(() => ({ eligible: false }))]);
         }
         if (id === 'carteiras') ctx.wallets = await ctx.api.getWallets();
-        if (id === 'cartoes' && ctx.has('cards')) [ctx.cards, ctx.wallets] = await Promise.all([ctx.api.getCards(), ctx.api.getWallets().catch(() => null)]);
+        if (id === 'cartoes' && ctx.has('cards')) {
+          let cats = null;
+          [ctx.cards, ctx.wallets, cats] = await Promise.all([ctx.api.getCards(), ctx.api.getWallets().catch(() => null), ctx.api.getCategories().catch(() => null)]);
+          ctx.customCategories = cats?.custom ?? [];
+        }
         if (id === 'lembretes') ctx.reminders = (await ctx.api.getReminders()).reminders;
         if (id === 'treinador') ctx.coach = await api.getCoach().catch(() => null);
         if (mine !== token) return; // a pessoa já foi para outra aba

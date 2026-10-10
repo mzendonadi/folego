@@ -43,6 +43,8 @@ export const state = {
   paid: false,
   /** Assinante do Prumo: preço/uso do Mapa calculados pelo servidor (null para visitantes e para o plano Controle). */
   mapOffer: null,
+  /** Veio do convite "Falar com um parceiro": na prévia, abre o formulário do parceiro. */
+  partnerGoal: false,
 };
 
 // O rascunho fica só neste navegador (sessionStorage) para o refresh não apagar o formulário.

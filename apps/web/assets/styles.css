@@ -1163,6 +1163,53 @@ fieldset.offer-box { min-inline-size: 0; }
 @media (prefers-reduced-motion: no-preference) { .map-banner { animation: map-in .35s ease-out both; } }
 @keyframes map-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
+/* Fale com um parceiro Fôlego: convite em destaque (landing e Prumo), cartão na prévia/entrega e formulário em painel claro. */
+.partner-band { background: var(--cta-bg); color: var(--cta-ink); }
+.partner-band-inner { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: var(--s6); align-items: center; }
+.partner-band h2 { color: var(--cta-ink); margin: 0 0 var(--s3); }
+.partner-band-tag { display: inline-block; margin: 0 0 var(--s3); padding: 4px 12px; border-radius: 999px; font-size: 0.875rem; font-weight: 700; background: color-mix(in srgb, var(--cta-ink) 16%, transparent); }
+.partner-band-lead { margin: 0; max-width: 56ch; font-size: 1.0625rem; line-height: 1.55; }
+.partner-band-points, .partner-points { list-style: none; margin: var(--s4) 0 0; padding: 0; display: grid; gap: var(--s2); }
+.partner-band-points li, .partner-points li { display: flex; align-items: center; gap: 10px; }
+.partner-band-points .icon, .partner-points .icon { flex: none; width: 1.1em; height: 1.1em; }
+.partner-band-cta { display: grid; justify-items: center; gap: var(--s3); padding: var(--s5); border-radius: var(--radius); text-align: center; background: color-mix(in srgb, var(--cta-ink) 10%, transparent); }
+.partner-band-cta .fine, .partner-banner-cta .fine { margin: 0; color: inherit; opacity: 0.88; }
+.partner-band .btn-primary, .partner-banner .btn-primary, .partner-card > .btn-primary { background: var(--cta-ink); color: var(--cta-bg); }
+.partner-band .btn-primary:hover, .partner-banner .btn-primary:hover, .partner-card > .btn-primary:hover { background: var(--cta-ink); color: var(--cta-bg); }
+.partner-banner { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--s4) var(--s5); align-items: center; padding: var(--s5); border-radius: var(--radius); background: var(--cta-bg); color: var(--cta-ink); }
+.partner-banner h2 { margin: 0 0 var(--s2); font-size: 1.375rem; color: var(--cta-ink); }
+.partner-banner p { margin: 0; }
+.partner-banner-cta { display: grid; justify-items: center; gap: var(--s2); text-align: center; }
+.partner-card { display: grid; gap: var(--s4); padding: var(--s6) var(--s5); background: var(--cta-bg); color: var(--cta-ink); border-color: transparent; }
+.partner-card h2 { margin: 0; color: var(--cta-ink); }
+.partner-head { display: flex; align-items: center; gap: var(--s4); }
+.partner-ico { flex: none; display: grid; place-items: center; width: 52px; height: 52px; border-radius: 16px; background: color-mix(in srgb, var(--cta-ink) 14%, transparent); }
+.partner-ico .icon { width: 28px; height: 28px; }
+.partner-sub { margin: 4px 0 0; font-family: var(--font-display); font-size: 1.25rem; }
+.partner-points { margin-top: 0; }
+.partner-card > .btn-primary { justify-self: start; }
+.partner-card > .fine { color: inherit; opacity: 0.88; }
+.partner-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s4); padding: var(--s5); border-radius: var(--radius); background: var(--surface); color: var(--ink); }
+.partner-form[hidden] { display: none; }
+.partner-cats, .partner-consent, .partner-actions, .partner-wide { grid-column: 1 / -1; }
+.partner-cats { display: grid; gap: var(--s3); margin: 0; padding: 0; border: 0; min-width: 0; }
+.partner-cats legend { padding: 0; margin-bottom: var(--s2); }
+.partner-opt { display: flex; align-items: flex-start; gap: var(--s3); padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); cursor: pointer; }
+.partner-opt:has(input:checked) { border-color: var(--primary); background: var(--mint); color: var(--mint-ink); }
+.partner-opt > span { display: grid; gap: 2px; }
+.partner-form .fine { margin: 0; color: var(--muted); }
+.partner-actions { display: flex; justify-content: center; }
+.partner-actions .btn { width: 100%; max-width: 420px; justify-content: center; }
+@media (max-width: 860px) { .partner-band-inner { grid-template-columns: 1fr; } }
+@media (max-width: 620px) {
+  .partner-banner { grid-template-columns: 1fr; }
+  .partner-banner .btn, .partner-band-cta .btn { width: 100%; justify-content: center; }
+  .partner-card { padding: var(--s5) var(--s4); }
+  .partner-card > .btn-primary { justify-self: stretch; justify-content: center; }
+  .partner-head { align-items: flex-start; }
+  .partner-form { grid-template-columns: 1fr; padding: var(--s4); }
+}
+
 /* Prumo > Contas conectadas: linha da conexão com o aviso e os botões (reconectar, atualizar, desconectar) embaixo no celular. */
 .wallet-row.of-row { grid-template-columns: minmax(0, 1fr) auto; }
 .of-row .of-actions { justify-content: flex-end; flex-wrap: wrap; }
@@ -1227,3 +1274,59 @@ fieldset.offer-box { min-inline-size: 0; }
   .cc-acts .btn { flex: 1 1 calc(50% - var(--s2)); justify-content: center; }
   .cc-add > summary { width: 100%; justify-content: center; }
 }
+
+/* Formulário padrão (Cartões, Metas): duas colunas no desktop, uma no mobile; rótulos, textos e botões centralizados e alinhados pelo topo. */
+.entry-form.form-std, .goal-form.form-std { display: grid; grid-template-columns: 1fr; gap: var(--s4); align-items: start; width: 100%; max-width: 760px; margin-inline: auto; }
+@media (min-width: 640px) { .entry-form.form-std, .goal-form.form-std { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.form-std .field { min-width: 0; justify-items: stretch; align-content: start; }
+.form-std .field-wide { grid-column: 1 / -1; }
+.form-std .label { text-align: center; line-height: 1.3; }
+.form-std .input, .form-std select.input { text-align: center; text-align-last: center; min-height: 48px; }
+.form-std .input::placeholder { text-align: center; }
+.form-std .field .fine, .form-std > .fine { text-align: center; margin: 0; }
+.form-std .cat-new { justify-content: center; }
+.form-std .btn[type="submit"], .form-std > .btn { grid-column: 1 / -1; justify-self: center; min-width: 240px; justify-content: center; }
+@media (max-width: 620px) { .form-std .btn[type="submit"], .form-std > .btn { width: 100%; min-width: 0; } }
+
+/* Tela Cartões: cabeçalhos, números e ações centralizados. */
+.cc-screen .card > h2, .cc-screen .card > .section-sub, .cc-screen .card > .muted { text-align: center; }
+.cc-screen .cc-top { flex-direction: column; align-items: center; text-align: center; }
+.cc-screen .cc-top > div, .cc-screen .cc-add { width: 100%; }
+.cc-screen .cc-add > summary { justify-content: center; margin-inline: auto; width: fit-content; min-width: 240px; }
+.cc-screen .lis-block { text-align: center; }
+.cc-screen .cc-tile { position: relative; }
+.cc-screen .cc-head { flex-direction: column; text-align: center; gap: var(--s2); }
+.cc-screen .cc-head .icon-btn { position: absolute; top: 10px; right: 10px; }
+.cc-screen .cc-stat { text-align: center; justify-items: center; }
+.cc-screen .cc-acts { justify-content: center; }
+.cc-screen .cc-area { display: grid; justify-items: center; }
+.cc-screen .cc-area:empty { display: none; }
+.cc-screen .cc-panel-body { width: 100%; max-width: 760px; margin-inline: auto; }
+.cc-screen .cc-panel-body > p, .cc-screen .cc-panel-body > h4 { text-align: center; }
+.cc-screen .button-row { justify-content: center; }
+.cc-screen .locked-box { justify-content: center; text-align: left; }
+.cc-screen .note { justify-content: center; text-align: left; }
+@media (max-width: 620px) {
+  .cc-screen .cc-stat { grid-template-columns: 1fr; justify-items: center; }
+  .cc-screen .cc-stat .fine { grid-column: auto; }
+}
+
+/* Tela Metas: título, abertura do formulário e modelos centralizados, no mesmo padrão dos Cartões. */
+.meta-screen .card > h2 { text-align: center; }
+.meta-screen .new-goal > summary { justify-content: center; text-align: center; }
+.meta-screen .goal-templates { display: grid; justify-items: center; text-align: center; gap: var(--s2); }
+.meta-screen .goal-templates .button-row { justify-content: center; }
+.meta-screen .goal-card { text-align: center; justify-items: center; }
+.meta-screen .goal-card .goal-top { justify-content: center; text-align: center; }
+.meta-screen .goal-card .progress, .meta-screen .goal-card .goal-nums { width: 100%; }
+.meta-screen .goal-card .no-print { display: grid; justify-items: center; }
+
+/* Simulador: bloco "Transformar em meta" depois do resultado. */
+.sim-save { display: grid; justify-items: center; gap: var(--s3); margin-top: var(--s4); padding: var(--s5); border-radius: var(--radius-sm); background: var(--sunken); text-align: center; }
+.sim-save h3, .sim-save p { margin: 0; }
+.sim-save .field { width: 100%; max-width: 420px; }
+.sim-save .input { text-align: center; }
+
+/* Campo que sobra sozinho na última linha fica centralizado, com a mesma largura de uma coluna. */
+.form-std .field-solo { grid-column: 1 / -1; justify-self: center; width: 100%; }
+@media (min-width: 640px) { .form-std .field-solo { width: calc(50% - var(--s4) / 2); } }

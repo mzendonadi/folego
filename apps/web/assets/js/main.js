@@ -3,6 +3,7 @@ import { state, loadDraft, wipeAll, saveDraft, emptyAnswers } from './state.js';
 import { initIntake, rebuildIntake, goTo, buildInput, isComplete, answersFromInput } from './intake.js';
 import { renderPreview, renderDelivery } from './results.js';
 import { renderCheckout } from './checkout.js';
+import { leadsSection } from './leads.js';
 import { isPending, renderGenerated } from './generated.js';
 import { renderTools } from './tools.js';
 import { renderTranslator } from './translator.js';
@@ -383,7 +384,38 @@ async function onIntakeComplete() {
   show('preview');
 }
 
+// Fale com um parceiro Fôlego na prévia grátis: o mesmo convite de quem comprou o Mapa, sem exigir compra.
+async function mountPartnerCard() {
+  const root = $('#preview-root');
+  root.querySelector('#propostas')?.remove();
+  let st;
+  try {
+    st = await api.getLeadState(state.caseId);
+  } catch {
+    return; // recurso desligado ou sem conexão: a prévia segue sem o convite
+  }
+  const node = leadsSection(st, {
+    onSubmit: async (body) => {
+      await api.submitLead(state.caseId, body);
+      await mountPartnerCard();
+    },
+    onRevoke: async () => {
+      await api.revokeLead(state.caseId);
+      await mountPartnerCard();
+    },
+  });
+  const main = root.querySelector('.preview-main');
+  if (!node || !main) return;
+  main.insertBefore(node, main.querySelector('.locked-card'));
+  if (state.partnerGoal) {
+    state.partnerGoal = false; // veio do convite "Falar com um parceiro": já abre o formulário
+    if (node.querySelector('form')?.hidden) node.querySelector('button.btn-primary')?.click();
+    window.setTimeout(() => node.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' }), 120);
+  }
+}
+
 function renderPreviewView() {
+  void mountPartnerCard();
   renderPreview($('#preview-root'), state.preview, {
     offer: state.mapOffer,
     onBuy: () => {
@@ -620,6 +652,7 @@ function bindGlobalClicks() {
     const target = event.target instanceof Element ? event.target : null;
     if (!target) return;
 
+    if (target.closest('[data-partner]')) state.partnerGoal = true; // convite "Falar com um parceiro": depois do diagnóstico, abre o formulário do parceiro
     if (target.closest('[data-start]')) {
       track('cta', { id: 'start' });
       return startFlow();
@@ -705,6 +738,8 @@ function init() {
   bindGlobalClicks();
   observeReveal();
   observeHero();
+  // O convite a parceiros só aparece se o recurso está ligado neste servidor.
+  api.getFeatures().then((f) => document.querySelectorAll('[data-partner-banner]').forEach((n) => { n.hidden = !f?.leads; })).catch(() => undefined);
   window.addEventListener('popstate', route);
   window.addEventListener('hashchange', route);
   // Preços e aviso do site vêm do servidor (espera no máximo 1,5 s) antes do primeiro desenho.

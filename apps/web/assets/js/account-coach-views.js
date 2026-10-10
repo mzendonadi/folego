@@ -2,6 +2,7 @@
 import { el, icon, toast } from './dom.js';
 import { brl } from './format.js';
 import { CATEGORY_LABEL } from '../vendor/engine.js';
+import { partnerPrompt } from './account-map-banner.js';
 
 const card = (...c) => el('section', { class: 'card d-section' }, ...c.filter(Boolean));
 const PLAN_NAME = { controle: 'Controle', ousado: 'Ousado', desbravador: 'Desbravador' };
@@ -32,6 +33,13 @@ function svgLine(points, { label }) {
 }
 
 export function viewCoach(ctx) {
+  const node = viewCoachBody(ctx);
+  const invite = partnerPrompt(ctx);
+  if (invite) node.append(invite);
+  return node;
+}
+
+function viewCoachBody(ctx) {
   const o = ctx.overview;
   const h = o.health;
   const gauge = el(
@@ -165,9 +173,29 @@ export function viewMercado(ctx) {
   const insights = m.insights.map((x) => x.locked
     ? el('li', { class: 'insight is-locked' }, icon('lock', 'icon icon-lock'), el('strong', {}, x.title), el('span', { class: 'pill' }, `Plano ${PLAN_NAME[x.minPlan]}`))
     : el('li', { class: `insight tone-${x.tone}` }, el('strong', {}, x.title), el('p', {}, x.text)));
+  const signed = (v) => (v === null ? '—' : `${v > 0 ? '+' : ''}${v.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`);
+  const tone = (v) => (v === null || v === 0 ? '' : v > 0 ? 'pos' : 'neg');
+  const exchangeTile = (x) => (m.exchangesLocked
+    ? el('div', { class: 'indicator is-locked' }, icon('lock', 'icon icon-lock'), el('span', { class: 'fine' }, `${x.name} (${x.place})`))
+    : el(
+      'div', { class: 'indicator' },
+      el('span', { class: 'fine muted' }, `${x.name} · ${x.place}`),
+      el('strong', { class: 'indicator-value' }, x.value === null ? 'Sem dado agora' : x.value.toLocaleString('pt-BR', { maximumFractionDigits: 0 }) + ' pts'),
+      el('span', { class: `fine ${tone(x.dayPct)}` }, `Dia ${signed(x.dayPct)} · 3 meses ${signed(x.threeMonthsPct)}`),
+      x.history?.length > 1 ? svgLine(x.history, { label: `Evolução: ${x.name}` }) : null,
+    ));
+  const exchanges = (m.exchanges ?? []).length
+    ? card(
+      el('h2', {}, 'Bolsas pelo mundo'),
+      el('p', { class: 'section-sub' }, m.exchangesLocked ? 'B3, Nasdaq, NYSE, Xangai e Euronext no plano Ousado ou Desbravador.' : 'Último fechamento de cada praça. Pontos do índice, não valem em reais.'),
+      el('div', { class: 'indicators' }, ...m.exchanges.map(exchangeTile)),
+      m.exchangesLocked ? el('div', { class: 'button-row no-print' }, Object.assign(el('button', { class: 'btn btn-secondary btn-sm', type: 'button' }, 'Ver planos'), { onclick: () => ctx.goTab('plano') })) : null,
+    )
+    : null;
   return el(
     'div', { class: 'acc-stack' },
     card(el('h2', {}, 'Cenário econômico'), el('p', { class: 'section-sub' }, `Fonte: ${m.source}. Atualizado em ${new Date(m.updatedAt).toLocaleDateString('pt-BR')}.`), tiles),
+    exchanges,
     card(el('h2', {}, 'O que isso significa para você'), el('ul', { class: 'insights' }, ...insights), el('p', { class: 'fine muted' }, 'Informação educativa, não é recomendação de investimento. Os indicadores são oficiais; a leitura é feita com as regras do Fôlego e os seus dados.')),
   );
 }

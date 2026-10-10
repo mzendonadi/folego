@@ -7,7 +7,7 @@ import { formatBrl, OBJECTIVES, goalTemplates, PROGRAMS, applyMethods, compareMo
 import type { CoachFacts, CoachPlan } from './engine.ts';
 import { requireFeature } from './subscriptions.ts';
 import { listDebts, monthLimits } from './account-debts.ts';
-import { loadIndicators, refreshIfNeeded, marketStatus } from './market.ts';
+import { loadIndicators, loadExchanges, refreshIfNeeded, marketStatus } from './market.ts';
 import { layout } from './email.ts';
 import { planByCode } from './engine.ts';
 
@@ -156,7 +156,12 @@ export async function marketView(ctx: Ctx, subscriberId: string) {
   const { indicators, updatedAt, history } = await loadIndicators(ctx);
   const { facts, openRatesBps } = await loadCoachFacts(ctx, subscriberId);
   const insights = marketInsights(indicators, facts, openRatesBps).map((i) => { const locked = !planAtLeast(plan, i.minPlan); return { ...i, locked, text: locked ? '' : i.text }; });
+  // Bolsas pelo mundo: Ousado vê o último fechamento e a variação; Desbravador, também a linha do tempo.
+  const exchangesLocked = !planAtLeast(plan, 'ousado');
+  const exchanges = (await loadExchanges(ctx).catch(() => [])).map((x) => (exchangesLocked ? { ...x, value: null, dayPct: null, threeMonthsPct: null, history: [] } : planAtLeast(plan, 'desbravador') ? x : { ...x, history: [] }));
   return {
+    exchanges,
+    exchangesLocked,
     plan,
     indicators: planAtLeast(plan, 'desbravador') ? indicators : { ...indicators, usdBrl: null, usdTrend: null },
     updatedAt,

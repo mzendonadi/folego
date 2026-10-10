@@ -189,6 +189,26 @@ test('fluxo completo: consentimento → entrega assinada ao parceiro → portal 
   assert.deepEqual(hist.rows.map((r) => r.action), ['grant', 'revoke']);
 });
 
+test('quem só fez o diagnóstico grátis (sem comprar nada) também pode falar com um parceiro, sem digitar o perfil de novo', async () => {
+  const admin = client();
+  await admin('POST', '/api/admin/partners', { body: newPartner('Banco Épsilon Ltda', '10203040000150', 'epsilon@banco.com'), headers: { 'x-admin-token': ADMIN } });
+  const c = client();
+  const created = await c('POST', '/api/cases', { body: caseBody() });
+  const caseId = created.json.caseId as string;
+  const state = await c('GET', `/api/cases/${caseId}/leads`);
+  assert.equal(state.status, 200);
+  assert.equal(state.json.enabled, true);
+  assert.equal(state.json.available, true);
+  assert.equal(state.json.active, null);
+  assert.equal((await client()('GET', `/api/cases/${caseId}/leads`)).status, 404, 'o caso é de quem fez o diagnóstico');
+  const ok = await c('POST', `/api/cases/${caseId}/leads`, { body: { name: 'Ana Lima', phone: '(31) 98888-7777', categories: ['renegotiation'], consent: true } });
+  assert.equal(ok.status, 201, JSON.stringify(ok.json));
+  assert.ok((await c('GET', `/api/cases/${caseId}/leads`)).json.active);
+  const profile = await db.query<{ uf: string; income_band: string }>(`SELECT uf, income_band FROM app.lead_profiles WHERE case_id = $1`, [caseId]);
+  assert.equal(profile.rows[0]!.uf, 'SP', 'o perfil veio do diagnóstico');
+  assert.equal((await c('DELETE', `/api/cases/${caseId}/leads`)).status, 204);
+});
+
 test('revogar antes da entrega cancela o envio', async () => {
   const admin = client();
   await admin('POST', '/api/admin/partners', { body: newPartner('Banco Gama Ltda', '99888777000166', 'gama@banco.com'), headers: { 'x-admin-token': ADMIN } });

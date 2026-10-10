@@ -5,7 +5,8 @@ import { el, icon, toast } from './dom.js';
 import { brl, percentToBps, todayISO } from './format.js';
 import { moneyInput } from './money.js';
 import { confirmDialog } from './confirm.js';
-import { PLANS, CATEGORIES, CATEGORY_LABEL, parseCardInvoice } from '../vendor/engine.js';
+import { categorySelect, NEW_CAT } from './account-categories.js';
+import { PLANS, CATEGORY_LABEL, parseCardInvoice } from '../vendor/engine.js';
 
 const card = (...c) => el('section', { class: 'card d-section' }, ...c.filter(Boolean));
 const dayBr = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
@@ -46,7 +47,7 @@ function cardForm(ctx, existing = null) {
   const rate = el('input', { class: 'input', id: `${p}-juros`, type: 'text', inputmode: 'decimal', maxlength: '5', 'aria-label': 'Juros do rotativo ao mês (%)', value: String((existing?.revolvingRateBps ?? 1400) / 100).replace('.', ',') });
   const save = el('button', { class: 'btn btn-primary', type: 'submit' }, ...(existing ? ['Salvar'] : [icon('plus'), 'Adicionar cartão']));
   const form = el(
-    'form', { class: 'entry-form cc-form' },
+    'form', { class: 'entry-form cc-form form-std' },
     el('div', { class: 'field field-wide' }, el('label', { class: 'label', for: name.id }, 'Nome do cartão'), name),
     field('Bandeira', brand),
     field('4 últimos dígitos (opcional)', last4),
@@ -84,7 +85,7 @@ function purchasePanel(ctx, c) {
   const amount = moneyInput({ id: `pc-${k}-valor`, ariaLabel: 'Valor total da compra' });
   const date = el('input', { class: 'input', id: `pc-${k}-data`, type: 'date', value: todayISO(), max: todayISO() });
   const parcels = select(`pc-${k}-parc`, 'Parcelas', parcelOptions.map((n) => [n, n === 1 ? 'À vista' : `${n}x`]), 1);
-  const cat = select(`pc-${k}-cat`, 'Categoria', [['', 'Automática (pelo nome)'], ...CATEGORIES.filter((x) => x !== 'renda').map((x) => [x, catLabel(x)])], '');
+  const cat = categorySelect(ctx, { id: `pc-${k}-cat`, label: 'Categoria', first: 'Automática (pelo nome)', exclude: ['renda'] });
   const preview = el('p', { class: 'fine field-wide', 'aria-live': 'polite' });
   const refreshPreview = () => {
     const n = Number(parcels.value);
@@ -94,7 +95,7 @@ function purchasePanel(ctx, c) {
   parcels.addEventListener('change', refreshPreview);
   amount.input.addEventListener('input', refreshPreview);
   const add = el('button', { class: 'btn btn-primary', type: 'submit' }, icon('plus'), 'Lançar compra');
-  const form = el('form', { class: 'entry-form cc-form' },
+  const form = el('form', { class: 'entry-form cc-form form-std' },
     el('div', { class: 'field field-wide' }, el('label', { class: 'label', for: note.id }, 'O que foi'), note),
     field('Valor total (R$)', amount.input),
     field('Data da compra', date),
@@ -109,7 +110,7 @@ function purchasePanel(ctx, c) {
     if (!date.value) return toast('Escolha a data.');
     add.disabled = true;
     try {
-      await ctx.api.addCardPurchase(c.id, { date: date.value, amountCents: cents, note: note.value.trim(), ...(cat.value ? { category: cat.value } : {}), installments: Number(parcels.value) });
+      await ctx.api.addCardPurchase(c.id, { date: date.value, amountCents: cents, note: note.value.trim(), ...(cat.value && cat.value !== NEW_CAT ? { category: cat.value } : {}), installments: Number(parcels.value) });
       toast(Number(parcels.value) > 1 ? 'Compra parcelada lançada.' : 'Compra lançada no cartão.');
       ctx.refresh();
     } catch (err) {
@@ -128,7 +129,7 @@ function paymentPanel(ctx, c, wallets) {
   const payable = (wallets ?? []).filter((w) => w.id && w.kind !== 'poupanca');
   const wallet = el('select', { class: 'input', id: `pg-${k}-conta`, 'aria-label': 'Sai de qual conta' }, el('option', { value: '' }, 'Não descontar de nenhuma conta'), ...payable.map((w) => el('option', { value: w.id }, w.name)));
   const pay = el('button', { class: 'btn btn-primary', type: 'submit' }, 'Registrar pagamento');
-  const form = el('form', { class: 'entry-form cc-form' },
+  const form = el('form', { class: 'entry-form cc-form form-std' },
     due ? el('p', { class: 'fine field-wide' }, `${due.status === 'open' ? 'Fatura aberta' : 'Fatura a pagar'}: ${brl(due.remainingCents)}${due.status === 'open' ? '' : `, vence em ${dayBr(due.dueOn)}`}. Pagou outro valor? É só trocar.`) : el('p', { class: 'fine field-wide' }, 'Nenhuma fatura em aberto agora. Se pagou adiantado, registre mesmo assim.'),
     field('Valor pago (R$)', amount.input),
     field('Data', date),
@@ -428,5 +429,5 @@ export function viewCartoes(ctx) {
   }
 
   if (d.cards.length > 0) out.push(el('p', { class: 'fine muted' }, 'Dica: se você também importa o extrato do banco, a linha de "pagamento de fatura" pode aparecer como gasto em dobro. Apague essa linha ou não lance as compras do cartão aqui.'));
-  return el('div', { class: 'acc-stack' }, ...out);
+  return el('div', { class: 'acc-stack cc-screen' }, ...out);
 }

@@ -110,6 +110,9 @@ export async function setEntryCategory(id, category) {
   return request('POST', `/account/entries/${id}/category`, { body: { category } });
 }
 /** Categorias próprias (além das 10 do sistema): criar e apagar (os lançamentos dela vão para "Outros"). */
+export async function getCategories() {
+  return request('GET', '/account/categories');
+}
 export async function createCategory(name) {
   return request('POST', '/account/categories', { body: { name } });
 }
@@ -136,6 +139,10 @@ export async function getCoach() {
 }
 export async function simulateInvestmentApi(input) {
   return request('POST', '/account/simulate', { body: input });
+}
+
+export async function getLeadState(caseId) {
+  return request('GET', `/cases/${caseId}/leads`);
 }
 
 export async function submitLead(caseId, body) {

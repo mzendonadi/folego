@@ -11,6 +11,8 @@ import { viewIndicar } from './referral.js';
 import { viewCobrancas, viewCenarios } from './account-insight-views.js';
 import { viewContas } from './account-openfinance-views.js';
 import { viewCartoes } from './account-cards-views.js';
+import { partnerPrompt } from './account-map-banner.js';
+import { NEW_CAT, catLabel, catList, categoryEditor } from './account-categories.js';
 import { PLANS, CATEGORIES, CATEGORY_LABEL, categorize, parseExtract, parsePdfExtract, simulateInvestment } from '../vendor/engine.js';
 
 export const FEATURE_LABEL = { health: 'Nota de saúde financeira', debts: 'Dívidas com plano de quitação', reminders: 'Lembretes de contas por e-mail', ledger: 'Controle de gastos', import: 'Importar extrato', alerts: 'Alertas de limite', coach_limited: 'Treinador (3 dicas)', goals: 'Metas com aportes', coach: 'Treinador completo', simulator: 'Simulador de investimento', planner: 'Planejador com IA', household: 'Conta compartilhada com uma pessoa', recurring: 'Detector de assinaturas e cobranças recorrentes', scenarios: 'Simulador "e se...?" de cenários', ebook: 'eBook de presente no seu e-mail (50+ páginas)', journeys: 'Todas as jornadas do coach', market: 'Cenário econômico (Selic, inflação, CDI)', market_pro: 'Dólar e histórico de 12 meses', cards: 'Cartões de crédito: limite, fatura, vencimento e parcelas', cards_pro: 'Cartões avançado: fatura em PDF, estratégias e custo do rotativo', map_member: 'Mapa da Virada com preço de assinante (Pix, 90 dias)', map_included: 'Mapa da Virada incluso, enquanto a assinatura valer' };
@@ -43,45 +45,7 @@ const card = (...c) => el('section', { class: 'card d-section' }, ...c.filter(Bo
 const cap = (t) => t.charAt(0).toUpperCase() + t.slice(1);
 const monthNow = () => new Date().toISOString().slice(0, 7);
 // ---------- categorias: as do sistema + as que a pessoa cria ----------
-const catLabel = (c) => CATEGORY_LABEL[c] ?? c;
-const catList = (ctx) => [...CATEGORIES, ...(ctx.data?.customCategories ?? [])];
-const NEW_CAT = '__nova__';
-const CAT_SUGGESTIONS = ['Cartão de crédito', 'Parcela de financiamento', 'Assinaturas e streaming', 'Pets', 'Viagem', 'Presentes', 'Impostos e taxas', 'Investimentos'];
 const catId = (c) => `lim-${c.replace(/[^A-Za-z0-9]/g, '_')}`;
-
-/** Campo para criar uma categoria na hora. Entra no lugar do seletor (mesma célula da grade), então cabe no desktop e no mobile. */
-function categoryEditor(ctx, { onCreated, onCancel }) {
-  const listId = `cat-sug-${Math.random().toString(36).slice(2, 8)}`;
-  const taken = new Set(catList(ctx).map((c) => catLabel(c).toLowerCase()));
-  const suggestions = el('datalist', { id: listId }, ...CAT_SUGGESTIONS.filter((s) => !taken.has(s.toLowerCase())).map((s) => el('option', { value: s })));
-  const input = el('input', { class: 'input input-sm', type: 'text', maxlength: '30', placeholder: 'Nome da categoria', 'aria-label': 'Nome da nova categoria', list: listId, autocomplete: 'off' });
-  const ok = el('button', { class: 'btn btn-primary btn-sm icon-btn', type: 'button', 'aria-label': 'Criar categoria' }, icon('check'));
-  const no = el('button', { class: 'btn btn-quiet btn-sm icon-btn', type: 'button', 'aria-label': 'Cancelar' }, icon('x'));
-  const box = el('div', { class: 'cat-new' }, input, ok, no, suggestions);
-  async function save() {
-    const name = input.value.trim();
-    if (name.length < 2) return toast('Digite o nome da categoria (mínimo 2 letras).');
-    ok.disabled = true;
-    try {
-      const r = await ctx.api.createCategory(name);
-      if (!(ctx.data.customCategories ?? []).includes(r.name)) ctx.data.customCategories = [...(ctx.data.customCategories ?? []), r.name];
-      await onCreated(r.name);
-    } catch (e) {
-      ok.disabled = false;
-      toast(e?.message || 'Não consegui criar a categoria agora.');
-    }
-  }
-  ok.addEventListener('click', save);
-  no.addEventListener('click', onCancel);
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      save();
-    } else if (e.key === 'Escape') onCancel();
-  });
-  window.setTimeout(() => input.focus(), 0);
-  return box;
-}
 
 /** "Minhas categorias": criar e apagar. Recolhido por padrão, para não pesar no formulário. */
 function categoryManager(ctx) {
@@ -243,7 +207,8 @@ export function viewGeral(ctx) {
       ),
     );
   }
-  return el('div', { class: 'acc-stack' }, ...out);
+  out.push(partnerPrompt(ctx));
+  return el('div', { class: 'acc-stack' }, ...out.filter(Boolean));
 }
 
 // ---------------------------------------------------------------- Lançamentos
@@ -596,11 +561,11 @@ export function viewMetas(ctx) {
   const due = el('input', { class: 'input', id: 'mt-prazo', type: 'date', 'aria-label': 'Prazo (opcional)' });
   const btn = el('button', { class: 'btn btn-primary', type: 'submit' }, 'Criar meta');
   const form = el(
-    'form', { class: 'goal-form' },
+    'form', { class: 'goal-form form-std' },
     el('div', { class: 'field field-wide' }, el('label', { class: 'label', for: 'mt-nome' }, 'Nome da meta'), name),
     el('div', { class: 'field' }, el('label', { class: 'label', for: 'mt-alvo' }, 'Quanto quer juntar (R$)'), target.input),
     el('div', { class: 'field' }, el('label', { class: 'label', for: 'mt-ini' }, 'Quanto já tem (R$)'), initial.input),
-    el('div', { class: 'field' }, el('label', { class: 'label', for: 'mt-prazo' }, 'Prazo (opcional)'), due),
+    el('div', { class: 'field field-solo' }, el('label', { class: 'label', for: 'mt-prazo' }, 'Prazo (opcional)'), due),
     btn,
   );
   form.addEventListener('submit', async (e) => {
@@ -634,7 +599,7 @@ export function viewMetas(ctx) {
     return b;
   })))).catch(() => {});
   return el(
-    'div', { class: 'acc-stack' },
+    'div', { class: 'acc-stack meta-screen' },
     card(
       el('h2', {}, 'Suas metas'),
       active.length > 0 ? el('div', { class: 'goal-list' }, ...active.map((g) => goalCard(ctx, g))) : empty('Nenhuma meta em andamento', 'Comece com algo pequeno e concreto: uma reserva de um mês de gastos, por exemplo.'),
@@ -666,6 +631,35 @@ export function viewTreinador(ctx) {
 }
 
 // ---------------------------------------------------------------- Simulador
+/** Depois de simular: guarda o resultado como meta (valor final = alvo, valor inicial = já guardado, prazo = meses simulados). */
+function saveAsGoal(ctx, input, r) {
+  if (!ctx.has('goals')) return el('p', { class: 'fine muted sim-save' }, 'Quer acompanhar esse resultado como meta? As metas estão em outros planos.');
+  const name = el('input', { class: 'input', id: 'sm-meta-nome', maxlength: '80', value: `Investir ${brl(input.monthlyCents)} por mês`, 'aria-label': 'Nome da meta' });
+  const save = el('button', { class: 'btn btn-primary', type: 'button' }, icon('plus'), 'Salvar como meta');
+  const due = new Date();
+  due.setMonth(due.getMonth() + input.months);
+  const dueOn = due.toISOString().slice(0, 10);
+  save.addEventListener('click', async () => {
+    if (!name.value.trim()) return toast('Dê um nome à meta.');
+    save.disabled = true;
+    try {
+      await ctx.api.saveGoal({ name: name.value.trim(), targetCents: r.finalCents, savedCents: input.initialCents, dueOn });
+      toast('Meta criada a partir da simulação.');
+      ctx.goTab('metas');
+    } catch (error) {
+      save.disabled = false;
+      toast(error?.status === 422 ? 'Você chegou ao limite de metas.' : 'Não consegui salvar agora.');
+    }
+  });
+  return el(
+    'div', { class: 'sim-save no-print' },
+    el('h3', {}, 'Transformar em meta'),
+    el('p', { class: 'fine' }, `Meta de ${brl(r.finalCents)} em ${input.months} meses (até ${new Date(`${dueOn}T12:00:00`).toLocaleDateString('pt-BR')}), já com os ${brl(input.initialCents)} que você tem hoje.`),
+    el('div', { class: 'field' }, el('label', { class: 'label', for: 'sm-meta-nome' }, 'Nome da meta'), name),
+    save,
+  );
+}
+
 export function viewSimulador(ctx) {
   if (!ctx.has('simulator')) {
     return locked(ctx, {
@@ -715,6 +709,7 @@ export function viewSimulador(ctx) {
           el('div', { class: 'stat' }, el('dt', {}, 'Final, sem a inflação'), el('dd', {}, brl(r.realFinalCents))),
         ),
         el('p', { class: 'fine' }, res.notice),
+        saveAsGoal(ctx, input, r),
       );
     } catch {
       toast('Não consegui simular agora.');

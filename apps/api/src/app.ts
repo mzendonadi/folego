@@ -313,6 +313,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
 
   // ---------- propostas de parceiros (desligado por padrão) ----------
+  app.get('/api/cases/:id/leads', async (req) => {
+    const sessionId = await requireSession(req);
+    return leads.leadStateFor(ctx, sessionId, idParam((req.params as { id: string }).id));
+  });
+
   app.post('/api/cases/:id/leads', { config: { rateLimit: { max: 5 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => {
     const sessionId = await requireSession(req);
     const input = leadSchema.parse(req.body);

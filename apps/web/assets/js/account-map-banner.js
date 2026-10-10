@@ -7,6 +7,7 @@ import { el, icon } from './dom.js';
 import { brl } from './format.js';
 import { newDebt, saveDraft, state } from './state.js';
 import { rebuildIntake } from './intake.js';
+import { partnerBanner } from './leads.js';
 
 const fmtDay = (ms) => new Date(ms).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
 const daysLeft = (ms) => Math.max(0, Math.ceil((ms - Date.now()) / 86_400_000));
@@ -25,6 +26,12 @@ function prefillFromPrumo(debts) {
   }));
   saveDraft();
   rebuildIntake();
+}
+
+/** Convite "Quer ter ainda mais tranquilidade financeira? Fale com um parceiro": aparece nas telas principais do Prumo quando o recurso está ligado. */
+export function partnerPrompt(ctx) {
+  if (!ctx.leadsOn) return null;
+  return partnerBanner({ onStart: () => prefillFromPrumo(ctx.debts) });
 }
 
 export function mapBanner(ctx) {
