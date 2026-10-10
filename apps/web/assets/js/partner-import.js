@@ -2,9 +2,22 @@
 // seguem para o servidor, em lotes, e o servidor nunca duplica (mesmo CPF = mesma pessoa).
 import { el, icon, toast } from './dom.js';
 import { readXlsx, planSheet, SIAPE_COLUMN_LABELS, MAX_XLSX_BYTES } from '../vendor/engine.js';
+import { batchesBySize } from './partner-batch.js';
 
-const BATCH = 200;
 const n = (v) => Number(v).toLocaleString('pt-BR');
+
+/** Envia um lote; se a rede oscilar ou o servidor pedir calma (429, 502, 503, 504), tenta de novo com espera crescente. */
+async function sendBatch(ctx, importId, rows) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await ctx.call('POST', `/partner/imports/${importId}/rows`, { rows });
+    } catch (err) {
+      const transient = err.status === undefined || [429, 502, 503, 504].includes(err.status);
+      if (!transient || attempt >= 4) throw err;
+      await new Promise((r) => window.setTimeout(r, 900 * attempt));
+    }
+  }
+}
 const LAYOUT = { siape: 'Planilha da Euro (colunas A a BO, sem cabeçalho)', cabecalho: 'Planilha com cabeçalho' };
 
 export async function viewImportar(ctx) {
@@ -69,9 +82,10 @@ export async function viewImportar(ctx) {
       bar.hidden = false;
       try {
         const start = await ctx.call('POST', '/partner/imports', { filename: file.name, layout: plan.layout, total: plan.total, invalid: bad, repeatedInFile: plan.repeatedInFile });
-        for (let i = 0; i < plan.records.length; i += BATCH) {
-          await ctx.call('POST', `/partner/imports/${start.importId}/rows`, { rows: plan.records.slice(i, i + BATCH) });
-          const done = Math.min(plan.records.length, i + BATCH);
+        let done = 0;
+        for (const rows of batchesBySize(plan.records)) {
+          await sendBatch(ctx, start.importId, rows);
+          done += rows.length;
           bar.firstChild.style.width = `${Math.round((done / plan.records.length) * 100)}%`;
           status.textContent = `Enviando… ${n(done)} de ${n(plan.records.length)}`;
         }

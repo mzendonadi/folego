@@ -375,7 +375,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     app.post('/api/partner/contacts/:id/events', async (req) => pp.addEvent(ctx, pid(req), { contactId: idParam((req.params as { id: string }).id) }, pp.eventSchema.parse(req.body)));
     app.get('/api/partner/imports', async (req) => pp.listImports(ctx, pid(req)));
     app.post('/api/partner/imports', async (req, reply) => reply.status(201).send(await pp.startImport(ctx, pid(req), pp.importStartSchema.parse(req.body))));
-    app.post('/api/partner/imports/:id/rows', { bodyLimit: 6 * 1024 * 1024 }, async (req) => pp.importBatch(ctx, pid(req), idParam((req.params as { id: string }).id), pp.importBatchSchema.parse(req.body).rows));
+    // Lotes pequenos (o nginx corta corpos acima de 64 KB): um arquivo grande vira muitas chamadas, então o limite de uso desta rota é maior.
+    app.post('/api/partner/imports/:id/rows', { bodyLimit: 6 * 1024 * 1024, config: { rateLimit: { max: 1500 * scale, timeWindow: '1 minute' } } }, async (req) => pp.importBatch(ctx, pid(req), idParam((req.params as { id: string }).id), pp.importBatchSchema.parse(req.body).rows));
     app.post('/api/partner/imports/:id/finish', async (req) => pp.finishImport(ctx, pid(req), idParam((req.params as { id: string }).id)));
     app.get('/api/partner/deals', async (req) => pp.listDeals(ctx, pid(req), { month: qs(req).mes, origin: qs(req).origem, status: qs(req).situacao }));
     app.post('/api/partner/deals', async (req, reply) => reply.status(201).send(await pp.createDeal(ctx, pid(req), pp.dealSchema.parse(req.body))));

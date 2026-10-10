@@ -5,8 +5,8 @@ import { viewPainel, viewFolego, viewBase, viewContratos } from './partner-views
 import { viewImportar } from './partner-import.js';
 
 const TABS = [
-  ['painel', 'Painel', 'list'],
-  ['folego', 'Contatos do Fôlego', 'check'],
+  ['painel', 'Painel', 'chart'],
+  ['folego', 'Contatos do Fôlego', 'chat'],
   ['base', 'Minha base', 'list'],
   ['contratos', 'Contratos', 'card'],
   ['importar', 'Importar planilha', 'plus'],
@@ -41,7 +41,8 @@ export function renderPartner(root) {
       drawLogin('Sua sessão terminou. Entre de novo.');
       throw Object.assign(new Error('sessão'), { status: 401, silent: true });
     }
-    if (!res.ok) throw Object.assign(new Error(json?.message ?? 'Não consegui agora.'), { status: res.status });
+    // Sem JSON na resposta (ex.: 413 do nginx, 502 do servidor), mostra o código para dar para diagnosticar.
+    if (!res.ok) throw Object.assign(new Error(json?.message ?? `Não consegui agora (erro ${res.status}).`), { status: res.status });
     return json;
   };
 
@@ -89,8 +90,10 @@ export function renderPartner(root) {
     }
     const stage = el('div', { class: 'pt-stage', 'aria-live': 'polite' });
     const nav = el('nav', { class: 'pt-nav', 'aria-label': 'Áreas do portal' });
+    const side = el('aside', { class: 'pt-side', id: 'pt-side' });
     const ctx = { call, profile, toast, go: (t, opts) => show(t, opts) };
     const show = async (id, opts = {}) => {
+      side.classList.remove('is-open');
       nav.querySelectorAll('button').forEach((b) => b.setAttribute('aria-current', b.dataset.tab === id ? 'page' : 'false'));
       stage.replaceChildren(el('p', { class: 'muted', role: 'status' }, 'Carregando…'));
       try {
@@ -105,15 +108,33 @@ export function renderPartner(root) {
       b.addEventListener('click', () => show(id));
       nav.append(b);
     }
-    const out = el('button', { class: 'btn btn-quiet btn-sm pt-exit', type: 'button' }, 'Sair');
+    const out = el('button', { class: 'btn btn-secondary btn-sm pt-exit', type: 'button' }, 'Sair');
     out.addEventListener('click', () => {
       keep('');
       drawLogin();
     });
+    // Mesmo desenho do backoffice: barra lateral clara com a marca, menu à esquerda, conteúdo em cartões. No celular a barra vira gaveta.
+    const burger = el('button', { class: 'btn btn-secondary btn-sm pt-burger', type: 'button', 'aria-label': 'Abrir o menu', 'aria-controls': 'pt-side', 'aria-expanded': 'false' }, icon('menu'));
+    burger.addEventListener('click', () => {
+      const open = side.classList.toggle('is-open');
+      burger.setAttribute('aria-expanded', String(open));
+    });
+    side.append(
+      el('div', { class: 'pt-brand' }, lockup(profile), el('small', {}, 'Parceiro')),
+      nav,
+      el('div', { class: 'pt-me' }, el('strong', {}, profile.tradeName ? brandName(profile) : profile.legalName), el('span', { class: 'fine muted' }, 'Operações em parceria com o Fôlego'), out),
+    );
     root.replaceChildren(el('div', { class: 'pt-shell' },
-      el('aside', { class: 'pt-side' }, lockup(profile), el('p', { class: 'pt-side-sub' }, 'Operações em parceria'), nav, out),
-      el('main', { class: 'pt-main' }, stage),
+      side,
+      el('div', { class: 'pt-main' },
+        el('div', { class: 'pt-top' }, burger, lockup(profile)),
+        el('div', { class: 'pt-content' }, stage)),
     ));
+    // No celular, tocar no conteúdo fecha o menu aberto.
+    root.querySelector('.pt-content').addEventListener('click', () => {
+      side.classList.remove('is-open');
+      burger.setAttribute('aria-expanded', 'false');
+    });
     await show(tab);
   }
 
