@@ -1,4 +1,4 @@
-// Chatbot da Fôlia (landing e Prumo): botão flutuante + janela de conversa.
+// Chatbot da FôlIA (landing e Prumo): botão flutuante + janela de conversa.
 // Antes de conversar a pessoa informa celular com DDD e e-mail (obrigatórios) e aceita o contato: é o que permite à equipe retomar a conversa.
 // A conversa fica no servidor (criptografada); aqui só guardamos, na aba, o token que identifica a conversa por 24 h.
 import { API_BASE } from '../config.js';
@@ -63,12 +63,12 @@ export function initChat() {
   let started = false;
   let busy = false;
 
-  const fab = el('button', { class: 'fl-chat-fab', type: 'button', 'aria-label': 'Abrir o chat com a Fôlia', 'aria-expanded': 'false', 'aria-controls': 'fl-chat-panel' }, mark(30), el('span', { class: 'fl-chat-fab-text' }, 'Fale com a Fôlia'));
-  const log = el('div', { class: 'fl-chat-log', role: 'log', 'aria-live': 'polite', 'aria-label': 'Conversa com a Fôlia' });
+  const fab = el('button', { class: 'fl-chat-fab', type: 'button', 'aria-label': 'Abrir o chat com a FôlIA', 'aria-expanded': 'false', 'aria-controls': 'fl-chat-panel' }, mark(30), el('span', { class: 'fl-chat-fab-text' }, 'Fale com a FôlIA'));
+  const log = el('div', { class: 'fl-chat-log', role: 'log', 'aria-live': 'polite', 'aria-label': 'Conversa com a FôlIA' });
   const body = el('div', { class: 'fl-chat-body' });
   const close = el('button', { class: 'fl-chat-close', type: 'button', 'aria-label': 'Fechar o chat' }, icon('x'));
-  const head = el('header', { class: 'fl-chat-head' }, el('span', { class: 'fl-chat-avatar' }, mark(26)), el('div', { class: 'fl-chat-who' }, el('strong', {}, 'Fôlia'), el('span', {}, 'Assistente virtual do Fôlego')), close);
-  const panel = el('section', { class: 'fl-chat-panel', id: 'fl-chat-panel', role: 'dialog', 'aria-label': 'Chat com a Fôlia', hidden: true }, head, body);
+  const head = el('header', { class: 'fl-chat-head' }, el('span', { class: 'fl-chat-avatar' }, mark(26)), el('div', { class: 'fl-chat-who' }, el('strong', {}, 'FôlIA'), el('span', {}, 'Assistente virtual do Fôlego')), close);
+  const panel = el('section', { class: 'fl-chat-panel', id: 'fl-chat-panel', role: 'dialog', 'aria-label': 'Chat com a FôlIA', hidden: true }, head, body);
   const root = el('div', { class: 'fl-chat' }, panel, fab);
   document.body.append(root);
 
@@ -101,7 +101,7 @@ export function initChat() {
       input.style.height = '';
       send.disabled = true;
       log.append(bubble('user', text));
-      const typing = el('div', { class: 'fl-msg fl-msg-bot fl-typing', role: 'status', 'aria-label': 'A Fôlia está escrevendo' }, el('span', {}), el('span', {}), el('span', {}));
+      const typing = el('div', { class: 'fl-msg fl-msg-bot fl-typing', role: 'status', 'aria-label': 'A FôlIA está escrevendo' }, el('span', {}), el('span', {}), el('span', {}));
       log.append(typing);
       scrollDown();
       try {
@@ -144,7 +144,7 @@ export function initChat() {
     const field = (label, input, hint) => el('div', { class: 'field' }, el('label', { class: 'label', for: input.id }, label), input, hint ? el('span', { class: 'fine' }, hint) : null);
     phone.addEventListener('input', () => { phone.value = formatPhone(phone.value); });
     const form = el('form', { class: 'fl-chat-start', novalidate: true },
-      el('h2', {}, 'Oi! Eu sou a Fôlia.'),
+      el('h2', {}, 'Oi! Eu sou a FôlIA.'),
       el('p', { class: 'fl-chat-lead' }, 'Tiro dúvidas, indico o melhor caminho e deixo a nossa equipe pronta para te ajudar. Para começar, deixe seus dados de contato.'),
       field('Nome', name),
       field('Celular com DDD', phone, 'Só celular, com DDD.'),
@@ -188,7 +188,7 @@ export function initChat() {
     panel.hidden = false;
     root.classList.add('is-open');
     fab.setAttribute('aria-expanded', 'true');
-    fab.setAttribute('aria-label', 'Fechar o chat com a Fôlia');
+    fab.setAttribute('aria-label', 'Fechar o chat com a FôlIA');
     if (started) return;
     if (token) {
       body.replaceChildren(el('p', { class: 'fl-chat-wait', role: 'status' }, 'Retomando a conversa…'));
@@ -206,7 +206,7 @@ export function initChat() {
     panel.hidden = true;
     root.classList.remove('is-open');
     fab.setAttribute('aria-expanded', 'false');
-    fab.setAttribute('aria-label', 'Abrir o chat com a Fôlia');
+    fab.setAttribute('aria-label', 'Abrir o chat com a FôlIA');
   }
   fab.addEventListener('click', () => (panel.hidden ? openPanel() : closePanel()));
   close.addEventListener('click', () => { closePanel(); fab.focus(); });

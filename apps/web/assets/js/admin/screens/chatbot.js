@@ -1,4 +1,4 @@
-// Chatbot: quem chamou a Fôlia (landing e Prumo), o que conversou, quanto virou venda e a retomada do contato.
+// Chatbot: quem chamou a FôlIA (landing e Prumo), o que conversou, quanto virou venda e a retomada do contato.
 import { api } from '../api.js';
 import { el, icon, toast, int, pct, dt, card, cardOpts, kpi, kpis, grid, table, bar, columns, badge, field, drawer, pager, periodSelect, empty } from '../ui.js';
 
@@ -122,7 +122,7 @@ export async function chatbotScreen(ctx) {
         el('section', {}, el('h4', {}, 'Situação'), el('div', { class: 'bo-actions' }, ...statusBtns)),
         el('section', {}, el('h4', {}, 'Conversa'),
           data.messages.length
-            ? el('ol', { class: 'bo-chatlog' }, ...data.messages.map((x) => el('li', { class: `bo-msg bo-msg-${x.role}` }, el('span', { class: 'bo-msg-who' }, x.role === 'user' ? (l.name ? firstName(l) : 'Cliente') : x.role === 'team' ? 'Equipe' : 'Fôlia', el('time', { class: 'fine muted', datetime: x.at }, ` ${dt(x.at)}`)), el('p', {}, x.text))))
+            ? el('ol', { class: 'bo-chatlog' }, ...data.messages.map((x) => el('li', { class: `bo-msg bo-msg-${x.role}` }, el('span', { class: 'bo-msg-who' }, x.role === 'user' ? (l.name ? firstName(l) : 'Cliente') : x.role === 'team' ? 'Equipe' : 'FôlIA', el('time', { class: 'fine muted', datetime: x.at }, ` ${dt(x.at)}`)), el('p', {}, x.text))))
             : empty('Sem mensagens.')),
         el('section', {}, el('h4', {}, 'Registrar contato feito'), field('O que foi combinado', note), log),
         el('section', {}, el('h4', {}, 'Anotações internas'), field('Só a equipe vê', notes), saveNotes),

@@ -749,7 +749,7 @@ function init() {
   // O convite a parceiros só aparece se o recurso está ligado neste servidor.
   api.getFeatures().then((f) => {
     document.querySelectorAll('[data-partner-banner]').forEach((n) => { n.hidden = !f?.leads; });
-    if (f?.chatbot) initChat(); // botão flutuante da Fôlia: landing e Prumo
+    if (f?.chatbot) initChat(); // botão flutuante da FôlIA: landing e Prumo
   }).catch(() => undefined);
   window.addEventListener('popstate', route);
   window.addEventListener('hashchange', route);

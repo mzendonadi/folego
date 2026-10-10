@@ -1,4 +1,4 @@
-// Chatbot com IA da landing e do Prumo ("Fôlia"): atendimento, vendas e retomada de contato.
+// Chatbot com IA da landing e do Prumo ("FôlIA"): atendimento, vendas e retomada de contato.
 // Regras que não mudam:
 //  - celular com DDD e e-mail são obrigatórios antes da primeira mensagem (é o que permite retomar o contato);
 //  - telefone, e-mail, nome, notas e mensagens ficam criptografados (AES-256-GCM); HMAC só para cruzar com assinantes;
@@ -13,7 +13,7 @@ import type { Ctx } from './services.ts';
 import { audit, num } from './services.ts';
 import { waPhone } from './whatsapp.ts';
 
-export const CHAT_NAME = 'Fôlia';
+export const CHAT_NAME = 'FôlIA';
 const MAX_USER_CHARS = 800;
 const MAX_HISTORY = 14;
 const PER_HOUR = 25;

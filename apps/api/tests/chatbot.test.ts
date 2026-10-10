@@ -1,4 +1,4 @@
-// Chatbot (Fôlia) e sino de alertas: contato obrigatório, resposta por regras sem chave de IA, prompt com preços vivos, gestão e alertas.
+// Chatbot (FôlIA) e sino de alertas: contato obrigatório, resposta por regras sem chave de IA, prompt com preços vivos, gestão e alertas.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import type { FastifyInstance } from 'fastify';
@@ -45,14 +45,14 @@ test('chat: abre a conversa, responde por regras sem chave de IA e guarda tudo c
   assert.equal(res.statusCode, 200);
   const { token, messages } = res.json();
   assert.ok(token);
-  assert.match(messages[0].text, /Fôlia/);
+  assert.match(messages[0].text, /FôlIA/);
   const a = await app.inject({ method: 'POST', url: '/api/chat/message', headers: { ...H, authorization: `Bearer ${token}` }, payload: JSON.stringify({ text: 'Quanto custa o plano?' }) });
   assert.equal(a.statusCode, 200);
   assert.equal(a.json().via, 'regras');
   assert.match(a.json().reply.text, /R\$/);
   const raw = await db.query<{ phone_enc: Buffer; body_enc: Buffer }>(`SELECT l.phone_enc, m.body_enc FROM app.chat_leads l JOIN app.chat_messages m ON m.lead_id = l.id LIMIT 1`);
   assert.ok(!raw.rows[0]!.phone_enc.toString('utf8').includes('91234'), 'o telefone não fica em texto puro');
-  assert.ok(!raw.rows[0]!.body_enc.toString('utf8').includes('Fôlia'), 'a mensagem não fica em texto puro');
+  assert.ok(!raw.rows[0]!.body_enc.toString('utf8').includes('FôlIA'), 'a mensagem não fica em texto puro');
   const again = await start(valid);
   assert.equal(again.json().messages.length >= 3, true, 'o mesmo contato retoma a mesma conversa');
 });

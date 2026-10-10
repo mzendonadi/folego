@@ -1680,7 +1680,7 @@ body[data-route="partner"] #view-partner .tools-layout { display: block; max-wid
 }
 .pt-metric.is-accent:not(#c) :is(.pt-metric-label, .pt-metric-sub) { color: var(--mint-ink); }
 
-/* ===== Chat da Fôlia (landing e Prumo): botão flutuante + janela ===== */
+/* ===== Chat da FôlIA (landing e Prumo): botão flutuante + janela ===== */
 .fl-chat { position: fixed; right: max(16px, env(safe-area-inset-right)); bottom: max(16px, env(safe-area-inset-bottom)); z-index: 60; display: grid; justify-items: end; gap: 12px; }
 body[data-route="partner"] .fl-chat, body[data-route="unsubscribe"] .fl-chat, body[data-route="checkout"] .fl-chat, body[data-route="addon"] .fl-chat { display: none; }
 .fl-chat-fab { display: inline-flex; align-items: center; gap: 0; height: 58px; min-width: 58px; padding: 0 14px; border: 0; border-radius: 999px; background: var(--primary); color: var(--primary-ink); font: inherit; font-weight: 700; cursor: pointer; box-shadow: var(--shadow); transition: background-color 0.2s var(--ease), gap 0.25s var(--ease), padding 0.25s var(--ease), transform 0.2s var(--ease); }

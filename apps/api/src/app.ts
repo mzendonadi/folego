@@ -301,7 +301,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     return sendContact(ctx, contactSchema.parse(req.body));
   });
 
-  // Chatbot (Fôlia): celular com DDD e e-mail obrigatórios para abrir a conversa. Limites por IP; a conversa tem token próprio de 24 h.
+  // Chatbot (FôlIA): celular com DDD e e-mail obrigatórios para abrir a conversa. Limites por IP; a conversa tem token próprio de 24 h.
   app.post('/api/chat/start', { config: { rateLimit: { max: 8 * scale, timeWindow: '10 minutes' } } }, async (req) => {
     await verifyTurnstile(config, req.headers['x-turnstile'], clientIp(req));
     return chatbot.startChat(ctx, chatbot.startSchema.parse(req.body));
