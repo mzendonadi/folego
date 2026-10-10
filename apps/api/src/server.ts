@@ -8,7 +8,7 @@ import type { Db } from './db.ts';
 import { AsaasGateway, FakeGateway } from './gateway.ts';
 import { ConsoleSender, CountingSender, ResendSender } from './email.ts';
 import type { PaymentGateway } from './gateway.ts';
-import { PluggyProvider } from './openfinance.ts';
+import { makeOpenFinance } from './openfinance.ts';
 import { purgeExpired } from './services.ts';
 import { runWorker } from './generation/worker.ts';
 import { workerOptions } from './generation/setup.ts';
@@ -32,7 +32,7 @@ const gateway: PaymentGateway = config.asaas ? new AsaasGateway(config.asaas) : 
 const emailRaw = config.email ? new ResendSender(config.email) : (config.env !== 'production' && (config.leadsEnabled || config.subscriptionsEnabled) ? new ConsoleSender() : undefined);
 const email = emailRaw ? new CountingSender(emailRaw, db) : undefined;
 // RATE_LIMITS=relaxed só vale fora de produção (popular dados de exemplo sem esbarrar nos limites por IP).
-const openFinance = config.openFinance ? new PluggyProvider(config.openFinance) : undefined;
+const openFinance = makeOpenFinance(config);
 const app = await buildApp({ config, db, gateway, email, ...(openFinance ? { openFinance } : {}), rateLimits: config.env !== 'production' && process.env.RATE_LIMITS === 'relaxed' ? 'relaxed' : 'strict' });
 
 // Worker dentro do processo só em desenvolvimento (em produção é um container próprio: src/worker.ts).

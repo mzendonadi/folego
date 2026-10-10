@@ -39,6 +39,9 @@ export const daysOf = (code) => CATALOG[code]?.days ?? 30;
 /** Preço fechado do Kit Completo (Mapa + Cartas + Calendário). Só exibição: o servidor calcula o que vale. */
 export const BUNDLE = { cents: 5999 };
 
+/** Mapa da Virada para quem assina o Ousado (Pix): valor e dias de acesso. Só exibição na landing: o servidor calcula o que vale. */
+export const SUB_MAP = { cents: 1299, days: 90 };
+
 export const ADDONS = ['defense_letters', 'calendar_30d', 'extra_income_plan'];
 
 /** Aplica o catálogo vindo do servidor (GET /api/catalog). */
@@ -55,6 +58,8 @@ export function applyCatalog(server) {
     if (p.name) item.name = p.name;
   }
   if (Number.isInteger(server?.bundlePriceCents)) BUNDLE.cents = server.bundlePriceCents;
+  if (Number.isInteger(server?.subscriberMapPriceCents)) SUB_MAP.cents = server.subscriberMapPriceCents;
+  if (Number.isInteger(server?.subscriberMapDays)) SUB_MAP.days = server.subscriberMapDays;
 }
 
 const whole = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });

@@ -1138,3 +1138,92 @@ fieldset.offer-box { min-inline-size: 0; }
 .tr-read-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2) var(--s3); }
 .tr-read-do { padding-top: var(--s3); border-top: 1px solid var(--line); }
 @media (max-width: 560px) { .tr-read { margin-left: 0; } }
+
+/* Prumo > Dívidas: aviso do Mapa da Virada (preço de assinante / incluso no plano / Mapa ativo). Compacto no desktop, empilhado no celular. */
+.map-banner { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--s3) var(--s4); align-items: center; padding: var(--s4) var(--s5); background: var(--mint); color: var(--mint-ink); border: 1px solid color-mix(in srgb, var(--primary) 30%, var(--line)); border-left: 5px solid var(--primary); }
+.map-banner-ico { display: grid; place-items: center; width: 44px; height: 44px; border-radius: var(--radius-sm); background: var(--surface); color: var(--primary); }
+.map-banner-ico .icon { width: 24px; height: 24px; }
+.map-banner-text { min-width: 0; display: grid; gap: 4px; }
+.map-banner h2 { margin: 0; font-family: var(--font-display); font-size: 1.1875rem; line-height: 1.25; color: var(--ink); }
+.map-banner p { margin: 0; font-size: 0.9375rem; line-height: 1.45; color: var(--mint-ink); max-width: 62ch; }
+.map-banner .fine { font-size: 0.8125rem; }
+.map-banner-buy { display: grid; justify-items: end; gap: 6px; }
+.map-banner-buy .fine { margin: 0; text-align: right; }
+.map-price { display: flex; align-items: baseline; justify-content: flex-end; flex-wrap: wrap; gap: 4px var(--s2); margin: 0; }
+.map-was { text-decoration: line-through; color: var(--ink-2); font-size: 0.9375rem; }
+.map-now { font-family: var(--font-display); font-size: 1.75rem; line-height: 1; font-weight: 700; color: var(--ink); }
+.map-save { font-size: 0.8125rem; font-weight: 700; color: var(--ok-ink); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+@media (max-width: 760px) {
+  .map-banner { grid-template-columns: auto minmax(0, 1fr); padding: var(--s4); align-items: start; }
+  .map-banner-buy { grid-column: 1 / -1; justify-items: stretch; }
+  .map-banner-buy .btn { width: 100%; justify-content: center; }
+  .map-price { justify-content: flex-start; }
+  .map-banner-buy .fine { text-align: center; }
+}
+@media (prefers-reduced-motion: no-preference) { .map-banner { animation: map-in .35s ease-out both; } }
+@keyframes map-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* Prumo > Contas conectadas: linha da conexão com o aviso e os botões (reconectar, atualizar, desconectar) embaixo no celular. */
+.wallet-row.of-row { grid-template-columns: minmax(0, 1fr) auto; }
+.of-row .of-actions { justify-content: flex-end; flex-wrap: wrap; }
+.of-row .note { margin-top: 6px; }
+@media (max-width: 620px) {
+  .wallet-row.of-row { grid-template-columns: 1fr; }
+  .of-row .of-actions { justify-content: flex-start; }
+}
+
+/* Prumo > Cartões de crédito: resumo, um cartão por bloco, ações com um formulário por vez. Três números em linha no desktop, empilhados no celular. */
+.cc-top { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--s3) var(--s5); }
+.cc-top h2, .cc-top p { margin: 0; }
+.cc-top .muted { margin-top: 4px; }
+.cc-add > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+.cc-add > summary::-webkit-details-marker { display: none; }
+.cc-add[open] { flex: 1 1 100%; }
+.cc-add[open] > summary { margin-bottom: var(--s4); }
+.cc-form { padding-top: var(--s2); }
+.cc-form .field-wide { grid-column: 1 / -1; }
+.cc-tile { display: grid; gap: var(--s4); align-content: start; border-left: 5px solid var(--line); }
+.cc-tile.cc-attention { border-left-color: var(--tone-attention); }
+.cc-tile.cc-high, .cc-tile.cc-over { border-left-color: var(--tone-critical); }
+.cc-head { display: flex; align-items: center; gap: var(--s3); }
+.cc-ico { display: grid; place-items: center; flex: none; width: 40px; height: 40px; border-radius: var(--radius-sm); background: var(--mint); color: var(--mint-ink); }
+.cc-title { min-width: 0; flex: 1; }
+.cc-title h3 { margin: 0; font-size: 1.125rem; overflow-wrap: anywhere; }
+.cc-title p { margin: 2px 0 0; }
+.cc-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s3); }
+.cc-stat { display: grid; gap: 2px; min-width: 0; padding: 12px 14px; border-radius: var(--radius-sm); background: var(--sunken); align-content: start; }
+.cc-stat-label { font-size: 0.8125rem; font-weight: 700; color: var(--ink-2); }
+.cc-stat strong { font-family: var(--font-display); font-size: 1.375rem; line-height: 1.15; overflow-wrap: anywhere; }
+.cc-stat.neg strong { color: var(--danger-ink); }
+.cc-acts { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.cc-actbtn.is-on { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); }
+.cc-area:empty { display: none; }
+.cc-area { padding: var(--s4); border-radius: var(--radius-sm); background: var(--sunken); }
+.cc-panel-body { display: grid; gap: var(--s3); }
+.cc-panel-body h4, .cc-installments h4 { margin: var(--s2) 0 0; font-size: 1rem; }
+.cc-invoices { display: grid; gap: var(--s2); }
+.cc-invoice { border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); }
+.cc-invoice > summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: var(--s3); padding: 10px 14px; min-height: 48px; }
+.cc-invoice > summary::-webkit-details-marker { display: none; }
+.cc-inv-name { display: grid; gap: 2px; min-width: 0; }
+.cc-inv-total { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; justify-content: flex-end; }
+.cc-invoice-body { padding: 0 14px 12px; display: grid; gap: var(--s2); }
+.cc-cats { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.cc-cats li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: var(--s3); align-items: baseline; }
+.cc-table { width: 100%; border-collapse: collapse; font-size: 0.9375rem; }
+.cc-table th, .cc-table td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); }
+.cc-table .cc-best td { font-weight: 700; color: var(--ok-ink); }
+.cc-bars { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 6px; align-items: end; height: 190px; }
+.cc-bars li { display: grid; grid-template-rows: auto 1fr auto; justify-items: center; gap: 4px; height: 100%; min-width: 0; }
+.cc-bar { align-self: end; width: 100%; max-width: 34px; min-height: 2px; border-radius: 6px 6px 0 0; background: var(--primary); }
+.cc-bar-m { font-size: 0.75rem; font-weight: 700; color: var(--ink-2); }
+.cc-bar-v { font-size: 0.6875rem; white-space: nowrap; }
+@media (max-width: 620px) {
+  .cc-stats { grid-template-columns: 1fr; }
+  .cc-stat { grid-template-columns: 1fr auto; align-items: baseline; column-gap: var(--s3); }
+  .cc-stat .fine { grid-column: 1 / -1; }
+  .cc-bars { grid-template-columns: repeat(6, minmax(0, 1fr)); height: auto; row-gap: var(--s4); }
+  .cc-bars li { height: 140px; }
+  .cc-acts .btn { flex: 1 1 calc(50% - var(--s2)); justify-content: center; }
+  .cc-add > summary { width: 100%; justify-content: center; }
+}

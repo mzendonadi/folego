@@ -6,7 +6,7 @@ import { addDaysIso, formatBrl } from './calendar.ts';
 // Planos
 // ---------------------------------------------------------------------------
 export type PlanCode = 'controle' | 'ousado' | 'desbravador';
-export type Feature = 'health' | 'debts' | 'reminders' | 'ledger' | 'import' | 'alerts' | 'coach_limited' | 'goals' | 'coach' | 'simulator' | 'planner' | 'journeys' | 'market' | 'market_pro' | 'household' | 'ebook' | 'recurring' | 'scenarios';
+export type Feature = 'health' | 'debts' | 'reminders' | 'ledger' | 'import' | 'alerts' | 'coach_limited' | 'goals' | 'coach' | 'simulator' | 'planner' | 'journeys' | 'market' | 'market_pro' | 'household' | 'ebook' | 'recurring' | 'scenarios' | 'map_member' | 'map_included' | 'cards' | 'cards_pro';
 
 export interface Plan {
   code: PlanCode;
@@ -29,13 +29,13 @@ export const PLANS: Plan[] = [
   {
     code: 'ousado', name: 'Ousado', priceCents: 3999, productCode: 'sub_ousado',
     tagline: 'Sair do vermelho, criar reserva e cumprir metas',
-    features: ['health', 'ledger', 'import', 'alerts', 'debts', 'reminders', 'goals', 'coach', 'market', 'journeys', 'household', 'ebook', 'recurring', 'scenarios'],
+    features: ['health', 'ledger', 'import', 'alerts', 'debts', 'reminders', 'goals', 'coach', 'market', 'journeys', 'household', 'ebook', 'recurring', 'scenarios', 'cards', 'map_member'],
     soon: [],
   },
   {
     code: 'desbravador', name: 'Desbravador', priceCents: 5999, productCode: 'sub_desbravador',
     tagline: 'Tudo, mais planejador com IA, dólar e histórico de mercado',
-    features: ['health', 'ledger', 'import', 'alerts', 'debts', 'reminders', 'goals', 'coach', 'simulator', 'planner', 'market', 'journeys', 'market_pro', 'household', 'ebook', 'recurring', 'scenarios'],
+    features: ['health', 'ledger', 'import', 'alerts', 'debts', 'reminders', 'goals', 'coach', 'simulator', 'planner', 'market', 'journeys', 'market_pro', 'household', 'ebook', 'recurring', 'scenarios', 'cards', 'cards_pro', 'map_included'],
     soon: ['Contas conectadas (Open Finance): depende de parceiro autorizado pelo Banco Central.'],
   },
 ];

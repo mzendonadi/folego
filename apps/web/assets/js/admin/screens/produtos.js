@@ -68,6 +68,24 @@ export async function produtosScreen(ctx) {
         toast(e.message);
       }
     });
+    // Mapa da Virada para quem assina: Ousado paga este valor (Pix) e tem estes dias; Desbravador usa sem pagar enquanto a assinatura valer.
+    const subMap = moneyInput({ id: 'pr-submap', ariaLabel: 'Preço do Mapa para assinante Ousado', value: d.subscriberMapPriceCents });
+    const subDays = el('input', { class: 'input', id: 'pr-submap-dias', type: 'number', min: '1', max: '365', step: '1', value: String(d.subscriberMapDays), 'aria-label': 'Dias de acesso do Mapa para assinante Ousado' });
+    const saveSubMap = el('button', { class: 'btn btn-secondary btn-sm', type: 'button' }, 'Salvar');
+    saveSubMap.addEventListener('click', async () => {
+      const cents = subMap.cents();
+      const dias = Number(subDays.value);
+      if (!cents || cents < 100) return toast('Informe um valor válido.');
+      if (!Number.isInteger(dias) || dias < 1 || dias > 365) return toast('Dias de acesso: de 1 a 365.');
+      try {
+        await api.salvarConfig({ subscriberMapPriceCents: cents, subscriberMapDays: dias });
+        toast('Mapa para assinantes salvo.');
+        draw();
+      } catch (e) {
+        toast(e.message);
+      }
+    });
+    const mapRegular = d.products.find((p) => p.code === 'recovery_map')?.priceCents ?? 0;
     const sum = d.products.filter((p) => p.active);
     host.replaceChildren(
       el('p', { class: 'muted bo-lead' }, 'Edite os valores quando quiser. A mudança vale para os próximos pedidos e aparece no site em até alguns segundos; quem já gerou um Pix mantém o valor daquele pedido.'),
@@ -77,6 +95,8 @@ export async function produtosScreen(ctx) {
         const soma = ['recovery_map', 'defense_letters', 'calendar_30d'].reduce((s, c) => s + (d.products.find((p) => p.code === c)?.priceCents ?? 0), 0);
         return el('p', { class: 'fine' }, `Soma dos três separados: ${brl(soma)}. ${d.bundlePriceCents < soma ? `Desconto de ${brl(soma - d.bundlePriceCents)}.` : 'Atenção: o Kit está mais caro que a soma; sem desconto o servidor cobra os itens separados.'}`);
       })()),
+      card('Mapa da Virada para assinantes do Prumo', el('p', { class: 'muted' }, 'Na tela Dívidas, o assinante do Ousado vê um aviso para liberar o Mapa por este valor no Pix, com este prazo de acesso. O assinante do Desbravador usa o Mapa sem pagar, enquanto a assinatura valer. O Controle não muda. Preço e prazo são calculados no servidor.'), el('div', { class: 'bo-actions' }, field('Preço para o Ousado (R$)', subMap.input), field('Dias de acesso', subDays), saveSubMap), el('p', { class: 'fine' }, mapRegular > d.subscriberMapPriceCents ? `Preço normal do Mapa: ${brl(mapRegular)}. O Ousado economiza ${brl(mapRegular - d.subscriberMapPriceCents)}.` : 'Atenção: o preço do assinante não está abaixo do preço normal do Mapa; o servidor cobra o menor dos dois.')),
+      card('Mapa da Virada para assinantes do Prumo', el('p', { class: 'muted' }, 'Na tela Dívidas, o assinante do Ousado vê um aviso para liberar o Mapa por este valor no Pix, com este prazo de acesso. O assinante do Desbravador usa o Mapa sem pagar, enquanto a assinatura valer. O Controle não muda. Preço e prazo são calculados no servidor.'), el('div', { class: 'bo-actions' }, field('Preço para o Ousado (R$)', subMap.input), field('Dias de acesso', subDays), saveSubMap), el('p', { class: 'fine' }, mapRegular > d.subscriberMapPriceCents ? `Preço normal do Mapa: ${brl(mapRegular)}. O Ousado economiza ${brl(mapRegular - d.subscriberMapPriceCents)}.` : 'Atenção: o preço do assinante não está abaixo do preço normal do Mapa; o servidor cobra o menor dos dois.')),
       card('Assinaturas do Prumo (recorrência mensal no cartão)', el('p', { class: 'muted' }, 'A pessoa assina uma vez e o cartão é cobrado todo mês até ela cancelar. Cancelar interrompe a cobrança na hora e mantém o acesso até o fim do mês pago. Mudar o preço vale para novas assinaturas e para as cobranças seguintes criadas daqui para frente; confira no Asaas as assinaturas já existentes.'), el('div', { class: 'bo-stack' }, ...subs.map((p) => productCard(p, draw)))),
       card('Recursos gratuitos', table([{ label: 'Recurso', render: (f) => f.name }, { label: 'O que é', render: (f) => f.description }, { label: 'IA', render: (f) => (f.usesAi ? 'Sim' : 'Não') }], d.free), el('p', { class: 'fine' }, 'Os gratuitos são a porta de entrada do funil. Não passam por pedido, então não têm preço editável; para cobrar por um deles, ele precisa virar um produto.')),
     );

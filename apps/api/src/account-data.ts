@@ -2,11 +2,12 @@
 // (2) pacote COMPLETO de um ex-assinante para o backoffice (.zip, tudo o que o sistema guarda dele);
 // (3) exclusão definitiva dos dados (manual no backoffice, ou automática depois da janela de retenção).
 import { AppError, notFound } from './errors.ts';
-import { audit } from './services.ts';
+import { audit, wipeCase } from './services.ts';
 import type { Ctx } from './services.ts';
 import { num } from './services.ts';
 import { CATEGORY_LABEL, planByCode } from './engine.ts';
 import { requireFeature } from './subscriptions.ts';
+import { revokeAllForSubscriber } from './openfinance.ts';
 import { buildXlsx } from './xlsx.ts';
 import type { Sheet } from './xlsx.ts';
 import { createZip } from './zip.ts';
@@ -27,7 +28,7 @@ export interface AccountReport {
 export async function accountReport(ctx: Ctx, subscriberId: string): Promise<AccountReport> {
   const plan = await requireFeature(ctx, subscriberId, 'ledger');
   const q = ctx.db;
-  const [who, entries, debts, pays, goals, contribs, reminders, wallets, limits, monthLimits] = await Promise.all([
+  const [who, entries, debts, pays, goals, contribs, reminders, wallets, limits, monthLimits, cardRows] = await Promise.all([
     q.query<{ email: string }>(`SELECT email::text AS email FROM app.subscribers WHERE id = $1`, [subscriberId]),
     q.query<{ occurred_on: Date; note: string; category: string; amount_cents: string; wallet: string | null }>(`SELECT l.occurred_on, l.note, l.category, l.amount_cents, w.name AS wallet FROM app.ledger_entries l LEFT JOIN app.wallets w ON w.id = l.wallet_id WHERE l.subscriber_id = $1 ORDER BY l.occurred_on, l.created_at`, [subscriberId]),
     q.query<{ name: string; initial_cents: string; balance_cents: string; monthly_rate_bps: number; min_payment_cents: string; paid_off_at: Date | null }>(`SELECT name, initial_cents, balance_cents, monthly_rate_bps, min_payment_cents, paid_off_at FROM app.account_debts WHERE subscriber_id = $1 ORDER BY created_at`, [subscriberId]),
@@ -35,9 +36,10 @@ export async function accountReport(ctx: Ctx, subscriberId: string): Promise<Acc
     q.query<{ name: string; target_cents: string; total: string; due_on: Date | null; completed_at: Date | null }>(`SELECT g.name, g.target_cents, g.saved_cents + coalesce((SELECT sum(c.amount_cents) FROM app.goal_contributions c WHERE c.goal_id = g.id), 0) AS total, g.due_on, g.completed_at FROM app.goals g WHERE g.subscriber_id = $1 ORDER BY g.created_at`, [subscriberId]),
     q.query<{ occurred_on: Date; name: string; amount_cents: string; note: string }>(`SELECT c.occurred_on, g.name, c.amount_cents, c.note FROM app.goal_contributions c JOIN app.goals g ON g.id = c.goal_id WHERE c.subscriber_id = $1 ORDER BY c.occurred_on`, [subscriberId]),
     q.query<{ title: string; due_on: Date; amount_cents: string | null; repeat_monthly: boolean; done_at: Date | null }>(`SELECT title, due_on, amount_cents, repeat_monthly, done_at FROM app.reminders WHERE subscriber_id = $1 ORDER BY due_on`, [subscriberId]),
-    q.query<{ name: string; kind: string; opening: string; limit_c: string; rate: number; balance: string }>(`SELECT w.name, w.kind, w.opening_balance_cents::text AS opening, w.overdraft_limit_cents::text AS limit_c, w.overdraft_rate_bps AS rate, (w.opening_balance_cents + coalesce(sum(l.amount_cents), 0))::text AS balance FROM app.wallets w LEFT JOIN app.ledger_entries l ON l.wallet_id = w.id WHERE w.subscriber_id = $1 GROUP BY w.id ORDER BY w.created_at`, [subscriberId]),
+    q.query<{ name: string; kind: string; opening: string; limit_c: string; rate: number; balance: string }>(`SELECT w.name, w.kind, w.opening_balance_cents::text AS opening, w.overdraft_limit_cents::text AS limit_c, w.overdraft_rate_bps AS rate, (w.opening_balance_cents + coalesce(sum(l.amount_cents), 0) - coalesce((SELECT sum(cp.amount_cents) FROM app.card_payments cp WHERE cp.wallet_id = w.id), 0))::text AS balance FROM app.wallets w LEFT JOIN app.ledger_entries l ON l.wallet_id = w.id WHERE w.subscriber_id = $1 GROUP BY w.id ORDER BY w.created_at`, [subscriberId]),
     q.query<{ category: string; limit_cents: string }>(`SELECT category, limit_cents FROM app.budget_limits WHERE subscriber_id = $1 ORDER BY category`, [subscriberId]),
     q.query<{ month: string; category: string; limit_cents: string }>(`SELECT month, category, limit_cents FROM app.budget_months WHERE subscriber_id = $1 ORDER BY month, category`, [subscriberId]),
+    q.query<{ name: string; brand: string; limit_cents: string; closing_day: number; due_day: number }>(`SELECT name, brand, limit_cents, closing_day, due_day FROM app.credit_cards WHERE subscriber_id = $1 ORDER BY created_at`, [subscriberId]),
   ]);
   const income = entries.rows.filter((e) => num(e.amount_cents) > 0).reduce((s, e) => s + num(e.amount_cents), 0);
   const spent = entries.rows.filter((e) => num(e.amount_cents) < 0).reduce((s, e) => s - num(e.amount_cents), 0);
@@ -50,6 +52,7 @@ export async function accountReport(ctx: Ctx, subscriberId: string): Promise<Acc
     { name: 'Aportes em metas', headers: ['Data', 'Meta', 'Valor', 'Observação'], rows: contribs.rows.map((c) => [day(c.occurred_on), c.name, num(c.amount_cents), c.note]), moneyCols: [2] },
     { name: 'Lembretes', headers: ['Conta ou prazo', 'Vence em', 'Valor', 'Todo mês', 'Situação'], rows: reminders.rows.map((r) => [r.title, day(r.due_on), r.amount_cents === null ? null : num(r.amount_cents), r.repeat_monthly ? 'Sim' : 'Não', r.done_at ? 'Pago' : 'Pendente']), moneyCols: [2] },
     { name: 'Carteiras', headers: ['Carteira', 'Tipo', 'Saldo', 'Saldo de partida', 'Limite do cheque especial', 'Taxa do cheque especial (% ao mês)'], rows: wallets.rows.map((w) => [w.name, w.kind, num(w.balance), num(w.opening), num(w.limit_c), w.rate / 100]), moneyCols: [2, 3, 4] },
+    { name: 'Cartões', headers: ['Cartão', 'Bandeira', 'Limite', 'Fecha no dia', 'Vence no dia'], rows: cardRows.rows.map((k) => [k.name, k.brand, num(k.limit_cents), k.closing_day, k.due_day]), moneyCols: [2] },
     { name: 'Limites', headers: ['Mês', 'Categoria', 'Limite'], rows: [...limits.rows.map((l) => ['Todos os meses', cat(l.category), num(l.limit_cents)] as (string | number)[]), ...monthLimits.rows.map((l) => [l.month, cat(l.category), num(l.limit_cents)] as (string | number)[])], moneyCols: [2] },
   ];
   const brl = (c: number) => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -190,9 +193,12 @@ export async function purgeSubscriber(ctx: Ctx, subscriberId: string, actor: str
   const tables = (await subscriberTables(ctx)).filter((t) => !KEEP_ON_PURGE.has(t));
   const prof = await ctx.db.query<{ provider_subscription_id: string | null; status: string }>(`SELECT provider_subscription_id, status FROM app.billing_profiles WHERE subscriber_id = $1`, [subscriberId]);
   if (prof.rows[0]?.provider_subscription_id && prof.rows[0].status !== 'canceled') await ctx.gateway.cancelCardSubscription(prof.rows[0].provider_subscription_id);
+  await revokeAllForSubscriber(ctx, subscriberId); // corta o acesso aos bancos no agregador antes de apagar os dados
   return ctx.db.tx(async (q) => {
     const old = await q.query<{ email: string }>(`SELECT email::text AS email FROM app.subscribers WHERE id = $1`, [subscriberId]);
     let deleted = 0;
+    const maps = await q.query<{ id: string }>(`SELECT id FROM app.cases WHERE owner_subscriber_id = $1 AND status <> 'purged'`, [subscriberId]);
+    for (const m of maps.rows) await wipeCase(q, m.id); // o Mapa que veio com a assinatura também é dado da pessoa
     await q.query(`UPDATE app.sessions SET subscriber_id = NULL WHERE subscriber_id = $1`, [subscriberId]);
     await q.query(`DELETE FROM app.household_members WHERE owner_id = $1 OR member_id = $1`, [subscriberId]);
     // E-mails de amigos que esta pessoa indicou são dados de terceiros: somem junto.

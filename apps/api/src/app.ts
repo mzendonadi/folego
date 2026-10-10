@@ -19,6 +19,7 @@ import * as sub from './subscriptions.ts';
 import { registerGestao } from './admin/routes.ts';
 import * as campaigns from './admin/campaigns.ts';
 import * as extras from './account-extras.ts';
+import * as cards from './cards.ts';
 import * as debts from './account-debts.ts';
 import { askPlanner } from './planner.ts';
 import * as program from './coach-program.ts';
@@ -32,9 +33,10 @@ import { deepHealth } from './health.ts';
 import { eventSchema, recordEvent } from './admin/events.ts';
 import { publicCatalog } from './admin/manage.ts';
 import * as redo from './redo.ts';
+import { mapOffer } from './map-offer.ts';
 import * as demoAccounts from './demo.ts';
 import { refreshRuntime } from './runtime.ts';
-import { accessSchema, addEntriesSchema, cancelSchema, contributionSchema, createCaseSchema, entryWalletSchema, accountDebtSchema, accountDebtPatchSchema, debtPaymentSchema, monthLimitSchema, plannerSchema, objectiveSchema, inviteSchema, checkoutSchema, profileSchema, referralLeadSchema, referralInviteSchema, recurringDecisionSchema, reminderPatchSchema, reminderSchema, walletSchema, walletPatchSchema, createOrderSchema, emailLinkSchema, emailOnlySchema, goalSchema, incomeInterviewSchema, leadSchema, loginCodeSchema, newPartnerSchema, partnerLoginSchema, partnerStatusSchema, setCategorySchema, categoryNameSchema, setLimitSchema, simulateSchema, subscriptionOrderSchema, toggleIncomeTaskSchema, translationSchema, guidedSchema, uuidParam, monthParam } from './schemas.ts';
+import { cardSchema, cardPatchSchema, cardPurchaseSchema, cardPaymentSchema, cardImportSchema, accessSchema, addEntriesSchema, cancelSchema, contributionSchema, createCaseSchema, entryWalletSchema, accountDebtSchema, accountDebtPatchSchema, debtPaymentSchema, monthLimitSchema, plannerSchema, objectiveSchema, inviteSchema, checkoutSchema, profileSchema, referralLeadSchema, referralInviteSchema, recurringDecisionSchema, reminderPatchSchema, reminderSchema, walletSchema, walletPatchSchema, createOrderSchema, emailLinkSchema, emailOnlySchema, goalSchema, incomeInterviewSchema, leadSchema, loginCodeSchema, newPartnerSchema, partnerLoginSchema, partnerStatusSchema, setCategorySchema, categoryNameSchema, setLimitSchema, simulateSchema, subscriptionOrderSchema, toggleIncomeTaskSchema, translationSchema, guidedSchema, uuidParam, monthParam } from './schemas.ts';
 import { EngineInputError } from './engine.ts';
 import { GUIDED_KINDS } from './guided.ts';
 import * as openFinance from './openfinance.ts';
@@ -420,6 +422,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
   const accountViewForCancel = async (id: string) => (await sub.accountView(ctx, id)).email;
   // Exportação dos dados da própria pessoa (enquanto tem acesso, inclusive depois de cancelar, até o fim do mês pago).
+  // Mapa da Virada para quem assina: oferta (Ousado), uso incluído (Desbravador) ou o Mapa ativo. O preço e o prazo que valem são sempre os do servidor.
+  app.get('/api/account/map-offer', async (req) => {
+    await requireSelf(req);
+    return mapOffer(ctx, await requireSession(req));
+  });
   app.get('/api/account/export', async (req) => accountData.accountReport(ctx, await requireSubscriber(req)));
   app.get('/api/account/export.xlsx', async (req, reply) => {
     const buf = await accountData.accountXlsx(ctx, await requireSubscriber(req));
@@ -553,12 +560,47 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     return reply.status(201).send(await openFinance.addConnection(ctx, await requireSubscriber(req), itemId));
   });
   app.post('/api/account/openfinance/connections/:id/sync', { config: { rateLimit: { max: 6 * scale, timeWindow: '10 minutes' } } }, async (req) => openFinance.syncNow(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id)));
+  // Reconectar (renovar o consentimento ou entrar de novo no banco): token em modo "atualizar" e conferência do estado depois do widget
+  app.post('/api/account/openfinance/connections/:id/reconnect-token', { config: { rateLimit: { max: 10 * scale, timeWindow: '10 minutes' } } }, async (req) => openFinance.reconnectToken(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id)));
+  app.post('/api/account/openfinance/connections/:id/refresh', { config: { rateLimit: { max: 10 * scale, timeWindow: '10 minutes' } } }, async (req) => openFinance.refreshConnection(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id)));
   app.delete('/api/account/openfinance/connections/:id', async (req, reply) => {
     await openFinance.revokeConnection(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id));
     return reply.status(204).send();
   });
   app.get('/api/account/market', async (req) => program.marketView(ctx, await requireSubscriber(req)));
   // Carteiras e lembretes
+  // Cartões de crédito: Ousado (cadastro, limite, fatura, parcelas) e Desbravador (também fatura em PDF e estratégias)
+  app.get('/api/account/cards', async (req) => cards.listCards(ctx, await requireSubscriber(req)));
+  app.post('/api/account/cards', async (req, reply) => reply.status(201).send({ id: await cards.createCard(ctx, await requireSubscriber(req), cardSchema.parse(req.body)) }));
+  app.put('/api/account/cards/:id', async (req) => {
+    await cards.updateCard(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id), cardPatchSchema.parse(req.body));
+    return { ok: true };
+  });
+  app.delete('/api/account/cards/:id', async (req, reply) => {
+    await cards.deleteCard(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id));
+    return reply.status(204).send();
+  });
+  app.post('/api/account/cards/:id/purchases', { config: { rateLimit: { max: 60 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => reply.status(201).send(await cards.addPurchase(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id), cardPurchaseSchema.parse(req.body))));
+  app.delete('/api/account/cards/:id/installments/:planId', async (req, reply) => {
+    const p = req.params as { id: string; planId: string };
+    await cards.cancelInstallments(ctx, await requireSubscriber(req), idParam(p.id), idParam(p.planId));
+    return reply.status(204).send();
+  });
+  app.post('/api/account/cards/:id/payments', { config: { rateLimit: { max: 30 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => reply.status(201).send({ id: await cards.addCardPayment(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id), cardPaymentSchema.parse(req.body)) }));
+  app.delete('/api/account/cards/:id/payments/:paymentId', async (req, reply) => {
+    const p = req.params as { id: string; paymentId: string };
+    await cards.deleteCardPayment(ctx, await requireSubscriber(req), idParam(p.id), idParam(p.paymentId));
+    return reply.status(204).send();
+  });
+  app.get('/api/account/cards/:id/invoices/:key', async (req) => {
+    const p = req.params as { id: string; key: string };
+    return cards.invoiceDetail(ctx, await requireSubscriber(req), idParam(p.id), p.key);
+  });
+  app.get('/api/account/cards/:id/revolving', async (req) => {
+    const fixed = Math.max(0, Math.min(100_000_000_00, Number((req.query as { fixed?: string }).fixed) || 0));
+    return cards.rotativoSimulation(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id), fixed);
+  });
+  app.post('/api/account/cards/:id/import', { config: { rateLimit: { max: 12 * scale, timeWindow: '10 minutes' } } }, async (req) => cards.importInvoice(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id), cardImportSchema.parse(req.body)));
   app.get('/api/account/wallets', async (req) => extras.listWallets(ctx, await requireSubscriber(req)));
   app.post('/api/account/wallets', async (req, reply) => {
     return reply.status(201).send({ id: await extras.createWallet(ctx, await requireSubscriber(req), walletSchema.parse(req.body)) });
@@ -605,6 +647,14 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     const { token } = accessSchema.parse(req.body);
     const sessionId = await createSession(req, reply);
     return svc.redeemAccess(ctx, sessionId, token);
+  });
+
+  // Avisos do agregador de Open Finance (webhook): sem cookie, autenticado por segredo. Sempre 200 para não gerar reenvio à toa; sem segredo configurado, não existe (404).
+  app.post('/webhooks/openfinance', { config: { rateLimit: { max: 120 * scale, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const outcome = await openFinance.handleOpenFinanceWebhook(ctx, req.headers, (req.query ?? {}) as Record<string, unknown>, req.body);
+    if (outcome === 'disabled') throw notFound();
+    if (outcome === 'invalid') return reply.status(401).send({ error: 'invalid_secret' });
+    return reply.status(200).send({ ok: true, outcome });
   });
 
   // Webhook do gateway: sem cookie, autenticado pela assinatura do provedor.

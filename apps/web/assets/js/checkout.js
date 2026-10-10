@@ -18,7 +18,10 @@ export function renderCheckout(root, ctx) {
   let pollId = 0;
   let orderId = null;
   let disposed = false;
-  let contact = { email: '', phone: '' };
+  // Assinante do Prumo: o servidor já calculou o preço e o prazo do Mapa dele (Ousado: valor especial no Pix; Desbravador: incluso no plano).
+  const offer = ctx.mapOffer && !ctx.addon ? ctx.mapOffer : null;
+  const included = offer?.mode === 'free';
+  let contact = { email: offer?.email ?? '', phone: '' };
 
   const stop = () => {
     window.clearInterval(timerId);
@@ -35,10 +38,11 @@ export function renderCheckout(root, ctx) {
   let needContact = !addon || standalone;
 
   // Valores lidos do catálogo na hora (o dono pode mudar); o servidor sempre recalcula o preço que vale.
-  const MAP_CENTS = () => CATALOG.recovery_map.cents;
+  const MAP_CENTS = () => (offer ? offer.priceCents : CATALOG.recovery_map.cents);
   const LETTERS_CENTS = () => CATALOG.defense_letters.cents;
   const BUNDLE_CENTS = () => BUNDLE.cents;
-  const isBundle = () => !addon && withLetters && withCalendar;
+  const isBundle = () => !addon && !offer && withLetters && withCalendar; // quem assina o Prumo tem o preço dele no Mapa: o combo não se soma
+  const isFreeOrder = () => included && !addon && !withLetters && !withCalendar; // só o Mapa incluso no plano: sem Pix e sem contato
   const bundleDiscount = () => (isBundle() ? MAP_CENTS() + LETTERS_CENTS() + CATALOG.calendar_30d.cents - BUNDLE_CENTS() : 0);
   const codes = () => addon ?? ['recovery_map', ...(withLetters ? ['defense_letters'] : []), ...(withCalendar ? ['calendar_30d'] : [])];
 
@@ -68,7 +72,8 @@ export function renderCheckout(root, ctx) {
     const lines = addon
       ? addon.map((code) => line(CATALOG[code].name, CATALOG[code].cents))
       : [
-          line('Mapa da Virada', MAP_CENTS()),
+          offer ? line('Mapa da Virada', offer.regularCents) : line('Mapa da Virada', MAP_CENTS()),
+          offer && offer.regularCents > offer.priceCents ? line(included ? 'Incluso no seu plano Desbravador' : 'Desconto de assinante Ousado', -(offer.regularCents - offer.priceCents), 'co-discount') : null,
           withLetters ? line('Kit de Cartas e Defesas', LETTERS_CENTS()) : null,
           withCalendar ? line('Calendário dos 30 dias', CATALOG.calendar_30d.cents) : null,
           isBundle() ? line('Desconto Kit Completo', -bundleDiscount(), 'co-discount') : null,
@@ -77,10 +82,12 @@ export function renderCheckout(root, ctx) {
       el('h2', { id: 'co-sum-title' }, 'Seu pedido'),
       el('ul', { class: 'co-lines' }, ...lines),
       ...bumps,
-      ...(!addon && !isBundle() && ctx.offerLetters ? [el('p', { class: 'fine' }, `Mapa + Cartas + Calendário juntos saem por ${brl(BUNDLE_CENTS())} (Kit Completo).`)] : []),
+      ...(!addon && !offer && !isBundle() && ctx.offerLetters ? [el('p', { class: 'fine' }, `Mapa + Cartas + Calendário juntos saem por ${brl(BUNDLE_CENTS())} (Kit Completo).`)] : []),
       el('div', { class: 'co-total' }, el('span', {}, 'Total'), el('strong', { 'aria-live': 'polite' }, brl(total()))),
-      el('p', { class: 'note' }, icon('info'), el('span', {}, `Depois de pagar, você tem ${daysOf(addon ? addon[0] : 'recovery_map')} dias de acesso e pode refazer com dados novos quantas vezes quiser, sem pagar de novo. Uma contagem regressiva mostra quantos dias faltam.`)),
-      el('p', { class: 'fine' }, 'Pagamento único por Pix. Sem assinatura e sem renovação automática.'),
+      el('p', { class: 'note' }, icon('info'), el('span', {}, included
+        ? 'O Mapa fica liberado enquanto a sua assinatura do Desbravador valer, e você pode refazer com dados novos quantas vezes quiser. Uma contagem regressiva mostra quantos dias faltam.'
+        : `Depois de pagar, você tem ${offer ? offer.days : daysOf(addon ? addon[0] : 'recovery_map')} dias de acesso e pode refazer com dados novos quantas vezes quiser, sem pagar de novo. Uma contagem regressiva mostra quantos dias faltam.`)),
+      el('p', { class: 'fine' }, included && total() === 0 ? 'Sem cobrança: faz parte do seu plano.' : 'Pagamento único por Pix. Sem assinatura e sem renovação automática.'),
     );
   }
 
@@ -100,6 +107,16 @@ export function renderCheckout(root, ctx) {
   }
 
   function drawIntro() {
+    if (isFreeOrder()) {
+      payCard.replaceChildren(...[
+        el('h2', { id: 'co-pay-title' }, 'Abrir o seu Mapa'),
+        el('p', { class: 'muted' }, 'O Mapa da Virada faz parte do seu plano Desbravador. Não há Pix nem cobrança: é só abrir.'),
+        el('button', { class: 'btn btn-primary btn-lg btn-block', type: 'button', id: 'gen-pix' }, 'Abrir meu Mapa', icon('arrow-right')),
+        el('p', { class: 'fine' }, 'Dúvida? Escreva para ', el('a', { class: 'link', href: 'mailto:suporte@folego.online' }, 'suporte@folego.online'), '.'),
+      ]);
+      payCard.querySelector('#gen-pix').addEventListener('click', generate);
+      return;
+    }
     payCard.replaceChildren(...[
       el('h2', { id: 'co-pay-title' }, 'Gerar o código Pix'),
       el('p', { class: 'muted' }, addon ? 'Você gera o código, paga no app do seu banco e o item é liberado na hora.' : 'Você gera o código, paga no app do seu banco e o Mapa é liberado na hora.'),
@@ -126,12 +143,12 @@ export function renderCheckout(root, ctx) {
     btn.disabled = true;
     btn.textContent = 'Gerando o Pix…';
     try {
-      const order = await ctx.api.createOrder({ caseId: ctx.caseId, products: codes(), ...(!needContact || !contact.email ? {} : { contact: { email: contact.email, phone: digitsOf(contact.phone) } }) });
+      const order = await ctx.api.createOrder({ caseId: ctx.caseId, products: codes(), ...(!needContact || !contact.email || !emailEl ? {} : { contact: { email: contact.email, phone: digitsOf(contact.phone) } }) });
       if (disposed) return;
       orderId = order.orderId;
       // Conta de teste ligada pelo dono: o servidor já confirmou o pedido, sem Pix e sem cobrança.
       if (order.status === 'paid') {
-        toast('Conta de teste: liberado sem cobrança.');
+        toast(included ? 'Pronto: o Mapa está no seu plano.' : 'Conta de teste: liberado sem cobrança.');
         return ctx.onPaid(order.orderId);
       }
       drawSummary(true);
@@ -144,7 +161,7 @@ export function renderCheckout(root, ctx) {
         drawIntro();
         return toast('Informe seu e-mail e celular para gerar o Pix.');
       }
-      toast(error?.code === 'sales_paused' || error?.code === 'product_unavailable' ? error.message : 'Não deu pra gerar o Pix agora. Tente de novo.');
+      toast(['sales_paused', 'product_unavailable', 'map_active'].includes(error?.code) ? error.message : 'Não deu pra gerar o Pix agora. Tente de novo.');
     }
   }
 

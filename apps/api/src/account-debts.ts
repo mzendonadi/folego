@@ -51,7 +51,7 @@ export async function listDebts(ctx: Ctx, subscriberId: string, extraCents = 0) 
   // Cheque especial (LIS) em uso nas contas bancárias entra como dívida "virtual": mesma lista, mesmo plano de quitação.
   // Não se edita nem se paga aqui (o saldo vem da carteira): para quitar, lance uma entrada na conta.
   const lis = await ctx.db.query<{ id: string; name: string; rate: number; balance: string }>(
-    `SELECT w.id, w.name, w.overdraft_rate_bps AS rate, (w.opening_balance_cents + coalesce(sum(l.amount_cents), 0))::text AS balance
+    `SELECT w.id, w.name, w.overdraft_rate_bps AS rate, (w.opening_balance_cents + coalesce(sum(l.amount_cents), 0) - coalesce((SELECT sum(cp.amount_cents) FROM app.card_payments cp WHERE cp.wallet_id = w.id), 0))::text AS balance
        FROM app.wallets w LEFT JOIN app.ledger_entries l ON l.wallet_id = w.id WHERE w.subscriber_id = $1 AND w.kind = 'conta' GROUP BY w.id ORDER BY w.created_at`,
     [subscriberId],
   );

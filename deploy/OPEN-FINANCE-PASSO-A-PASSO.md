@@ -1,6 +1,10 @@
 # Open Finance no Prumo — passo a passo para ligar
 
-Estado hoje: o código está pronto e **desligado** (aba "Contas conectadas" mostra "Em breve"). Ele fala com o agregador **Pluggy**. Foi testado com respostas simuladas, nunca contra o ambiente real dele. Este roteiro leva do zero até clientes usando, com um teste de verdade no meio. Marque cada item.
+Estado hoje: o código está pronto e **desligado** (aba "Contas conectadas" mostra "Em breve"). Ele fala com o agregador **Pluggy**. Foi testado com respostas simuladas, nunca contra o ambiente real dele. Já cobre: contas e **cartões de crédito** (limite, compras, parcelas, pagamentos), botão **Reconectar**, **validade do consentimento** (aviso por e-mail 30 dias antes), **webhook** e corte do acesso no agregador ao apagar a conta.
+
+**Teste local sem contrato:** no ambiente de testes (`C:\Projeto Folego`), ligue `OPENFINANCE_FAKE=1` para usar bancos de mentira (Azul e Verde) e ver o fluxo inteiro. Isso nunca liga em produção.
+
+**Chaves (nova forma):** em vez de editar o `.env` pelo Terminal, cadastre nos **Secrets do GitHub** `PLUGGY_CLIENT_ID`, `PLUGGY_CLIENT_SECRET`, `OPENFINANCE_WEBHOOK_SECRET` (16+ caracteres inventados por você) e, se precisar, `PLUGGY_CONNECT_URL`; o próximo **Publicar em produção** grava no servidor sem mostrar nada. No painel do Pluggy, cadastre o webhook em `https://folego.online/webhooks/openfinance` com o cabeçalho `x-webhook-secret` igual ao segredo (se o painel não aceitar cabeçalho, use `?token=SEGREDO` no fim do endereço). Este roteiro leva do zero até clientes usando, com um teste de verdade no meio. Marque cada item.
 
 > Regra de ouro: nenhuma senha, chave ou token deve passar por mim ou pelo chat. As chaves vão direto do painel do agregador para o servidor, pelo Terminal.
 

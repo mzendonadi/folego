@@ -60,6 +60,26 @@ const TITLES = {
 };
 const HEADINGS = { intake: '#intake-title', processing: '#processing-title', preview: '#preview-title', checkout: '#checkout-title', addon: '#checkout-title', translator: '#translator-title', guided: '#guided-title', delivery: '#delivery-title', tools: '#tools-title' };
 
+// Assinante do Prumo: preço e uso do Mapa vêm do servidor (Ousado paga o valor dele, Desbravador usa incluso). Só perguntamos
+// quando este navegador já entrou numa conta, para não gerar chamadas à toa para visitantes.
+const hasAccountHint = () => {
+  try {
+    return localStorage.getItem('folego_prumo') === '1';
+  } catch {
+    return false;
+  }
+};
+let mapOfferP = null;
+async function loadMapOffer() {
+  if (!hasAccountHint()) {
+    state.mapOffer = null;
+    return null;
+  }
+  mapOfferP ??= api.getMapOffer().then((o) => (o?.eligible ? o : null)).catch(() => null);
+  state.mapOffer = await mapOfferP;
+  return state.mapOffer;
+}
+
 let current = 'landing';
 let lastTrackedView = '';
 let lastTrackedAt = 0;
@@ -91,6 +111,7 @@ function show(view, { focus = true, scroll = true } = {}) {
   const inFlow = view !== 'landing';
   $('.header-cta').hidden = inFlow || !heroGone;
   $('.header-exit').hidden = !inFlow;
+  $('.header-prumo').hidden = !inFlow || view === 'account' || !hasAccountHint(); // quem veio do Prumo volta para lá com um toque
   document.querySelectorAll('[data-landing-only]').forEach((n) => { n.hidden = inFlow; });
   document.body.dataset.route = view;
   // O roteador roda duas vezes por navegação (hashchange e popstate): a mesma tela em menos de 1,5 s conta uma vez só.
@@ -236,6 +257,7 @@ async function route() {
   if (view === 'tools') renderTools($('#tools-root'), { onStart: () => startFlow() });
   if (view === 'preview' || view === 'checkout') {
     if (!(await ensurePreview())) return replaceWith('intake');
+    await loadMapOffer();
   }
   if (view === 'checkout' && state.paid) return replaceWith('delivery');
   if (view === 'addon') renderAddonView();
@@ -356,18 +378,37 @@ async function onIntakeComplete() {
     return;
   }
   history.replaceState({ view: 'preview' }, '', ROUTES.preview);
+  await loadMapOffer(); // assinante do Prumo vê o preço dele (ou "incluso") já na prévia
   renderPreviewView();
   show('preview');
 }
 
 function renderPreviewView() {
   renderPreview($('#preview-root'), state.preview, {
+    offer: state.mapOffer,
     onBuy: () => {
       track('cta', { id: 'buy_map' });
+      if (state.mapOffer?.mode === 'free') return openIncludedMap(); // Desbravador: o Mapa já é do plano, sem tela de pagamento
       go('checkout');
     },
     onWipe: askWipe,
   });
+}
+
+// Desbravador: cria o pedido (sem cobrança) e abre o Mapa na hora.
+async function openIncludedMap() {
+  try {
+    const order = await api.createOrder({ caseId: state.caseId, products: ['recovery_map'] });
+    mapOfferP = null; // o Prumo passa a mostrar o Mapa ativo
+    state.orderId = order.orderId;
+    state.paid = true;
+    await openDelivery();
+    history.pushState({ view: 'delivery' }, '', ROUTES.delivery);
+    show('delivery');
+    toast('Pronto: o Mapa está no seu plano.');
+  } catch (error) {
+    toast(error?.code === 'map_active' ? error.message : 'Não consegui abrir o seu Mapa agora. Tente de novo em instantes.');
+  }
 }
 
 // Tradutor de cobrança: texto → leitura rápida grátis → Pix → explicação completa.
@@ -446,10 +487,12 @@ function renderCheckoutView() {
   disposeCheckout = renderCheckout($('#checkout-root'), {
     offerLetters: eligible > 0,
     caseId: state.caseId,
+    mapOffer: state.mapOffer,
     api,
     onPaid: async (orderId) => {
       state.orderId = orderId;
       state.paid = true;
+      mapOfferP = null; // o Prumo passa a mostrar o Mapa ativo
       await openDelivery();
       history.pushState({ view: 'delivery' }, '', ROUTES.delivery);
       show('delivery');

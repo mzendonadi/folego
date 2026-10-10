@@ -10,6 +10,10 @@ for v in ASAAS_API_KEY ASAAS_PIX_KEY ASAAS_WEBHOOK_TOKEN TURNSTILE_SITE_KEY TURN
 echo "== configuração (valores não secretos)"
 for v in PAYMENT_PROVIDER ASAAS_BASE_URL SEO_OPEN LEADS_ENABLED SUBSCRIPTIONS_ENABLED ALLOW_FAKE_GATEWAY_IN_PRODUCTION REQUIRE_PRODUCTION_KEYS PUBLIC_URL EMAIL_FROM META_PIXEL_ID META_CAPI_PAGEVIEW AI_MAX_CALLS_PER_DAY; do echo "$v=$(val $v)"; done
 echo "META_TEST_EVENT_CODE: $(tem META_TEST_EVENT_CODE) (no lançamento deve estar AUSENTE)"
+echo "== Open Finance (opcional; só liga com as duas chaves do agregador)"
+echo "PLUGGY_CLIENT_ID: $(tem PLUGGY_CLIENT_ID) | PLUGGY_CLIENT_SECRET: $(tem PLUGGY_CLIENT_SECRET) | OPENFINANCE_WEBHOOK_SECRET: $(tem OPENFINANCE_WEBHOOK_SECRET)"
+sudo docker compose exec -T api node -e "fetch('http://127.0.0.1:3000/api/features').then(r=>r.json()).then(j=>console.log('openFinance ligado no servidor:', j.openFinance))" 2>&1 | grep -v "unable to resolve host"
+q "SELECT 'conexões ' || count(*) FILTER (WHERE status = 'active') || ' ativas, ' || count(*) FILTER (WHERE status = 'needs_action') || ' pedindo reconexão' FROM app.of_connections" 2>/dev/null
 echo "== indexação"
 cat nginx/seo.conf 2>/dev/null | head -3 || echo "sem seo.conf"
 echo "== saúde"

@@ -20,7 +20,7 @@ export async function listWallets(ctx: Ctx, subscriberId: string) {
   await requireFeature(ctx, subscriberId, 'ledger');
   const r = await ctx.db.query<{ id: string; name: string; kind: string; opening: string; limit_c: string; rate: number; balance: string; entries: string }>(
     `SELECT w.id, w.name, w.kind, w.opening_balance_cents::text AS opening, w.overdraft_limit_cents::text AS limit_c, w.overdraft_rate_bps AS rate,
-            (w.opening_balance_cents + coalesce(sum(l.amount_cents), 0))::text AS balance, count(l.id)::text AS entries
+            (w.opening_balance_cents + coalesce(sum(l.amount_cents), 0) - coalesce((SELECT sum(cp.amount_cents) FROM app.card_payments cp WHERE cp.wallet_id = w.id), 0))::text AS balance, count(l.id)::text AS entries
        FROM app.wallets w LEFT JOIN app.ledger_entries l ON l.wallet_id = w.id WHERE w.subscriber_id = $1 GROUP BY w.id ORDER BY w.created_at`,
     [subscriberId],
   );
@@ -48,7 +48,7 @@ export interface WalletInput {
 export async function walletOverdraftAlerts(ctx: Ctx, subscriberId: string): Promise<AlertItem[]> {
   const r = await ctx.db.query<{ name: string; limit_c: string; rate: number; balance: string }>(
     `SELECT w.name, w.overdraft_limit_cents::text AS limit_c, w.overdraft_rate_bps AS rate,
-            (w.opening_balance_cents + coalesce(sum(l.amount_cents), 0))::text AS balance
+            (w.opening_balance_cents + coalesce(sum(l.amount_cents), 0) - coalesce((SELECT sum(cp.amount_cents) FROM app.card_payments cp WHERE cp.wallet_id = w.id), 0))::text AS balance
        FROM app.wallets w LEFT JOIN app.ledger_entries l ON l.wallet_id = w.id WHERE w.subscriber_id = $1 AND w.kind = 'conta' GROUP BY w.id`,
     [subscriberId],
   );

@@ -139,12 +139,24 @@ jobs:
           TURNSTILE_SECRET: ${{ secrets.TURNSTILE_SECRET }}
           META_CAPI_TOKEN: ${{ secrets.META_CAPI_TOKEN }}
           META_TEST_EVENT_CODE: ${{ secrets.META_TEST_EVENT_CODE }}
+          PLUGGY_CLIENT_ID: ${{ secrets.PLUGGY_CLIENT_ID }}
+          PLUGGY_CLIENT_SECRET: ${{ secrets.PLUGGY_CLIENT_SECRET }}
+          OPENFINANCE_WEBHOOK_SECRET: ${{ secrets.OPENFINANCE_WEBHOOK_SECRET }}
+          PLUGGY_CONNECT_URL: ${{ secrets.PLUGGY_CONNECT_URL }}
         run: |
           out="$RUNNER_TEMP/prod.env"; : > "$out"; chmod 600 "$out"
           [ -n "$TURNSTILE_SITE_KEY" ] && printf 'TURNSTILE_SITE_KEY=%s\n' "$TURNSTILE_SITE_KEY" >> "$out"
           [ -n "$TURNSTILE_SECRET" ]   && printf 'TURNSTILE_SECRET=%s\n' "$TURNSTILE_SECRET" >> "$out"
           [ -n "$META_CAPI_TOKEN" ]     && printf 'META_CAPI_TOKEN=%s\n' "$META_CAPI_TOKEN" >> "$out"
           [ -n "$META_TEST_EVENT_CODE" ] && printf 'META_TEST_EVENT_CODE=%s\n' "$META_TEST_EVENT_CODE" >> "$out"
+          # Open Finance (Pluggy): só liga com as DUAS chaves; o segredo dos avisos e o endereço do widget são opcionais.
+          if [ -n "$PLUGGY_CLIENT_ID" ] && [ -n "$PLUGGY_CLIENT_SECRET" ]; then
+            printf 'PLUGGY_CLIENT_ID=%s\n' "$PLUGGY_CLIENT_ID" >> "$out"
+            printf 'PLUGGY_CLIENT_SECRET=%s\n' "$PLUGGY_CLIENT_SECRET" >> "$out"
+            [ -n "$OPENFINANCE_WEBHOOK_SECRET" ] && printf 'OPENFINANCE_WEBHOOK_SECRET=%s\n' "$OPENFINANCE_WEBHOOK_SECRET" >> "$out"
+            [ -n "$PLUGGY_CONNECT_URL" ] && printf 'PLUGGY_CONNECT_URL=%s\n' "$PLUGGY_CONNECT_URL" >> "$out"
+            echo "Open Finance: chaves presentes, as contas conectadas serão ligadas."
+          fi
           if [ -n "$ASAAS_API_KEY" ] && [ -n "$ASAAS_PIX_KEY" ] && [ -n "$ASAAS_WEBHOOK_TOKEN" ]; then
             # A chave do Asaas começa com "$": aspas simples evitam que o Docker a corrompa.
             printf "ASAAS_API_KEY='%s'\n" "$ASAAS_API_KEY" >> "$out"

@@ -41,6 +41,8 @@ export const state = {
   bumpCards: false,
   orderId: null,
   paid: false,
+  /** Assinante do Prumo: preço/uso do Mapa calculados pelo servidor (null para visitantes e para o plano Controle). */
+  mapOffer: null,
 };
 
 // O rascunho fica só neste navegador (sessionStorage) para o refresh não apagar o formulário.

@@ -54,7 +54,7 @@ export async function listProducts(ctx: Ctx) {
     updatedAt: iso(x.updated_at),
     history: h.rows.filter((r) => r.product_code === x.code).slice(0, 5).map((r) => ({ at: iso(r.changed_at), oldCents: r.old_price_cents === null ? null : num(r.old_price_cents), newCents: num(r.new_price_cents), by: r.email })),
   }));
-  return { products, free: FREE_FEATURES, bundlePriceCents: ctx.config.bundlePriceCents };
+  return { products, free: FREE_FEATURES, bundlePriceCents: ctx.config.bundlePriceCents, subscriberMapPriceCents: ctx.config.subscriberMapPriceCents, subscriberMapDays: ctx.config.subscriberMapDays };
 }
 
 export interface ProductPatch {
@@ -103,6 +103,8 @@ export async function publicCatalog(ctx: Ctx) {
   return {
     products: p.rows.map((x) => ({ code: x.code, name: x.name, kind: x.kind, priceCents: num(x.price_cents), active: x.active, accessDays: x.access_days })),
     bundlePriceCents: ctx.config.bundlePriceCents,
+    subscriberMapPriceCents: ctx.config.subscriberMapPriceCents,
+    subscriberMapDays: ctx.config.subscriberMapDays,
     salesPaused: ctx.config.salesPaused,
     announcement: ctx.config.announcement,
   };

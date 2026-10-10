@@ -47,6 +47,9 @@ export interface Config {
   announcement: { text: string; tone: 'info' | 'warn' } | null;
   /** Preço fechado do Kit Completo (Mapa + Cartas + Calendário). */
   bundlePriceCents: number;
+  /** Mapa da Virada para quem assina o Ousado: preço no Pix e dias de acesso. O Desbravador usa o Mapa sem pagar, enquanto a assinatura valer. */
+  subscriberMapPriceCents: number;
+  subscriberMapDays: number;
   /** Quantos dias antes de vencer a assinatura o lembrete por e-mail é enviado. */
   reminderDaysBefore: number;
   /** Teto de e-mails de campanha por dia (proteção da reputação do domínio de envio). */
@@ -59,6 +62,10 @@ export interface Config {
   openFinance: { clientId: string; clientSecret: string; baseUrl: string } | null;
   /** Endereço do widget de conexão do agregador (deve estar liberado na CSP). */
   openFinanceWidgetUrl: string;
+  /** Segredo que o agregador manda nos avisos (webhook). Sem ele, o endereço de avisos não existe. */
+  openFinanceWebhookSecret: string | null;
+  /** Banco de mentira para testar o fluxo inteiro SEM contrato (só fora de produção). */
+  openFinanceFake: boolean;
   /** Devolve o código de login no corpo da resposta (só para desenvolver). Exige EXPOSE_DEV_CODES=1 E ambiente de desenvolvimento: um NODE_ENV esquecido não basta. */
   exposeDevCodes: boolean;
   /** Cloudflare Turnstile (anti-robô). Sem as duas chaves fica desligado. */
@@ -111,6 +118,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   return {
     env: mode,
     openFinanceWidgetUrl: env.PLUGGY_CONNECT_URL ?? 'https://cdn.pluggy.ai/pluggy-connect/v2.8.0/pluggy-connect.js',
+    openFinanceWebhookSecret: env.OPENFINANCE_WEBHOOK_SECRET && env.OPENFINANCE_WEBHOOK_SECRET.length >= 16 ? env.OPENFINANCE_WEBHOOK_SECRET : null,
+    openFinanceFake: env.OPENFINANCE_FAKE === '1' && mode !== 'production',
     openFinance: env.PLUGGY_CLIENT_ID && env.PLUGGY_CLIENT_SECRET ? { clientId: env.PLUGGY_CLIENT_ID, clientSecret: env.PLUGGY_CLIENT_SECRET, baseUrl: env.PLUGGY_BASE_URL ?? 'https://api.pluggy.ai' } : null,
     exposeDevCodes: mode === 'development' && env.EXPOSE_DEV_CODES === '1',
     port: Number(env.PORT ?? 3000),
@@ -138,6 +147,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     salesPaused: false,
     announcement: null,
     bundlePriceCents: 5990,
+    subscriberMapPriceCents: 1299,
+    subscriberMapDays: 90,
     reminderDaysBefore: 3,
     campaignDailyCap: 200,
     canceledPurgeDays: 15,

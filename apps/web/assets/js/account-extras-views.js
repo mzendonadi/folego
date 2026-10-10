@@ -3,8 +3,9 @@ import { el, icon, toast } from './dom.js';
 import { brl, percentToBps } from './format.js';
 import { moneyInput } from './money.js';
 import { confirmDialog } from './confirm.js';
+import { mapBanner } from './account-map-banner.js';
 
-const card = (...c) => el('section', { class: 'card d-section' }, ...c.filter(Boolean));
+const card =(...c) => el('section', { class: 'card d-section' }, ...c.filter(Boolean));
 const fmtDate = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString('pt-BR');
 export const WALLET_KIND_LABEL = { dinheiro: 'Dinheiro', conta: 'Conta bancária', cartao: 'Cartão', poupanca: 'Poupança', outra: 'Outra' };
 
@@ -336,6 +337,7 @@ export function viewDividas(ctx) {
   const t = d.totals;
   return el(
     'div', { class: 'acc-stack' },
+    mapBanner(ctx),
     t.initialCents ? card(el('h2', {}, 'Para sair do vermelho'), el('p', {}, el('strong', {}, brl(t.owedCents)), ' ainda a pagar. Você já pagou ', el('strong', {}, brl(t.paidCents)), ` (${t.progressPct}%).`)) : null,
     planBox,
     card(el('h2', {}, 'Nova dívida'), el('p', { class: 'muted' }, 'Cadastre o que você deve. O saldo cai a cada pagamento registrado, e o pagamento entra nos seus lançamentos como gasto em "Dívidas".'), form),

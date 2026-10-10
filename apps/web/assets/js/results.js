@@ -54,7 +54,10 @@ function tickList(items) {
 
 // ---------- PREVIEW ----------
 /** Cartão "tem mais no seu diagnóstico": só sinais e contagens do preview (nunca o conteúdo pago). */
-function discoveryCard(preview) {
+/** Texto do botão que libera o Mapa: preço normal, preço de assinante (Ousado) ou incluso no plano (Desbravador). */
+const buyText = (offer) => (offer?.mode === 'free' ? 'Abrir meu Mapa · incluso no seu plano' : `Liberar meu Mapa · ${offer ? brl(offer.priceCents) : priceLabel('recovery_map')} no Pix`);
+
+function discoveryCard(preview, offer = null) {
   const dsc = preview.discoveries ?? { moreInQueue: 0, negotiable: 0, essentialOverdue: false };
   const found = [];
   if (dsc.moreInQueue > 0) found.push(`A ordem das outras ${dsc.moreInQueue} ${plural(dsc.moreInQueue, 'dívida', 'dívidas')} da fila, com o motivo de cada uma`);
@@ -70,13 +73,13 @@ function discoveryCard(preview) {
     el('h2', { id: 'discover-title' }, 'E tem mais no seu diagnóstico'),
     el('p', { class: 'muted' }, 'Você viu só por onde começar. O Mapa completo mostra o resto do caminho:'),
     el('ul', { class: 'discover-list' }, ...found.map((t) => el('li', {}, icon('lock', 'icon icon-lock'), t))),
-    el('button', { class: 'btn btn-primary btn-lg btn-block', type: 'button', 'data-buy': '' }, `Liberar meu Mapa · ${priceLabel('recovery_map')} no Pix`, icon('arrow-right')),
-    el('p', { class: 'fine center' }, 'Você só paga porque já viu o que tem aqui. Não gostou? É só fechar a página.'),
+    el('button', { class: 'btn btn-primary btn-lg btn-block', type: 'button', 'data-buy': '' }, buyText(offer), icon('arrow-right')),
+    el('p', { class: 'fine center' }, offer?.mode === 'free' ? 'O Mapa faz parte do seu plano Desbravador. Sem cobrança.' : 'Você só paga porque já viu o que tem aqui. Não gostou? É só fechar a página.'),
   );
 }
 
 
-export function renderPreview(root, preview, { onBuy, onWipe }) {
+export function renderPreview(root, preview, { onBuy, onWipe, offer = null }) {
   const band = preview.health.band;
   const head = headlineCopy(preview);
   const conf = confidenceNote(preview.confidence);
@@ -113,7 +116,7 @@ export function renderPreview(root, preview, { onBuy, onWipe }) {
     );
   }
 
-  main.append(discoveryCard(preview));
+  main.append(discoveryCard(preview, offer));
 
   if (preview.prescriptionTeaser.possibleCount > 0) {
     main.append(
@@ -147,26 +150,38 @@ export function renderPreview(root, preview, { onBuy, onWipe }) {
     el('p', { class: 'fine' }, 'Estimativas educativas, calculadas com o que você informou. Não substituem advogado nem consultor financeiro.'),
   );
 
-  const buy = (label = `Liberar meu Mapa · ${priceLabel('recovery_map')} no Pix`) => el('button', { class: 'btn btn-primary btn-lg btn-block', type: 'button', 'data-buy': '' }, label, icon('arrow-right'));
+  const buy = (label = buyText(offer)) => el('button', { class: 'btn btn-primary btn-lg btn-block', type: 'button', 'data-buy': '' }, label, icon('arrow-right'));
+
+  // Preço de quem assina o Prumo: Ousado vê o valor especial (com o normal riscado); Desbravador vê "incluso".
+  const shown = offer ? offer.priceCents : CATALOG.recovery_map.cents;
+  const priceBlock = offer?.mode === 'free'
+    ? el('p', { class: 'price price-sm price-included' }, 'Incluso no seu plano')
+    : el('p', { class: 'price price-sm' }, el('span', { class: 'price-cur' }, 'R$'), ` ${Math.floor(shown / 100)}`, el('span', { class: 'price-cents' }, `,${String(shown % 100).padStart(2, '0')}`));
+  const priceNote = offer?.mode === 'free'
+    ? 'Sem cobrança: o Mapa faz parte do Desbravador enquanto a assinatura valer.'
+    : offer
+      ? `no Pix, uma vez só. Preço normal ${brl(offer.regularCents)}: você economiza ${brl(offer.discountCents)} por assinar o Ousado.`
+      : 'no Pix, uma vez só. Você só paga porque viu o que está acima.';
+  const accessText = offer?.mode === 'free' ? 'acesso enquanto a assinatura valer' : `${offer?.days ?? daysOf('recovery_map')} dias de acesso`;
 
   const decision = el(
     'aside',
     { class: 'card decision', 'aria-labelledby': 'decision-title' },
     el('p', { class: 'card-eyebrow' }, 'Quer o Mapa completo?'),
     el('h2', { id: 'decision-title' }, 'Mapa da Virada'),
-    el('p', { class: 'price price-sm' }, el('span', { class: 'price-cur' }, 'R$'), ` ${Math.floor(CATALOG.recovery_map.cents / 100)}`, el('span', { class: 'price-cents' }, `,${String(CATALOG.recovery_map.cents % 100).padStart(2, '0')}`)),
-    el('p', { class: 'muted' }, 'no Pix, uma vez só. Você só paga porque viu o que está acima.'),
-    tickList(['Ordem completa de pagamento', 'Orçamento do mês e linha do tempo', 'Roteiros de negociação por credor', `PDF para guardar · ${daysOf('recovery_map')} dias de acesso e direito de refazer com dados novos`]),
+    priceBlock,
+    el('p', { class: 'muted' }, priceNote),
+    tickList(['Ordem completa de pagamento', 'Orçamento do mês e linha do tempo', 'Roteiros de negociação por credor', `PDF para guardar · ${accessText} e direito de refazer com dados novos`]),
     buy(),
-    el('p', { class: 'fine' }, 'Não gostou? Sem problema: é só fechar a página. Nada é cobrado.'),
+    el('p', { class: 'fine' }, offer?.mode === 'free' ? 'Quer só olhar? Pode voltar ao Prumo: nada é gasto.' : 'Não gostou? Sem problema: é só fechar a página. Nada é cobrado.'),
     el('button', { class: 'btn btn-quiet btn-sm', type: 'button', 'data-wipe': '' }, icon('trash'), 'Apagar meus dados agora'),
   );
 
   const bar = el(
     'div',
     { class: 'buy-bar' },
-    el('div', {}, el('strong', {}, brl(CATALOG.recovery_map.cents)), el('span', { class: 'muted' }, 'no Pix · uma vez só')),
-    el('button', { class: 'btn btn-primary', type: 'button', 'data-buy': '' }, 'Liberar Mapa', icon('arrow-right')),
+    el('div', {}, el('strong', {}, offer?.mode === 'free' ? 'Incluso' : brl(shown)), el('span', { class: 'muted' }, offer?.mode === 'free' ? 'no seu plano' : 'no Pix · uma vez só')),
+    el('button', { class: 'btn btn-primary', type: 'button', 'data-buy': '' }, offer?.mode === 'free' ? 'Abrir Mapa' : 'Liberar Mapa', icon('arrow-right')),
   );
 
   root.replaceChildren(main, decision, bar);

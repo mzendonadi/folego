@@ -13,6 +13,8 @@ export const runtimeSchema = z.object({
   salesPaused: z.boolean(),
   announcement: z.object({ text: z.string().trim().min(1).max(240), tone: z.enum(['info', 'warn']) }).nullable(),
   bundlePriceCents: z.number().int().min(100).max(1_000_000),
+  subscriberMapPriceCents: z.number().int().min(100).max(1_000_000),
+  subscriberMapDays: z.number().int().min(1).max(365),
   reminderDaysBefore: z.number().int().min(1).max(15),
   campaignDailyCap: z.number().int().min(0).max(5000),
   canceledPurgeDays: z.number().int().min(1).max(180),
@@ -32,6 +34,8 @@ export interface RuntimeSettings {
   salesPaused: boolean;
   announcement: { text: string; tone: 'info' | 'warn' } | null;
   bundlePriceCents: number;
+  subscriberMapPriceCents: number;
+  subscriberMapDays: number;
   reminderDaysBefore: number;
   campaignDailyCap: number;
   canceledPurgeDays: number;
@@ -50,6 +54,8 @@ export const currentSettings = (config: Config): RuntimeSettings => ({
   salesPaused: config.salesPaused,
   announcement: config.announcement,
   bundlePriceCents: config.bundlePriceCents,
+  subscriberMapPriceCents: config.subscriberMapPriceCents,
+  subscriberMapDays: config.subscriberMapDays,
   reminderDaysBefore: config.reminderDaysBefore,
   campaignDailyCap: config.campaignDailyCap,
   canceledPurgeDays: config.canceledPurgeDays,
@@ -68,6 +74,8 @@ function apply(config: Config, patch: RuntimePatch): void {
   if (patch.salesPaused !== undefined) config.salesPaused = patch.salesPaused;
   if (patch.announcement !== undefined) config.announcement = patch.announcement;
   if (patch.bundlePriceCents !== undefined) config.bundlePriceCents = patch.bundlePriceCents;
+  if (patch.subscriberMapPriceCents !== undefined) config.subscriberMapPriceCents = patch.subscriberMapPriceCents;
+  if (patch.subscriberMapDays !== undefined) config.subscriberMapDays = patch.subscriberMapDays;
   if (patch.reminderDaysBefore !== undefined) config.reminderDaysBefore = patch.reminderDaysBefore;
   if (patch.campaignDailyCap !== undefined) config.campaignDailyCap = patch.campaignDailyCap;
   if (patch.canceledPurgeDays !== undefined) config.canceledPurgeDays = patch.canceledPurgeDays;

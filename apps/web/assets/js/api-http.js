@@ -223,6 +223,44 @@ export async function updateReminder(id, body) {
 export async function deleteReminder(id) {
   return request('DELETE', `/account/reminders/${id}`);
 }
+// Cartões de crédito (Ousado e Desbravador)
+export async function getCards() {
+  return request('GET', '/account/cards');
+}
+export async function createCard(body) {
+  return request('POST', '/account/cards', { body });
+}
+export async function updateCard(id, body) {
+  return request('PUT', `/account/cards/${id}`, { body });
+}
+export async function deleteCard(id) {
+  return request('DELETE', `/account/cards/${id}`);
+}
+export async function addCardPurchase(id, body) {
+  return request('POST', `/account/cards/${id}/purchases`, { body });
+}
+export async function cancelCardInstallments(id, planId) {
+  return request('DELETE', `/account/cards/${id}/installments/${planId}`);
+}
+export async function addCardPayment(id, body) {
+  return request('POST', `/account/cards/${id}/payments`, { body });
+}
+export async function deleteCardPayment(id, paymentId) {
+  return request('DELETE', `/account/cards/${id}/payments/${paymentId}`);
+}
+export async function getCardInvoice(id, key) {
+  return request('GET', `/account/cards/${id}/invoices/${key}`);
+}
+export async function getCardRevolving(id, fixedCents = 0) {
+  return request('GET', `/account/cards/${id}/revolving?fixed=${Math.max(0, Math.round(fixedCents))}`);
+}
+export async function importCardInvoice(id, body) {
+  return request('POST', `/account/cards/${id}/import`, { body });
+}
+/** Mapa da Virada para quem assina: oferta do Ousado, uso incluso do Desbravador ou o Mapa já ativo. */
+export async function getMapOffer() {
+  return request('GET', '/account/map-offer');
+}
 export async function getDebts(extraCents = 0) {
   return request('GET', `/account/debts?extra=${Math.max(0, Math.round(extraCents))}`);
 }
@@ -350,6 +388,12 @@ export async function ofAddConnection(itemId) {
 }
 export async function ofSync(id) {
   return request('POST', `/account/openfinance/connections/${id}/sync`, { body: {} });
+}
+export async function ofReconnectToken(id) {
+  return request('POST', `/account/openfinance/connections/${id}/reconnect-token`, { body: {} });
+}
+export async function ofRefresh(id) {
+  return request('POST', `/account/openfinance/connections/${id}/refresh`, { body: {} });
 }
 export async function ofRevoke(id) {
   return request('DELETE', `/account/openfinance/connections/${id}`);

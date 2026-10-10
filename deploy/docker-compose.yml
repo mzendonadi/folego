@@ -39,6 +39,10 @@ x-api-env: &api-env
   # Contas conectadas (Open Finance) via Pluggy. Sem as duas chaves, ficam desligadas.
   PLUGGY_CLIENT_ID: ${PLUGGY_CLIENT_ID:-}
   PLUGGY_CLIENT_SECRET: ${PLUGGY_CLIENT_SECRET:-}
+  PLUGGY_CONNECT_URL: ${PLUGGY_CONNECT_URL:-}
+  PLUGGY_BASE_URL: ${PLUGGY_BASE_URL:-}
+  # Segredo dos avisos (webhook) do agregador: 16+ caracteres. Sem ele, o endereço /webhooks/openfinance não existe.
+  OPENFINANCE_WEBHOOK_SECRET: ${OPENFINANCE_WEBHOOK_SECRET:-}
 
 services:
   postgres:

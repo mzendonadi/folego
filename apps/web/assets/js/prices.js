@@ -1,7 +1,7 @@
 // Preços e avisos que vêm do servidor (o dono edita no backoffice). Aqui só ficam os valores padrão de reserva
 // (para o site continuar funcionando se o catálogo demorar) e a troca dos textos fixos do HTML.
 import { el } from './dom.js';
-import { CATALOG, applyCatalog, priceLabel } from './catalog.js';
+import { CATALOG, SUB_MAP, applyCatalog, priceLabel } from './catalog.js';
 import * as api from './api.js';
 
 /** Troca os preços escritos no HTML: [data-price="codigo"] → "R$ 29"; [data-price-int] / [data-price-dec] para o cartão grande. */
@@ -10,6 +10,10 @@ export function bindStaticPrices(root = document) {
     const code = n.dataset.price;
     if (code === 'bundle') n.textContent = priceLabel('bundle');
     else if (CATALOG[code]) n.textContent = priceLabel(code);
+  });
+  // Mapa para assinante do Ousado: [data-sub-map="price"] → "R$ 12,99"; [data-sub-map="days"] → "90"
+  root.querySelectorAll('[data-sub-map]').forEach((n) => {
+    n.textContent = n.dataset.subMap === 'days' ? String(SUB_MAP.days) : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(SUB_MAP.cents / 100);
   });
   root.querySelectorAll('[data-price-int]').forEach((n) => {
     const c = CATALOG[n.dataset.priceInt]?.cents;
@@ -49,7 +53,7 @@ export async function loadCatalog() {
     const c = await Promise.race([api.getCatalog(), new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 4000))]);
     applyCatalog(c);
     try {
-      localStorage.setItem(CACHE_KEY, JSON.stringify({ products: c.products, bundlePriceCents: c.bundlePriceCents }));
+      localStorage.setItem(CACHE_KEY, JSON.stringify({ products: c.products, bundlePriceCents: c.bundlePriceCents, subscriberMapPriceCents: c.subscriberMapPriceCents, subscriberMapDays: c.subscriberMapDays }));
     } catch {
       /* sem armazenamento */
     }

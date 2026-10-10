@@ -216,4 +216,42 @@ export const accessSchema = z.object({ token: z.string().min(20).max(80).regex(/
 
 export const uuidParam = z.string().uuid();
 
+// Cartões de crédito (Prumo): cadastro, compra (com parcelas), pagamento da fatura e fatura lida do PDF.
+const cardCents = z.number().int().min(1).max(100_000_000_00);
+export const cardSchema = z.strictObject({
+  name: z.string().trim().min(2).max(40),
+  brand: z.enum(['visa', 'mastercard', 'elo', 'amex', 'hipercard', 'outra']).optional(),
+  last4: z.string().regex(/^\d{4}$/).nullable().optional(),
+  limitCents: z.number().int().min(0).max(100_000_000_000),
+  closingDay: z.number().int().min(1).max(31),
+  dueDay: z.number().int().min(1).max(31),
+  /** Juros do rotativo ao mês em pontos-base (14% = 1400). Só serve para simular o custo de pagar parte da fatura. */
+  revolvingRateBps: z.number().int().min(0).max(3000).optional(),
+});
+export const cardPatchSchema = cardSchema.partial();
+export const cardPurchaseSchema = z.strictObject({
+  date: isoDate,
+  amountCents: cardCents,
+  note: z.string().trim().max(100).default(''),
+  category: z.string().max(30).optional(),
+  installments: z.number().int().min(1).max(60).optional(),
+});
+export const cardPaymentSchema = z.strictObject({
+  paidOn: isoDate.optional(),
+  amountCents: cardCents,
+  walletId: z.string().uuid().nullable().optional(),
+  note: z.string().trim().max(100).optional(),
+});
+export const cardImportSchema = z.strictObject({
+  entries: z.array(z.strictObject({
+    date: isoDate,
+    amountCents: cardCents,
+    note: z.string().trim().max(120),
+    installmentNo: z.number().int().min(1).max(60).nullable().optional(),
+    installmentTotal: z.number().int().min(2).max(60).nullable().optional(),
+    category: z.string().max(30).optional(),
+  })).max(500),
+  credits: z.array(z.strictObject({ date: isoDate, amountCents: cardCents, note: z.string().trim().max(120) })).max(200),
+});
+
 export type CreateCaseInput = z.infer<typeof createCaseSchema>;

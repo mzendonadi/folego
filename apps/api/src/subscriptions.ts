@@ -8,12 +8,13 @@ import { hmac, safeEqual } from './crypto.ts';
 import { layout } from './email.ts';
 import { AppError, notFound } from './errors.ts';
 import type { Ctx, OrderView } from './services.ts';
-import { audit, num, orderView, todaySaoPaulo } from './services.ts';
+import { audit, num, orderView, todaySaoPaulo, wipeCase } from './services.ts';
 import type { Queryable } from './db.ts';
 import { ownedWalletId, walletOverdraftAlerts } from './account-extras.ts';
 import { monthLimits } from './account-debts.ts';
 import { createCustomCategory, customCategories, deleteCustomCategory, isAllowedCategory } from './categories.ts';
 import { markMissionDone } from './coach-program.ts';
+import { materializeInstallments } from './cards.ts';
 import { billingView, CARD_GRACE_DAYS } from './billing.ts';
 import { isDemoSubscriber } from './demo.ts';
 import type { BillingView } from './billing.ts';
@@ -150,8 +151,32 @@ export async function createSubscriptionOrder(ctx: Ctx, args: { sessionId: strin
   return orderView(ctx.db, orderId);
 }
 
+/** Desbravador: o Mapa que veio com o plano acompanha o período da assinatura (a cada renovação o prazo se estende). */
+async function extendPlanMaps(q: Queryable, subscriberId: string): Promise<void> {
+  const plan = `EXISTS (SELECT 1 FROM app.entitlements e JOIN app.payments p ON p.order_id = e.order_id AND p.provider = 'plan' WHERE e.case_id = c.id AND e.product_code = 'recovery_map')`;
+  await q.query(
+    `UPDATE app.entitlements e SET expires_at = s.current_period_end
+       FROM app.subscriptions s, app.cases c, app.payments p
+      WHERE s.subscriber_id = $1 AND s.plan = 'desbravador' AND e.product_code = 'recovery_map' AND e.expires_at < s.current_period_end
+        AND c.id = e.case_id AND c.owner_subscriber_id = $1 AND c.status <> 'purged'
+        AND p.order_id = e.order_id AND p.provider = 'plan'`,
+    [subscriberId],
+  );
+  await q.query(
+    `UPDATE app.cases c SET purge_after = greatest(c.purge_after, s.current_period_end + interval '1 day')
+       FROM app.subscriptions s
+      WHERE s.subscriber_id = $1 AND s.plan = 'desbravador' AND c.owner_subscriber_id = $1 AND c.status <> 'purged' AND ${plan}`,
+    [subscriberId],
+  );
+}
+
 /** Chamada por confirmPayment (dentro da transação) quando o pedido pago é de assinatura. */
 export async function activateSubscription(q: Queryable, subscriberId: string, orderId: string): Promise<void> {
+  await activateSubscriptionPeriod(q, subscriberId, orderId);
+  await extendPlanMaps(q, subscriberId);
+}
+
+async function activateSubscriptionPeriod(q: Queryable, subscriberId: string, orderId: string): Promise<void> {
   const item = await q.query<{ product_code: string }>(`SELECT product_code FROM app.order_items WHERE order_id = $1`, [orderId]);
   const plan = PLANS.find((p) => p.productCode === item.rows[0]?.product_code);
   if (!plan) return;
@@ -193,6 +218,8 @@ export async function setCancel(ctx: Ctx, subscriberId: string, cancel: boolean)
 /** Apaga a conta: dados de uso somem; o registro fica anonimizado só para não quebrar pedidos pagos (obrigação fiscal). */
 export async function deleteAccount(ctx: Ctx, sessionId: string, subscriberId: string): Promise<void> {
   await ctx.db.tx(async (q) => {
+    const maps = await q.query<{ id: string }>(`SELECT id FROM app.cases WHERE owner_subscriber_id = $1 AND status <> 'purged'`, [subscriberId]);
+    for (const m of maps.rows) await wipeCase(q, m.id); // o Mapa de quem apaga a conta vai junto
     await q.query(`DELETE FROM app.ledger_entries WHERE subscriber_id = $1`, [subscriberId]);
     await q.query(`DELETE FROM app.budget_limits WHERE subscriber_id = $1`, [subscriberId]);
     await q.query(`DELETE FROM app.goals WHERE subscriber_id = $1`, [subscriberId]);
@@ -339,17 +366,27 @@ export async function deleteContribution(ctx: Ctx, subscriberId: string, goalId:
 
 export async function monthView(ctx: Ctx, subscriberId: string, month: string) {
   const plan = await requireFeature(ctx, subscriberId, 'ledger');
+  if (planHas(plan, 'cards')) await materializeInstallments(ctx, subscriberId); // parcelas do cartão entram no mês certo
   const today = todaySaoPaulo();
   const from = `${monthOf(new Date(Date.parse(`${month}-01T00:00:00Z`) - 62 * 86_400_000).toISOString().slice(0, 10))}-01`; // 2 meses antes, para comparar
   const entries = await loadLedger(ctx, subscriberId, from);
   const limits = { ...(await loadLimits(ctx, subscriberId)), ...(await monthLimits(ctx, subscriberId, month)) };
   const goals = planHas(plan, 'goals') ? await loadGoals(ctx, subscriberId) : [];
   const inMonth = entries.filter((e) => monthOf(e.date) === month);
-  const wallets = inMonth.length ? await ctx.db.query<{ id: string; wallet_id: string | null }>(`SELECT id, wallet_id FROM app.ledger_entries WHERE subscriber_id = $1 AND id = ANY($2::uuid[])`, [subscriberId, inMonth.map((e) => e.id)]) : { rows: [] as { id: string; wallet_id: string | null }[] };
-  const walletOf = new Map(wallets.rows.map((w) => [w.id, w.wallet_id]));
+  type Meta = { id: string; wallet_id: string | null; card_id: string | null; card_name: string | null; installment_no: number | null; installment_total: number | null };
+  const metas = inMonth.length
+    ? await ctx.db.query<Meta>(
+      `SELECT l.id, l.wallet_id, l.card_id, c.name AS card_name, l.installment_no, l.installment_total FROM app.ledger_entries l LEFT JOIN app.credit_cards c ON c.id = l.card_id WHERE l.subscriber_id = $1 AND l.id = ANY($2::uuid[])`,
+      [subscriberId, inMonth.map((e) => e.id)],
+    )
+    : { rows: [] as Meta[] };
+  const metaOf = new Map(metas.rows.map((m) => [m.id, m]));
   return {
     month,
-    entries: inMonth.map((e) => ({ ...e, walletId: walletOf.get(e.id as string) ?? null })),
+    entries: inMonth.map((e) => {
+      const m = metaOf.get(e.id as string);
+      return { ...e, walletId: m?.wallet_id ?? null, cardId: m?.card_id ?? null, cardName: m?.card_name ?? null, installmentNo: m?.installment_no ?? null, installmentTotal: m?.installment_total ?? null };
+    }),
     summary: summarizeMonth(entries, limits, month),
     limits,
     customCategories: await customCategories(ctx.db, subscriberId),

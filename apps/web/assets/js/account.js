@@ -11,6 +11,16 @@ const card = (...c) => el('section', { class: 'card d-section' }, ...c.filter(Bo
 const TAB_IDS = TABS.map((t) => t.id);
 const hashFor = (id) => (id === 'coach' ? '/conta' : `/conta/${id}`);
 
+/** Este navegador tem uma conta aberta? As telas do Mapa usam isso para só perguntar ao servidor o preço de assinante quando faz sentido. */
+function rememberAccount(on) {
+  try {
+    if (on) localStorage.setItem('folego_prumo', '1');
+    else localStorage.removeItem('folego_prumo');
+  } catch {
+    /* sem armazenamento: o Mapa segue com o preço normal */
+  }
+}
+
 export function renderAccount(root, { api, tab: initialTab = null }) {
   let month = monthNow();
   let wantedTab = TAB_IDS.includes(initialTab) ? initialTab : 'coach';
@@ -43,8 +53,10 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
     try {
       acc = await api.getAccount();
     } catch {
+      rememberAccount(false);
       return drawLogin();
     }
+    rememberAccount(true);
     const pending = takePending();
     if (pending && !(acc.subscription?.active && acc.subscription.periodEnd > (pending.before ?? 0))) acc = await waitPayment(acc, pending);
     if (!acc.subscription?.active) {
@@ -264,8 +276,11 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
         if (id === 'cenarios' && ctx.has('scenarios')) ctx.scenarioBase = await api.getScenarioBase();
         if (id === 'indicar') ctx.referrals = await api.getReferrals();
         if (id === 'familia') ctx.household = await api.getHousehold();
-        if (id === 'dividas') ctx.debts = await ctx.api.getDebts(ctx.debtExtra ?? 0);
+        if (id === 'dividas') {
+          [ctx.debts, ctx.mapOffer] = await Promise.all([ctx.api.getDebts(ctx.debtExtra ?? 0), ctx.api.getMapOffer().catch(() => ({ eligible: false }))]);
+        }
         if (id === 'carteiras') ctx.wallets = await ctx.api.getWallets();
+        if (id === 'cartoes' && ctx.has('cards')) [ctx.cards, ctx.wallets] = await Promise.all([ctx.api.getCards(), ctx.api.getWallets().catch(() => null)]);
         if (id === 'lembretes') ctx.reminders = (await ctx.api.getReminders()).reminders;
         if (id === 'treinador') ctx.coach = await api.getCoach().catch(() => null);
         if (mine !== token) return; // a pessoa já foi para outra aba

@@ -17,6 +17,7 @@ import type { DebtInput, Diagnosis, Preview, CalendarItem, Profile, Strategies, 
 import { encryptText, hmac, newToken, sha256 } from './crypto.ts';
 import { AppError, notFound } from './errors.ts';
 import { isDemoSession } from './demo.ts';
+import { activeMap, subscriberMapTerms } from './map-offer.ts';
 
 export interface Ctx {
   db: Db;
@@ -185,9 +186,6 @@ export async function createOrder(ctx: Ctx, args: { sessionId: string; caseId: s
       `UPDATE app.cases SET contact_email_enc = $2, contact_phone_enc = $3, ads_consent = $4, contact_at = now(), contact_ip = $5, contact_ua = $6, contact_fbc = coalesce($7, contact_fbc) WHERE id = $1`,
       [args.caseId, encryptText(ctx.config.secret, args.contact.email), encryptText(ctx.config.secret, args.contact.phone), args.contact.adsConsent, args.ip ?? null, (args.userAgent ?? '').slice(0, 400) || null, args.contact.fbc ?? null],
     );
-  } else if (ctx.gateway.name === 'asaas' && !(await isDemoSession(ctx, args.sessionId))) {
-    const has = await ctx.db.query(`SELECT 1 FROM app.cases WHERE id = $1 AND contact_email_enc IS NOT NULL`, [args.caseId]);
-    if (has.rows.length === 0) throw new AppError(422, 'contact_required', 'Informe seu e-mail e celular para gerar o Pix.');
   }
 
   const existing = await ctx.db.query<{ id: string }>(`SELECT id FROM app.orders WHERE session_id = $1 AND idempotency_key = $2`, [args.sessionId, args.idempotencyKey]);
@@ -225,7 +223,16 @@ export async function createOrder(ctx: Ctx, args: { sessionId: string; caseId: s
   const products = await ctx.db.query<{ code: string; price_cents: string }>(`SELECT code, price_cents FROM app.products WHERE active AND code IN (${marks})`, codes);
   if (products.rows.length !== codes.length) throw new AppError(422, 'product_unavailable', 'Este item não está disponível no momento.');
   const prices = new Map(products.rows.map((p) => [p.code, num(p.price_cents)]));
-  const isBundle = ['recovery_map', 'defense_letters', 'calendar_30d'].every((c) => codes.includes(c));
+  // Assinante do Prumo: o Ousado paga um preço especial pelo Mapa (Pix) e o Desbravador usa sem pagar. Preço e prazo vêm daqui, nunca do navegador.
+  const demo = await isDemoSession(ctx, args.sessionId);
+  const terms = !demo && codes.includes('recovery_map') ? await subscriberMapTerms(ctx, args.sessionId) : null;
+  const itemDays = new Map<string, number>();
+  if (terms) {
+    if (await activeMap(ctx, terms.accountIds)) throw new AppError(409, 'map_active', 'Você já tem um Mapa ativo. Abra o seu Mapa e use "Refazer" para atualizar os dados.');
+    prices.set('recovery_map', terms.mode === 'free' ? 0 : Math.min(prices.get('recovery_map')!, terms.priceCents));
+    itemDays.set('recovery_map', terms.days);
+  }
+  const isBundle = !terms && ['recovery_map', 'defense_letters', 'calendar_30d'].every((c) => codes.includes(c));
   if (isBundle) {
     const sum = prices.get('recovery_map')! + prices.get('defense_letters')! + prices.get('calendar_30d')!;
     const discount = Math.max(0, sum - ctx.config.bundlePriceCents);
@@ -233,24 +240,33 @@ export async function createOrder(ctx: Ctx, args: { sessionId: string; caseId: s
   }
   // Conta de teste (demo) ativa: o pedido é confirmado na hora, sem cobrança e sem chamar o provedor. Total 0 e provedor "demo"
   // mantêm a receita e os relatórios limpos; o conteúdo e o prazo de acesso são exatamente os de um pedido pago.
-  if (await isDemoSession(ctx, args.sessionId)) {
-    const demoId = await ctx.db.tx(async (q) => {
+  // Desbravador: o Mapa já está no plano. O pedido nasce confirmado, com o prazo da assinatura, e não gera cobrança.
+  const included = !demo && terms?.mode === 'free' && [...prices.values()].every((v) => v === 0);
+  if (demo || included) {
+    const provider = demo ? 'demo' : 'plan';
+    const instantId = await ctx.db.tx(async (q) => {
       const created = await q.query<{ id: string }>(
         `INSERT INTO app.orders(case_id, session_id, status, total_cents, idempotency_key) VALUES ($1,$2,'pending',0,$3) ON CONFLICT (session_id, idempotency_key) DO NOTHING RETURNING id`,
         [args.caseId, args.sessionId, args.idempotencyKey],
       );
       const id = created.rows[0]?.id;
       if (!id) throw new Error('falha ao criar pedido de teste');
-      for (const code of prices.keys()) await q.query(`INSERT INTO app.order_items(order_id, product_code, unit_price_cents) VALUES ($1,$2,0)`, [id, code]);
+      for (const code of prices.keys()) await q.query(`INSERT INTO app.order_items(order_id, product_code, unit_price_cents, access_days) VALUES ($1,$2,0,$3)`, [id, code, itemDays.get(code) ?? null]);
       await q.query(
-        `INSERT INTO app.payments(order_id, provider, provider_payment_id, method, amount_cents, status, pix_copy_paste, pix_expires_at) VALUES ($1,'demo',$2,'pix',0,'pending','CONTA-DE-TESTE-SEM-COBRANCA', now() + interval '30 minutes')`,
-        [id, `demo-${id}`],
+        `INSERT INTO app.payments(order_id, provider, provider_payment_id, method, amount_cents, status, pix_copy_paste, pix_expires_at) VALUES ($1,$2,$3,'pix',0,'pending',$4, now() + interval '30 minutes')`,
+        [id, provider, `${provider}-${id}`, demo ? 'CONTA-DE-TESTE-SEM-COBRANCA' : 'INCLUIDO-NO-PLANO'],
       );
-      await audit(q, `session:${args.sessionId}`, 'demo_order_created', 'order', id, { items: [...prices.keys()] });
+      if (terms) await q.query(`UPDATE app.cases SET owner_subscriber_id = $2 WHERE id = $1`, [args.caseId, terms.subscriberId]);
+      await audit(q, `session:${args.sessionId}`, demo ? 'demo_order_created' : 'plan_order_created', 'order', id, { items: [...prices.keys()] });
       return id;
     });
-    await confirmPayment(ctx, `demo-${demoId}`, 'demo');
-    return orderView(ctx.db, demoId);
+    await confirmPayment(ctx, `${provider}-${instantId}`, provider);
+    return orderView(ctx.db, instantId);
+  }
+  // Pix de verdade (Asaas): precisa do contato do diagnóstico. Quem já informou antes não digita de novo.
+  if (!args.contact && ctx.gateway.name === 'asaas') {
+    const has = await ctx.db.query(`SELECT 1 FROM app.cases WHERE id = $1 AND contact_email_enc IS NOT NULL`, [args.caseId]);
+    if (has.rows.length === 0) throw new AppError(422, 'contact_required', 'Informe seu e-mail e celular para gerar o Pix.');
   }
   const totalCents = [...prices.values()].reduce((s, v) => s + v, 0);
 
@@ -268,8 +284,9 @@ export async function createOrder(ctx: Ctx, args: { sessionId: string; caseId: s
       return found;
     }
     for (const [code, price] of prices) {
-      await q.query(`INSERT INTO app.order_items(order_id, product_code, unit_price_cents) VALUES ($1,$2,$3)`, [id, code, price]);
+      await q.query(`INSERT INTO app.order_items(order_id, product_code, unit_price_cents, access_days) VALUES ($1,$2,$3,$4)`, [id, code, price, itemDays.get(code) ?? null]);
     }
+    if (terms) await q.query(`UPDATE app.cases SET owner_subscriber_id = $2 WHERE id = $1`, [args.caseId, terms.subscriberId]);
     const charge = await ctx.gateway.createPix({ orderId: id, amountCents: totalCents, expiresAt });
     await q.query(
       `INSERT INTO app.payments(order_id, provider, provider_payment_id, method, amount_cents, status, pix_copy_paste, pix_expires_at) VALUES ($1,$2,$3,'pix',$4,'pending',$5,$6)`,
@@ -378,7 +395,7 @@ async function confirmPaymentTx(ctx: Ctx, providerPaymentId: string, provider: s
 
     await q.query(
       `INSERT INTO app.entitlements(case_id, product_code, order_id, expires_at)
-       SELECT $1, oi.product_code, oi.order_id, now() + make_interval(days => pr.access_days)
+       SELECT $1, oi.product_code, oi.order_id, now() + make_interval(days => coalesce(oi.access_days, pr.access_days))
        FROM app.order_items oi JOIN app.products pr ON pr.code = oi.product_code WHERE oi.order_id = $2
        ON CONFLICT (case_id, product_code) DO NOTHING`,
       [pay.case_id, pay.order_id],
@@ -395,7 +412,8 @@ async function confirmPaymentTx(ctx: Ctx, providerPaymentId: string, provider: s
        ON CONFLICT (case_id, product_code) DO NOTHING`,
       [pay.case_id, pay.order_id],
     );
-    await q.query(`UPDATE app.cases SET status = 'paid', purge_after = now() + interval '30 days' WHERE id = $1`, [pay.case_id]);
+    // Os dados do caso ficam guardados enquanto o acesso vale (30 dias, ou o prazo combinado quando for maior, como os 90 do Mapa do Ousado).
+    await q.query(`UPDATE app.cases SET status = 'paid', purge_after = now() + make_interval(days => greatest(30, coalesce((SELECT max(access_days) FROM app.order_items WHERE order_id = $2), 0))) WHERE id = $1`, [pay.case_id, pay.order_id]);
     await audit(q, 'system', 'payment_confirmed', 'order', pay.order_id, { provider: ctx.gateway.name });
     return 'confirmed';
   });
@@ -555,13 +573,18 @@ export async function toggleIncomeTask(ctx: Ctx, sessionId: string, caseId: stri
 // ---------------------------------------------------------------------------
 // Apagar
 // ---------------------------------------------------------------------------
+/** Apaga o conteúdo do caso e o marca como expurgado (usado ao apagar o caso e ao apagar a conta de quem assina). */
+export async function wipeCase(q: Queryable, caseId: string): Promise<void> {
+  for (const table of ['debts', 'deliverables', 'diagnoses', 'lead_contacts', 'lead_profiles', 'access_tokens', 'entitlements', 'case_access']) {
+    await q.query(`DELETE FROM app.${table} WHERE case_id = $1`, [caseId]);
+  }
+  await q.query(`UPDATE app.cases SET status = 'purged', inputs = '{}'::jsonb, purged_at = now() WHERE id = $1`, [caseId]);
+}
+
 export async function deleteCase(ctx: Ctx, sessionId: string, caseId: string): Promise<void> {
   await ctx.db.tx(async (q) => {
     await ownedCase(q, sessionId, caseId);
-    for (const table of ['debts', 'deliverables', 'diagnoses', 'lead_contacts', 'lead_profiles', 'access_tokens', 'entitlements', 'case_access']) {
-      await q.query(`DELETE FROM app.${table} WHERE case_id = $1`, [caseId]);
-    }
-    await q.query(`UPDATE app.cases SET status = 'purged', inputs = '{}'::jsonb, purged_at = now() WHERE id = $1`, [caseId]);
+    await wipeCase(q, caseId);
     await audit(q, `session:${sessionId}`, 'case_deleted_by_user', 'case', caseId);
   });
 }

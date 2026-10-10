@@ -10,9 +10,10 @@ import { viewPlano as viewPlanoBilling, viewPerfil } from './account-billing.js'
 import { viewIndicar } from './referral.js';
 import { viewCobrancas, viewCenarios } from './account-insight-views.js';
 import { viewContas } from './account-openfinance-views.js';
+import { viewCartoes } from './account-cards-views.js';
 import { PLANS, CATEGORIES, CATEGORY_LABEL, categorize, parseExtract, parsePdfExtract } from '../vendor/engine.js';
 
-export const FEATURE_LABEL = { health: 'Nota de saúde financeira', debts: 'Dívidas com plano de quitação', reminders: 'Lembretes de contas por e-mail', ledger: 'Controle de gastos', import: 'Importar extrato', alerts: 'Alertas de limite', coach_limited: 'Treinador (3 dicas)', goals: 'Metas com aportes', coach: 'Treinador completo', simulator: 'Simulador de investimento', planner: 'Planejador com IA', household: 'Conta compartilhada com uma pessoa', recurring: 'Detector de assinaturas e cobranças recorrentes', scenarios: 'Simulador "e se...?" de cenários', ebook: 'eBook de presente no seu e-mail (50+ páginas)', journeys: 'Todas as jornadas do coach', market: 'Cenário econômico (Selic, inflação, CDI)', market_pro: 'Dólar e histórico de 12 meses' };
+export const FEATURE_LABEL = { health: 'Nota de saúde financeira', debts: 'Dívidas com plano de quitação', reminders: 'Lembretes de contas por e-mail', ledger: 'Controle de gastos', import: 'Importar extrato', alerts: 'Alertas de limite', coach_limited: 'Treinador (3 dicas)', goals: 'Metas com aportes', coach: 'Treinador completo', simulator: 'Simulador de investimento', planner: 'Planejador com IA', household: 'Conta compartilhada com uma pessoa', recurring: 'Detector de assinaturas e cobranças recorrentes', scenarios: 'Simulador "e se...?" de cenários', ebook: 'eBook de presente no seu e-mail (50+ páginas)', journeys: 'Todas as jornadas do coach', market: 'Cenário econômico (Selic, inflação, CDI)', market_pro: 'Dólar e histórico de 12 meses', cards: 'Cartões de crédito: limite, fatura, vencimento e parcelas', cards_pro: 'Cartões avançado: fatura em PDF, estratégias e custo do rotativo', map_member: 'Mapa da Virada com preço de assinante (Pix, 90 dias)', map_included: 'Mapa da Virada incluso, enquanto a assinatura valer' };
 
 /** Abas da conta. `needs` = recurso do plano exigido (a aba aparece sempre; sem o recurso mostra o que o upgrade traz). */
 export const TABS = [
@@ -22,6 +23,7 @@ export const TABS = [
   { id: 'orcamento', label: 'Orçamento', group: 'Dinheiro' },
   { id: 'cobrancas', label: 'Cobranças', group: 'Dinheiro' },
   { id: 'carteiras', label: 'Carteiras', group: 'Dinheiro' },
+  { id: 'cartoes', label: 'Cartões', needs: 'cards', group: 'Dinheiro' },
   { id: 'contas', label: 'Contas conectadas', needs: 'market_pro', group: 'Dinheiro' },
   { id: 'lembretes', label: 'Lembretes', group: 'Dinheiro' },
   { id: 'dividas', label: 'Dívidas', group: 'Dívidas e metas' },
@@ -450,7 +452,7 @@ export function viewLancamentos(ctx) {
     return el(
       'li', { class: 'entry-row' },
       el('span', { class: 'entry-date muted' }, fmtDay(x.date)),
-      el('span', { class: 'entry-note' }, x.note, x.walletId && walletName.get(x.walletId) ? el('span', { class: 'wallet-tag' }, ` · ${walletName.get(x.walletId)}`) : null),
+      el('span', { class: 'entry-note' }, x.note, x.cardName ? el('span', { class: 'wallet-tag' }, ` · ${x.cardName}${x.installmentNo ? ` ${x.installmentNo}/${x.installmentTotal}` : ''}`) : x.walletId && walletName.get(x.walletId) ? el('span', { class: 'wallet-tag' }, ` · ${walletName.get(x.walletId)}`) : null),
       cat,
       el('strong', { class: `entry-amount ${x.amountCents < 0 ? 'neg' : 'pos'}` }, brl(x.amountCents)),
       del,
@@ -768,6 +770,6 @@ export function viewContasTab(ctx) {
   return viewContas(ctx);
 }
 
-export const VIEWS = { contas: viewContasTab, cobrancas: viewCobrancas, cenarios: viewCenariosTab, indicar: viewIndicar, perfil: viewPerfil, familia: viewCompartilhar, coach: viewCoach, mercado: viewMercado, geral: viewGeral, lancamentos: viewLancamentos, orcamento: viewOrcamento, dividas: viewDividas, carteiras: viewCarteiras, lembretes: viewLembretes, metas: viewMetas, treinador: viewTreinador, simulador: viewSimulador, planejador: viewPlanejador, plano: viewPlano };
+export const VIEWS = { contas: viewContasTab, cobrancas: viewCobrancas, cenarios: viewCenariosTab, indicar: viewIndicar, perfil: viewPerfil, familia: viewCompartilhar, coach: viewCoach, mercado: viewMercado, geral: viewGeral, lancamentos: viewLancamentos, orcamento: viewOrcamento, dividas: viewDividas, carteiras: viewCarteiras, cartoes: viewCartoes, lembretes: viewLembretes, metas: viewMetas, treinador: viewTreinador, simulador: viewSimulador, planejador: viewPlanejador, plano: viewPlano };
 export const NEEDS_MONTH = new Set(['geral', 'lancamentos', 'orcamento', 'metas']);
 export { monthNow };
