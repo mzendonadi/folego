@@ -38,6 +38,9 @@ import * as demoAccounts from './demo.ts';
 import { refreshRuntime } from './runtime.ts';
 import * as partnerPortal from './partner-portal.ts';
 import { contactSchema, sendContact } from './contact.ts';
+import * as waPortal from './wa-portal.ts';
+import { handleWebhook as handleWhatsAppWebhook, loadAccount, validSignature } from './whatsapp.ts';
+import type { WebhookBody } from './whatsapp.ts';
 import { cardSchema, cardPatchSchema, cardPurchaseSchema, cardPaymentSchema, cardImportSchema, accessSchema, addEntriesSchema, cancelSchema, contributionSchema, createCaseSchema, entryWalletSchema, accountDebtSchema, accountDebtPatchSchema, debtPaymentSchema, monthLimitSchema, plannerSchema, objectiveSchema, inviteSchema, checkoutSchema, profileSchema, referralLeadSchema, referralInviteSchema, recurringDecisionSchema, reminderPatchSchema, reminderSchema, walletSchema, walletPatchSchema, createOrderSchema, emailLinkSchema, emailOnlySchema, goalSchema, incomeInterviewSchema, leadSchema, loginCodeSchema, newPartnerSchema, partnerLoginSchema, partnerStatusSchema, setCategorySchema, categoryNameSchema, setLimitSchema, simulateSchema, subscriptionOrderSchema, toggleIncomeTaskSchema, translationSchema, guidedSchema, uuidParam, monthParam } from './schemas.ts';
 import { EngineInputError } from './engine.ts';
 import { GUIDED_KINDS } from './guided.ts';
@@ -57,6 +60,10 @@ export interface AppDeps {
   email?: EmailSender;
   /** Ausente = contas conectadas (Open Finance) desligadas. */
   openFinance?: import('./openfinance.ts').OpenFinanceProvider;
+  /** Transporte do WhatsApp (ausente = Cloud API da Meta). */
+  whatsapp?: import('./whatsapp.ts').WaTransport;
+  /** Agente de IA de vendas do WhatsApp (ausente = só atendimento humano). */
+  salesAgent?: import('./whatsapp.ts').SalesAgent;
   /** 'relaxed' só para testes que criam muitas requisições do mesmo IP. */
   rateLimits?: 'strict' | 'relaxed';
 }
@@ -380,6 +387,29 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     app.post('/api/partner/imports/:id/finish', async (req) => pp.finishImport(ctx, pid(req), idParam((req.params as { id: string }).id)));
     app.get('/api/partner/deals', async (req) => pp.listDeals(ctx, pid(req), { month: qs(req).mes, origin: qs(req).origem, status: qs(req).situacao }));
     app.post('/api/partner/deals', async (req, reply) => reply.status(201).send(await pp.createDeal(ctx, pid(req), pp.dealSchema.parse(req.body))));
+    // WhatsApp do parceiro (API oficial da Meta): conexão, conversas, modelos, disparos e agente de IA (gancho).
+    const wa = waPortal;
+    const pidParam = (req: { params: unknown }) => idParam((req.params as { id: string }).id);
+    app.get('/api/partner/wa/account', async (req) => wa.accountView(ctx, pid(req)));
+    app.put('/api/partner/wa/account', { config: { rateLimit: { max: 20 * scale, timeWindow: '1 minute' } } }, async (req) => wa.saveAccount(ctx, pid(req), wa.accountSchema.parse(req.body)));
+    app.post('/api/partner/wa/account/test', { config: { rateLimit: { max: 10 * scale, timeWindow: '1 minute' } } }, async (req) => wa.testAccount(ctx, pid(req)));
+    app.put('/api/partner/wa/agent', async (req) => wa.saveAgent(ctx, pid(req), wa.agentSchema.parse(req.body)));
+    app.get('/api/partner/wa/templates', async (req) => wa.listTemplates(ctx, pid(req)));
+    app.post('/api/partner/wa/templates', async (req, reply) => reply.status(201).send(await wa.createTemplate(ctx, pid(req), wa.templateSchema.parse(req.body))));
+    app.patch('/api/partner/wa/templates/:id', async (req) => wa.setTemplateStatus(ctx, pid(req), pidParam(req), wa.templatePatchSchema.parse(req.body).status));
+    app.delete('/api/partner/wa/templates/:id', async (req) => wa.deleteTemplate(ctx, pid(req), pidParam(req)));
+    app.get('/api/partner/wa/threads', async (req) => {
+      const q = qs(req);
+      return wa.listThreads(ctx, pid(req), { filtro: q.filtro, q: q.q, page: Number(q.pagina) || 0 });
+    });
+    app.get('/api/partner/wa/threads/:id', async (req) => wa.threadDetail(ctx, pid(req), pidParam(req)));
+    app.post('/api/partner/wa/threads/:id/messages', { config: { rateLimit: { max: 120 * scale, timeWindow: '1 minute' } } }, async (req) => wa.sendInThread(ctx, pid(req), pidParam(req), wa.sendSchema.parse(req.body)));
+    app.patch('/api/partner/wa/threads/:id', async (req) => wa.patchThread(ctx, pid(req), pidParam(req), wa.threadPatchSchema.parse(req.body)));
+    app.post('/api/partner/wa/start', { config: { rateLimit: { max: 120 * scale, timeWindow: '1 minute' } } }, async (req) => wa.startConversation(ctx, pid(req), wa.startSchema.parse(req.body)));
+    app.get('/api/partner/wa/broadcasts', async (req) => wa.listBroadcasts(ctx, pid(req)));
+    app.post('/api/partner/wa/broadcasts/preview', async (req) => wa.previewBroadcast(ctx, pid(req), wa.broadcastSchema.parse(req.body)));
+    app.post('/api/partner/wa/broadcasts', { config: { rateLimit: { max: 10 * scale, timeWindow: '1 minute' } } }, async (req, reply) => reply.status(201).send(await wa.createBroadcast(ctx, pid(req), wa.broadcastSchema.parse(req.body))));
+    app.post('/api/partner/wa/broadcasts/:id/cancel', async (req) => wa.cancelBroadcast(ctx, pid(req), pidParam(req)));
     app.patch('/api/partner/deals/:id', async (req) => pp.patchDeal(ctx, pid(req), idParam((req.params as { id: string }).id), pp.dealPatchSchema.parse(req.body)));
   }
 
@@ -700,6 +730,37 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     const outcome = await svc.handleWebhook(ctx, req.headers, req.body);
     if (outcome === 'invalid_signature') return reply.status(401).send({ error: 'invalid_signature' });
     return { ok: true, outcome };
+  });
+
+  // Webhook do WhatsApp (Meta): um endereço por parceiro. O corpo CRU é conferido com a assinatura X-Hub-Signature-256 e o segredo do app do parceiro.
+  // A Meta reenvia se não receber 200 rápido, então depois de validar a assinatura respondemos sempre 200 (erros internos vão para o log).
+  await app.register(async (scope) => {
+    scope.addContentTypeParser('application/json', { parseAs: 'string', bodyLimit: 512 * 1024 }, (_req, body, done) => done(null, body));
+    scope.get('/webhooks/whatsapp/:partnerId', async (req, reply) => {
+      const q = req.query as Record<string, string | undefined>;
+      const answer = await waPortal.verifyChallenge(ctx, idParam((req.params as { partnerId: string }).partnerId), { mode: q['hub.mode'], token: q['hub.verify_token'], challenge: q['hub.challenge'] });
+      if (answer === null) return reply.status(403).send({ error: 'forbidden' });
+      return reply.type('text/plain').send(answer);
+    });
+    scope.post('/webhooks/whatsapp/:partnerId', { config: { rateLimit: { max: 1200 * scale, timeWindow: '1 minute' } } }, async (req, reply) => {
+      const acc = await loadAccount(ctx, idParam((req.params as { partnerId: string }).partnerId));
+      if (!acc) return reply.status(404).send({ error: 'not_found' });
+      const raw = typeof req.body === 'string' ? req.body : '';
+      const sig = req.headers['x-hub-signature-256'];
+      if (!validSignature(acc.appSecret, raw, typeof sig === 'string' ? sig : undefined)) return reply.status(401).send({ error: 'invalid_signature' });
+      let parsed: WebhookBody;
+      try {
+        parsed = JSON.parse(raw) as WebhookBody;
+      } catch {
+        return reply.status(400).send({ error: 'invalid_json' });
+      }
+      try {
+        await handleWhatsAppWebhook(ctx, acc, parsed, { log: (e) => req.log.warn(e) });
+      } catch (error) {
+        req.log.error({ erro: error instanceof Error ? error.message.slice(0, 200) : 'erro' }, 'whatsapp_webhook_falhou');
+      }
+      return { ok: true };
+    });
   });
 
   // Só desenvolvimento: faz o papel do banco confirmando o Pix, passando pelo MESMO caminho do webhook real.

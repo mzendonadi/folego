@@ -205,6 +205,8 @@ export async function viewFolego(ctx) {
       const deal = el('button', { class: 'btn btn-primary btn-sm', type: 'button' }, 'Registrar contrato'); deal.addEventListener('click', () => openDealModal(ctx, { source: 'lead', refId: l.id, name: l.name, bps: l.commissionBps, onDone: reload })); actions.push(deal);
       const no = el('button', { class: 'btn btn-quiet btn-sm', type: 'button' }, 'Descartar'); no.addEventListener('click', () => setStatus(l, 'rejected')); actions.push(no);
     }
+    const waBtn = el('button', { class: 'btn btn-secondary btn-sm', type: 'button' }, 'WhatsApp');
+    waBtn.addEventListener('click', () => ctx.go('whatsapp', { startDelivery: l.id }));
     const hist = el('button', { class: 'btn btn-quiet btn-sm', type: 'button' }, 'Histórico e anotações');
     hist.addEventListener('click', () => {
       const m = modal(l.name ?? 'Contato', el('p', { class: 'pt-sub' }, 'Carregando…'));
@@ -228,7 +230,7 @@ export async function viewFolego(ctx) {
           l.email ? el('a', { href: `mailto:${l.email}` }, l.email) : null),
         el('p', { class: 'pt-lead-meta' }, [l.uf && `UF ${l.uf}`, l.incomeBand && `renda ${l.incomeBand}`, l.debtBand && `dívidas ${l.debtBand}`, `recebido em ${new Date(l.createdAt).toLocaleDateString('pt-BR')}`].filter(Boolean).join(' · ')),
         l.dealsCount ? el('p', { class: 'pt-lead-deal' }, `${l.dealsCount} contrato(s): ${brl(l.dealsCents)} · comissão do Fôlego ${pctText(l.commissionBps)}`) : null),
-      el('div', { class: 'pt-lead-actions' }, ...actions, l.revoked ? null : hist));
+      el('div', { class: 'pt-lead-actions' }, ...actions, l.revoked || !l.phone ? null : waBtn, l.revoked ? null : hist));
   }
   await reload();
   return root;
@@ -322,6 +324,13 @@ export async function viewBase(ctx) {
       const addr = p.address ?? {};
       const deal = el('button', { class: 'btn btn-primary', type: 'button' }, 'Registrar contrato fechado');
       deal.addEventListener('click', () => openDealModal(ctx, { source: 'contact', refId: id, name: c.name, bps: 0, onDone: () => { m.close(); load(); } }));
+      // WhatsApp: a permissão é uma declaração do parceiro (ele só marca "tem permissão" se de fato a tem).
+      const optin = el('select', { class: 'input', 'aria-label': 'Permissão de WhatsApp' }, ...[['desconhecido', 'Permissão de WhatsApp: não informada'], ['sim', 'Tem permissão de WhatsApp'], ['nao', 'Pediu para não receber']].map(([v, l]) => el('option', { value: v, selected: v === c.waOptin }, l)));
+      optin.addEventListener('change', async () => {
+        try { await ctx.call('PATCH', `/partner/contacts/${id}`, { waOptin: optin.value }); toast('Permissão atualizada.'); } catch (err) { toast(err.message); }
+      });
+      const chatBtn = el('button', { class: 'btn btn-secondary', type: 'button' }, 'Conversar no WhatsApp');
+      chatBtn.addEventListener('click', () => { m.close(); ctx.go('whatsapp', { startContact: id }); });
       m.body.replaceChildren(
         el('h3', { class: 'pt-contact-name' }, c.name),
         el('p', { class: 'pt-sub' }, [c.serviceStatus, c.orgUf && `órgão ${c.orgUf}`, c.age && `${c.age} anos`].filter(Boolean).join(' · ')),
@@ -333,6 +342,7 @@ export async function viewBase(ctx) {
           kv('Conta de recebimento', [p.bank?.payer, p.bank?.agency && `ag. ${p.bank.agency}`, p.bank?.account && `conta ${p.bank.account}`].filter(Boolean).join(' · '))),
         c.deals.length ? el('div', { class: 'pt-deals-mini' }, ...c.deals.map((x) => el('p', {}, `${PRODUCT[x.product]} de ${brl(x.amountCents)} em ${dayBr(x.signedOn)}${x.status === 'cancelado' ? ' (cancelado)' : ''}`))) : null,
         deal,
+        el('div', { class: 'pt-form pt-inline' }, el('div', { class: 'field' }, optin), el('div', { class: 'field' }, chatBtn)),
         el('h4', { class: 'pt-h4' }, 'Anotações'),
         noteBox(ctx, `/partner/contacts/${id}/events`, paint2),
         eventsList(c.events),

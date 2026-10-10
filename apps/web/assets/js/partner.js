@@ -3,15 +3,17 @@
 import { el, icon, toast } from './dom.js';
 import { viewPainel, viewFolego, viewBase, viewContratos } from './partner-views.js';
 import { viewImportar } from './partner-import.js';
+import { viewWhatsapp } from './partner-wa.js';
 
 const TABS = [
   ['painel', 'Painel', 'chart'],
-  ['folego', 'Contatos do Fôlego', 'chat'],
+  ['folego', 'Contatos do Fôlego', 'check'],
+  ['whatsapp', 'WhatsApp', 'chat'],
   ['base', 'Minha base', 'list'],
   ['contratos', 'Contratos', 'card'],
   ['importar', 'Importar planilha', 'plus'],
 ];
-const VIEWS = { painel: viewPainel, folego: viewFolego, base: viewBase, contratos: viewContratos, importar: viewImportar };
+const VIEWS = { painel: viewPainel, folego: viewFolego, whatsapp: viewWhatsapp, base: viewBase, contratos: viewContratos, importar: viewImportar };
 
 export function renderPartner(root) {
   let token = '';

@@ -57,6 +57,9 @@ export async function viewImportar(ctx) {
     const bad = plan.invalid.sem_cpf + plan.invalid.cpf_invalido + plan.invalid.sem_nome;
     const withPhone = plan.records.filter((r) => r.phones.length).length;
     const withMargin = plan.records.filter((r) => (r.availableMarginCents ?? 0) > 0).length;
+    // Permissão de WhatsApp: declaração do parceiro. Sem ela, os contatos entram, mas não recebem disparo até escreverem ou serem liberados na ficha.
+    const optin = el('input', { type: 'checkbox', id: 'imp-optin' });
+    const optinBox = el('label', { class: 'check pt-optin', for: 'imp-optin' }, optin, el('span', {}, 'Tenho autorização destes contatos para falar por WhatsApp (eles são clientes meus ou pediram contato). Sem isso, eles entram na base mas não recebem disparos.'));
     const go = el('button', { class: 'btn btn-primary', type: 'button', disabled: plan.records.length === 0 }, `Importar ${n(plan.records.length)} contatos`);
     const cancel = el('button', { class: 'btn btn-quiet', type: 'button' }, 'Cancelar');
     cancel.addEventListener('click', () => stage.replaceChildren());
@@ -74,6 +77,7 @@ export async function viewImportar(ctx) {
       bad ? el('p', { class: 'pt-sub' }, `Descartados: ${plan.invalid.sem_cpf} sem CPF, ${plan.invalid.cpf_invalido} com CPF inválido, ${plan.invalid.sem_nome} sem nome.`) : null,
       el('p', { class: 'pt-sub' }, `${n(withPhone)} com telefone · ${n(withMargin)} com margem livre.`),
       plan.layout === 'siape' ? el('details', { class: 'pt-cols-help' }, el('summary', {}, 'Como lemos as colunas desta planilha'), el('ul', {}, ...Object.entries(SIAPE_COLUMN_LABELS).map(([c, l]) => el('li', {}, el('strong', {}, c), ` ${l}`)))) : null,
+      optinBox,
       bar, status,
       el('div', { class: 'pt-actions' }, go, cancel)));
     go.addEventListener('click', async () => {
@@ -81,7 +85,7 @@ export async function viewImportar(ctx) {
       cancel.disabled = true;
       bar.hidden = false;
       try {
-        const start = await ctx.call('POST', '/partner/imports', { filename: file.name, layout: plan.layout, total: plan.total, invalid: bad, repeatedInFile: plan.repeatedInFile });
+        const start = await ctx.call('POST', '/partner/imports', { filename: file.name, layout: plan.layout, total: plan.total, invalid: bad, repeatedInFile: plan.repeatedInFile, waOptin: optin.checked });
         let done = 0;
         for (const rows of batchesBySize(plan.records)) {
           await sendBatch(ctx, start.importId, rows);

@@ -9,6 +9,7 @@ import { AsaasGateway, FakeGateway } from './gateway.ts';
 import { ConsoleSender, CountingSender, ResendSender } from './email.ts';
 import type { PaymentGateway } from './gateway.ts';
 import { makeOpenFinance } from './openfinance.ts';
+import { ConsoleTransport } from './whatsapp.ts';
 import { purgeExpired } from './services.ts';
 import { runWorker } from './generation/worker.ts';
 import { workerOptions } from './generation/setup.ts';
@@ -33,13 +34,15 @@ const emailRaw = config.email ? new ResendSender(config.email) : (config.env !==
 const email = emailRaw ? new CountingSender(emailRaw, db) : undefined;
 // RATE_LIMITS=relaxed só vale fora de produção (popular dados de exemplo sem esbarrar nos limites por IP).
 const openFinance = makeOpenFinance(config);
-const app = await buildApp({ config, db, gateway, email, ...(openFinance ? { openFinance } : {}), rateLimits: config.env !== 'production' && process.env.RATE_LIMITS === 'relaxed' ? 'relaxed' : 'strict' });
+// WhatsApp: em produção usa a Cloud API da Meta (padrão). Fora dela, WHATSAPP_FAKE=1 só imprime no console.
+const whatsapp = config.env !== 'production' && process.env.WHATSAPP_FAKE === '1' ? new ConsoleTransport() : undefined;
+const app = await buildApp({ config, db, gateway, email, ...(openFinance ? { openFinance } : {}), ...(whatsapp ? { whatsapp } : {}), rateLimits: config.env !== 'production' && process.env.RATE_LIMITS === 'relaxed' ? 'relaxed' : 'strict' });
 
 // Worker dentro do processo só em desenvolvimento (em produção é um container próprio: src/worker.ts).
 const workerControl = { stopped: false };
 if (config.workerInline) {
   const opts = workerOptions(config, (event) => app.log.info({ servico: 'worker', ...event }));
-  void runWorker({ db, config, gateway, ...(openFinance ? { openFinance } : {}) }, opts, workerControl, 1500);
+  void runWorker({ db, config, gateway, ...(openFinance ? { openFinance } : {}), ...(whatsapp ? { whatsapp } : {}) }, opts, workerControl, 1500);
   app.log.info(`Worker embutido ativo. IA: ${opts.generator ? config.aiModel : 'desligada (modelos determinísticos)'}`);
 }
 

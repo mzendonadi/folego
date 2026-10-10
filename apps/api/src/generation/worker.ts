@@ -1,5 +1,6 @@
 import type { Ctx } from '../services.ts';
 import { deliverPendingLeads } from '../leads.ts';
+import { processWhatsAppQueue } from '../whatsapp.ts';
 import { maintenance } from '../subscriptions.ts';
 import { refreshRuntime } from '../runtime.ts';
 import { workerBeat } from '../health.ts';
@@ -246,6 +247,7 @@ export async function runWorker(ctx: Ctx, opts: WorkerOptions, control: { stoppe
     const log = opts.log ? { log: opts.log } : {};
     const jobs: Array<[string, () => Promise<unknown>]> = [
       ['leads', () => deliverPendingLeads(ctx, log)],
+      ['whatsapp', () => processWhatsAppQueue(ctx, log)],
       ['campanhas', () => dispatchCampaigns(ctx, log)],
       ['lembretes', () => sendDueReminders(ctx, log)],
       ['resumo_semanal', () => sendWeeklyDigests(ctx, log)],

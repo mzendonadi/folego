@@ -27,6 +27,10 @@ export interface Ctx {
   email?: EmailSender;
   /** Ausente = contas conectadas (Open Finance) desligadas. */
   openFinance?: import('./openfinance.ts').OpenFinanceProvider;
+  /** Transporte do WhatsApp. Ausente = Cloud API da Meta (produção); nos testes entra um falso. */
+  whatsapp?: import('./whatsapp.ts').WaTransport;
+  /** Agente de IA de vendas do WhatsApp. Ausente = só atendimento humano (padrão). */
+  salesAgent?: import('./whatsapp.ts').SalesAgent;
 }
 
 export const TERMS_VERSION = 'minuta-2026-09-26';

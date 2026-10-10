@@ -30,6 +30,7 @@ set EXPOSE_DEV_CODES=1
 set RATE_LIMITS=relaxed
 set SUBSCRIPTIONS_ENABLED=1
 set LEADS_ENABLED=1
+set WHATSAPP_FAKE=1
 set ADMIN_EMAILS=dono@folego.local
 set PGLITE_DIR=%~dp0.local-data
 set PORT=3000

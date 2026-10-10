@@ -9,6 +9,7 @@ import { AppError, notFound } from './errors.ts';
 import { cleanCpf } from './engine.ts';
 import type { Ctx } from './services.ts';
 import { audit, num, todaySaoPaulo } from './services.ts';
+import { phoneKey, waPhone } from './whatsapp.ts';
 
 const PAGE = 30;
 const iso = (d: unknown): string => new Date(d as string).toISOString();
@@ -46,11 +47,16 @@ export const importRowSchema = z.strictObject({
 });
 export type ImportRow = z.infer<typeof importRowSchema>;
 
-export const importStartSchema = z.strictObject({ filename: z.string().trim().min(1).max(200), layout: z.enum(['siape', 'cabecalho']), total: z.number().int().min(0).max(2_000_000), invalid: z.number().int().min(0).max(2_000_000).default(0), repeatedInFile: z.number().int().min(0).max(2_000_000).default(0) });
+export const importStartSchema = z.strictObject({ filename: z.string().trim().min(1).max(200), layout: z.enum(['siape', 'cabecalho']), total: z.number().int().min(0).max(2_000_000), invalid: z.number().int().min(0).max(2_000_000).default(0), repeatedInFile: z.number().int().min(0).max(2_000_000).default(0),
+  /** O parceiro declara que tem autorização destes contatos para WhatsApp (quem não tinha permissão passa a "sim"). */
+  waOptin: z.boolean().default(false),
+});
 /** O lote chega "cru": cada linha é validada separadamente, para uma linha ruim não derrubar as outras 199. */
 export const importBatchSchema = z.strictObject({ rows: z.array(z.unknown()).min(1).max(250) });
 
 const cpfKey = (ctx: Ctx, partnerId: string, cpf: string): string => hmac(ctx.config.secret, `pcpf:${partnerId}:${cpf}`).toString('hex');
+/** Chaves dos telefones (para achar a conversa do WhatsApp de quem escreve), sem guardar o número em claro. */
+const keysOf = (secret: string, partnerId: string, phones: string[]): string[] => [...new Set(phones.map((p) => waPhone(p)).filter((p): p is string => p !== null).map((e) => phoneKey(secret, partnerId, e)))];
 
 /** O que fica criptografado: tudo o que identifica ou contata a pessoa. */
 const piiOf = (r: ImportRow) => ({
@@ -81,8 +87,8 @@ const stable = (v: unknown): string => JSON.stringify(v, (_, x) => (x && typeof 
 
 export async function startImport(ctx: Ctx, partnerId: string, input: z.infer<typeof importStartSchema>): Promise<{ importId: string }> {
   const r = await ctx.db.query<{ id: string }>(
-    `INSERT INTO app.partner_imports(partner_id, filename, layout, rows_total, invalid_n, repeated_n) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
-    [partnerId, input.filename, input.layout, input.total, input.invalid, input.repeatedInFile],
+    `INSERT INTO app.partner_imports(partner_id, filename, layout, rows_total, invalid_n, repeated_n, wa_optin) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+    [partnerId, input.filename, input.layout, input.total, input.invalid, input.repeatedInFile, input.waOptin],
   );
   await audit(ctx.db, `partner:${partnerId}`, 'partner_import_started', 'partner_import', r.rows[0]!.id, { filename: input.filename, total: input.total });
   return { importId: r.rows[0]!.id };
@@ -91,8 +97,9 @@ export async function startImport(ctx: Ctx, partnerId: string, input: z.infer<ty
 export interface BatchResult { created: number; updated: number; same: number; rejected: number }
 
 export async function importBatch(ctx: Ctx, partnerId: string, importId: string, raw: unknown[]): Promise<BatchResult> {
-  const own = await ctx.db.query(`SELECT 1 FROM app.partner_imports WHERE id = $1 AND partner_id = $2 AND finished_at IS NULL`, [importId, partnerId]);
+  const own = await ctx.db.query<{ wa_optin: boolean }>(`SELECT wa_optin FROM app.partner_imports WHERE id = $1 AND partner_id = $2 AND finished_at IS NULL`, [importId, partnerId]);
   if (own.rows.length === 0) throw notFound();
+  const optin = own.rows[0]!.wa_optin ? 'sim' : 'desconhecido';
   const secret = ctx.config.secret;
   const rows: ImportRow[] = [];
   let rejected = 0;
@@ -106,8 +113,8 @@ export async function importBatch(ctx: Ctx, partnerId: string, importId: string,
   const keyed = [...unique.values()].map((r) => ({ r, key: cpfKey(ctx, partnerId, r.cpf) }));
   const out: BatchResult = { created: 0, updated: 0, same: 0, rejected };
   await ctx.db.tx(async (q) => {
-    const found = await q.query<{ id: string; cpf_hmac: string; pii_enc: Buffer; available_margin_cents: string | null; card_margin_cents: string | null; service_status: string | null; name: string }>(
-      `SELECT id, cpf_hmac, pii_enc, available_margin_cents::text, card_margin_cents::text, service_status, name FROM app.partner_contacts WHERE partner_id = $1 AND cpf_hmac = ANY($2::text[])`,
+    const found = await q.query<{ id: string; cpf_hmac: string; pii_enc: Buffer; available_margin_cents: string | null; card_margin_cents: string | null; service_status: string | null; name: string; wa_optin: string }>(
+      `SELECT id, cpf_hmac, pii_enc, available_margin_cents::text, card_margin_cents::text, service_status, name, wa_optin FROM app.partner_contacts WHERE partner_id = $1 AND cpf_hmac = ANY($2::text[])`,
       [partnerId, keyed.map((k) => k.key)],
     );
     const byKey = new Map(found.rows.map((x) => [x.cpf_hmac, x]));
@@ -116,9 +123,9 @@ export async function importBatch(ctx: Ctx, partnerId: string, importId: string,
       const next = piiOf(r);
       if (!cur) {
         const ins = await q.query(
-          `INSERT INTO app.partner_contacts(partner_id, cpf_hmac, name, org_uf, city, uf, service_status, age, available_margin_cents, card_margin_cents, pii_enc, import_id)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT (partner_id, cpf_hmac) DO NOTHING`,
-          [partnerId, key, r.name, r.orgUf ?? null, r.address.city ?? null, r.address.uf ?? null, r.serviceStatus ?? null, r.age ?? null, r.availableMarginCents ?? null, r.cardMarginCents ?? null, encryptText(secret, JSON.stringify(next)), importId],
+          `INSERT INTO app.partner_contacts(partner_id, cpf_hmac, name, org_uf, city, uf, service_status, age, available_margin_cents, card_margin_cents, pii_enc, import_id, phone_keys, wa_optin)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::text[],$14) ON CONFLICT (partner_id, cpf_hmac) DO NOTHING`,
+          [partnerId, key, r.name, r.orgUf ?? null, r.address.city ?? null, r.address.uf ?? null, r.serviceStatus ?? null, r.age ?? null, r.availableMarginCents ?? null, r.cardMarginCents ?? null, encryptText(secret, JSON.stringify(next)), importId, keysOf(secret, partnerId, r.phones), optin],
         );
         if ((ins.rowCount ?? 0) > 0) out.created += 1;
         else out.same += 1;
@@ -128,15 +135,17 @@ export async function importBatch(ctx: Ctx, partnerId: string, importId: string,
       const merged = mergePii(old, next);
       const margin = r.availableMarginCents ?? (cur.available_margin_cents === null ? null : num(cur.available_margin_cents));
       const card = r.cardMarginCents ?? (cur.card_margin_cents === null ? null : num(cur.card_margin_cents));
-      const same = stable(merged) === stable(old) && margin === (cur.available_margin_cents === null ? null : num(cur.available_margin_cents)) && card === (cur.card_margin_cents === null ? null : num(cur.card_margin_cents)) && (r.serviceStatus ?? cur.service_status) === cur.service_status;
+      const grants = optin === 'sim' && cur.wa_optin === 'desconhecido'; // a importação declara autorização: só promove quem ainda não tinha resposta
+      const same = !grants && stable(merged) === stable(old) && margin === (cur.available_margin_cents === null ? null : num(cur.available_margin_cents)) && card === (cur.card_margin_cents === null ? null : num(cur.card_margin_cents)) && (r.serviceStatus ?? cur.service_status) === cur.service_status;
       if (same) {
         out.same += 1;
         continue;
       }
       await q.query(
-        `UPDATE app.partner_contacts SET pii_enc = $3, available_margin_cents = $4, card_margin_cents = $5, service_status = coalesce($6, service_status), org_uf = coalesce($7, org_uf), city = coalesce($8, city), uf = coalesce($9, uf), age = coalesce($10, age), import_id = $11
+        `UPDATE app.partner_contacts SET pii_enc = $3, available_margin_cents = $4, card_margin_cents = $5, service_status = coalesce($6, service_status), org_uf = coalesce($7, org_uf), city = coalesce($8, city), uf = coalesce($9, uf), age = coalesce($10, age), import_id = $11,
+                phone_keys = $12::text[], wa_optin = CASE WHEN $13 = 'sim' AND wa_optin = 'desconhecido' THEN 'sim' ELSE wa_optin END
           WHERE id = $1 AND partner_id = $2`,
-        [cur.id, partnerId, encryptText(secret, JSON.stringify(merged)), margin, card, r.serviceStatus ?? null, r.orgUf ?? null, r.address.city ?? null, r.address.uf ?? null, r.age ?? null, importId],
+        [cur.id, partnerId, encryptText(secret, JSON.stringify(merged)), margin, card, r.serviceStatus ?? null, r.orgUf ?? null, r.address.city ?? null, r.address.uf ?? null, r.age ?? null, importId, keysOf(secret, partnerId, merged.phones), optin],
       );
       out.updated += 1;
     }
@@ -228,15 +237,15 @@ async function dealsOf(ctx: Ctx, partnerId: string, where: string, id: string) {
 }
 
 export async function contactDetail(ctx: Ctx, partnerId: string, id: string) {
-  const r = await ctx.db.query<{ id: string; name: string; stage: string; org_uf: string | null; service_status: string | null; age: number | null; available_margin_cents: string | null; card_margin_cents: string | null; next_action_on: Date | string | null; last_contact_at: Date | null; created_at: Date; pii_enc: Buffer }>(
-    `SELECT id, name, stage, org_uf, service_status, age, available_margin_cents::text, card_margin_cents::text, next_action_on, last_contact_at, created_at, pii_enc FROM app.partner_contacts WHERE id = $1 AND partner_id = $2`,
+  const r = await ctx.db.query<{ id: string; name: string; stage: string; org_uf: string | null; service_status: string | null; age: number | null; available_margin_cents: string | null; card_margin_cents: string | null; next_action_on: Date | string | null; last_contact_at: Date | null; created_at: Date; pii_enc: Buffer; wa_optin: string }>(
+    `SELECT id, name, stage, org_uf, service_status, age, available_margin_cents::text, card_margin_cents::text, next_action_on, last_contact_at, created_at, pii_enc, wa_optin FROM app.partner_contacts WHERE id = $1 AND partner_id = $2`,
     [id, partnerId],
   );
   const x = r.rows[0];
   if (!x) throw notFound();
   const events = await ctx.db.query<{ id: string; kind: string; body: string; created_at: Date }>(`SELECT id, kind, body, created_at FROM app.partner_events WHERE contact_id = $1 AND partner_id = $2 ORDER BY created_at DESC LIMIT 100`, [id, partnerId]);
   return {
-    id: x.id, name: x.name, stage: x.stage, orgUf: x.org_uf, serviceStatus: x.service_status, age: x.age,
+    id: x.id, name: x.name, stage: x.stage, orgUf: x.org_uf, serviceStatus: x.service_status, age: x.age, waOptin: x.wa_optin,
     availableMarginCents: x.available_margin_cents === null ? null : num(x.available_margin_cents), cardMarginCents: x.card_margin_cents === null ? null : num(x.card_margin_cents),
     nextActionOn: x.next_action_on ? day(x.next_action_on) : null, lastContactAt: x.last_contact_at ? iso(x.last_contact_at) : null, createdAt: iso(x.created_at),
     pii: JSON.parse(decryptText(ctx.config.secret, x.pii_enc)) as Pii,
@@ -245,7 +254,12 @@ export async function contactDetail(ctx: Ctx, partnerId: string, id: string) {
   };
 }
 
-export const contactPatchSchema = z.strictObject({ stage: z.enum(STAGES).optional(), nextActionOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional() });
+export const contactPatchSchema = z.strictObject({
+  stage: z.enum(STAGES).optional(),
+  nextActionOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  /** Permissão de WhatsApp: 'sim' só quando o parceiro realmente tem a autorização do contato. */
+  waOptin: z.enum(['desconhecido', 'sim', 'nao']).optional(),
+});
 
 export async function patchContact(ctx: Ctx, partnerId: string, id: string, patch: z.infer<typeof contactPatchSchema>) {
   const cur = await ctx.db.query<{ stage: string }>(`SELECT stage FROM app.partner_contacts WHERE id = $1 AND partner_id = $2`, [id, partnerId]);
@@ -256,6 +270,11 @@ export async function patchContact(ctx: Ctx, partnerId: string, id: string, patc
       await q.query(`INSERT INTO app.partner_events(partner_id, contact_id, kind, body) VALUES ($1,$2,'etapa',$3)`, [partnerId, id, `Etapa: ${cur.rows[0]!.stage} → ${patch.stage}`]);
     }
     if (patch.nextActionOn !== undefined) await q.query(`UPDATE app.partner_contacts SET next_action_on = $3 WHERE id = $1 AND partner_id = $2`, [id, partnerId, patch.nextActionOn]);
+    if (patch.waOptin) {
+      await q.query(`UPDATE app.partner_contacts SET wa_optin = $3 WHERE id = $1 AND partner_id = $2`, [id, partnerId, patch.waOptin]);
+      if (patch.waOptin === 'nao') await q.query(`UPDATE app.wa_threads SET opted_out = true WHERE contact_id = $1 AND partner_id = $2`, [id, partnerId]);
+      await audit(q, `partner:${partnerId}`, 'wa_optin_changed', 'partner_contact', id, { value: patch.waOptin });
+    }
   });
   return { ok: true };
 }
