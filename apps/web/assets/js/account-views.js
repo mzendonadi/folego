@@ -11,7 +11,7 @@ import { viewIndicar } from './referral.js';
 import { viewCobrancas, viewCenarios } from './account-insight-views.js';
 import { viewContas } from './account-openfinance-views.js';
 import { viewCartoes } from './account-cards-views.js';
-import { PLANS, CATEGORIES, CATEGORY_LABEL, categorize, parseExtract, parsePdfExtract } from '../vendor/engine.js';
+import { PLANS, CATEGORIES, CATEGORY_LABEL, categorize, parseExtract, parsePdfExtract, simulateInvestment } from '../vendor/engine.js';
 
 export const FEATURE_LABEL = { health: 'Nota de saúde financeira', debts: 'Dívidas com plano de quitação', reminders: 'Lembretes de contas por e-mail', ledger: 'Controle de gastos', import: 'Importar extrato', alerts: 'Alertas de limite', coach_limited: 'Treinador (3 dicas)', goals: 'Metas com aportes', coach: 'Treinador completo', simulator: 'Simulador de investimento', planner: 'Planejador com IA', household: 'Conta compartilhada com uma pessoa', recurring: 'Detector de assinaturas e cobranças recorrentes', scenarios: 'Simulador "e se...?" de cenários', ebook: 'eBook de presente no seu e-mail (50+ páginas)', journeys: 'Todas as jornadas do coach', market: 'Cenário econômico (Selic, inflação, CDI)', market_pro: 'Dólar e histórico de 12 meses', cards: 'Cartões de crédito: limite, fatura, vencimento e parcelas', cards_pro: 'Cartões avançado: fatura em PDF, estratégias e custo do rotativo', map_member: 'Mapa da Virada com preço de assinante (Pix, 90 dias)', map_included: 'Mapa da Virada incluso, enquanto a assinatura valer' };
 
@@ -696,7 +696,15 @@ export function viewSimulador(ctx) {
     e.preventDefault();
     btn.disabled = true;
     try {
-      const res = await ctx.api.simulateInvestmentApi({ initialCents: initial.cents() ?? 0, monthlyCents: monthly.cents() ?? 0, months: Math.max(1, Math.min(600, Number(months.value) || 12)), scenarios: [{ name: 'Cenário', annualPct: pctNum(rate.value) }], inflationAnnualPct: pctNum(infl.value) });
+      const input = { initialCents: initial.cents() ?? 0, monthlyCents: monthly.cents() ?? 0, months: Math.max(1, Math.min(600, Number(months.value) || 12)), scenarios: [{ name: 'Cenário', annualPct: pctNum(rate.value) }], inflationAnnualPct: pctNum(infl.value) };
+      let res;
+      try {
+        res = await ctx.api.simulateInvestmentApi(input);
+      } catch (error) {
+        // Plano vencido ou sessão caída: o aviso certo. Qualquer outra falha do servidor: a conta é a mesma, feita aqui no aparelho.
+        if ([401, 402, 403].includes(error?.status)) throw error;
+        res = { results: simulateInvestment(input), notice: 'Simulação educativa com as taxas que você informou. Não é recomendação de investimento nem previsão de resultado. Rendimentos passados e hipóteses não garantem o futuro.' };
+      }
       const r = res.results[0];
       out.replaceChildren(
         el(

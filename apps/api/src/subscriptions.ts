@@ -468,7 +468,7 @@ export interface SimulateArgs {
 
 export async function simulate(ctx: Ctx, subscriberId: string, args: SimulateArgs) {
   await requireFeature(ctx, subscriberId, 'simulator');
-  await markMissionDone(ctx, subscriberId, 'i4');
+  await markMissionDone(ctx, subscriberId, 'i4').catch(() => undefined); // missão do treinador é um extra: nunca derruba a simulação
   return {
     results: simulateInvestment(args),
     notice: 'Simulação educativa com as taxas que você informou. Não é recomendação de investimento nem previsão de resultado. Rendimentos passados e hipóteses não garantem o futuro.',
