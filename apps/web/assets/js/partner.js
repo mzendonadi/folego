@@ -1,8 +1,17 @@
-// Portal do parceiro (#/parceiros): login e lista dos leads entregues a ele. Sem link público na página.
-import { el, toast } from './dom.js';
-import { brl } from './format.js';
+// Portal do parceiro (#/parceiros): "Euro Multiplan & Fôlego". Login, navegação e as cinco áreas de trabalho.
+// Sem link público na página: o parceiro recebe o endereço e a senha do Fôlego.
+import { el, icon, toast } from './dom.js';
+import { viewPainel, viewFolego, viewBase, viewContratos } from './partner-views.js';
+import { viewImportar } from './partner-import.js';
 
-const STATUS = { queued: 'na fila', delivered: 'novo', failed: 'falha no envio', contacted: 'contatado', converted: 'convertido', rejected: 'descartado' };
+const TABS = [
+  ['painel', 'Painel', 'list'],
+  ['folego', 'Contatos do Fôlego', 'check'],
+  ['base', 'Minha base', 'list'],
+  ['contratos', 'Contratos', 'card'],
+  ['importar', 'Importar planilha', 'plus'],
+];
+const VIEWS = { painel: viewPainel, folego: viewFolego, base: viewBase, contratos: viewContratos, importar: viewImportar };
 
 export function renderPartner(root) {
   let token = '';
@@ -20,8 +29,6 @@ export function renderPartner(root) {
       /* sem armazenamento: o login vale só nesta tela */
     }
   };
-
-  const card = (...c) => el('section', { class: 'card d-section' }, ...c);
   const call = async (method, path, body) => {
     const res = await fetch(`/api${path}`, {
       method,
@@ -29,68 +36,86 @@ export function renderPartner(root) {
       body: body ? JSON.stringify(body) : undefined,
     });
     const json = await res.json().catch(() => null);
-    if (!res.ok) throw Object.assign(new Error(json?.message ?? 'erro'), { status: res.status });
+    if (res.status === 401 && token) {
+      keep('');
+      drawLogin('Sua sessão terminou. Entre de novo.');
+      throw Object.assign(new Error('sessão'), { status: 401, silent: true });
+    }
+    if (!res.ok) throw Object.assign(new Error(json?.message ?? 'Não consegui agora.'), { status: res.status });
     return json;
   };
 
-  function drawLogin() {
+  const brandName = (profile) => (profile?.tradeName || profile?.legalName || 'Parceiro').toLowerCase().replace(/(^|\s)(\p{L})/gu, (m, a, b) => a + b.toUpperCase()).replace(/\s+(Intermediacoes|Intermediações|Me|Ltda|Eireli)$/, '');
+  const lockup = (profile) => el('div', { class: 'pt-lockup' }, el('span', { class: 'pt-lockup-name' }, brandName(profile)), el('span', { class: 'pt-lockup-amp', 'aria-hidden': 'true' }, '&'), el('span', { class: 'pt-lockup-folego' }, 'fôlego'));
+
+  function drawLogin(message = '') {
     const email = el('input', { class: 'input', id: 'pt-email', type: 'email', autocomplete: 'username', required: true });
     const pass = el('input', { class: 'input', id: 'pt-pass', type: 'password', autocomplete: 'current-password', required: true });
+    const go = el('button', { class: 'btn btn-primary', type: 'submit' }, 'Entrar');
     const form = el(
-      'form', { class: 'tool-form' },
+      'form', { class: 'pt-login-form' },
       el('div', { class: 'field' }, el('label', { class: 'label', for: 'pt-email' }, 'E-mail'), email),
       el('div', { class: 'field' }, el('label', { class: 'label', for: 'pt-pass' }, 'Senha'), pass),
-      el('button', { class: 'btn btn-primary', type: 'submit' }, 'Entrar'),
+      go,
     );
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
+      go.disabled = true;
       try {
         const out = await call('POST', '/partner/login', { email: email.value, password: pass.value });
         keep(out.token);
-        await drawLeads(out.partnerName);
+        await drawShell();
       } catch {
+        go.disabled = false;
         toast('E-mail ou senha incorretos.');
       }
     });
-    root.replaceChildren(card(el('h2', {}, 'Entrar'), form));
+    root.replaceChildren(el('section', { class: 'pt-login' },
+      el('div', { class: 'pt-login-card' },
+        el('p', { class: 'pt-kicker' }, 'Portal do parceiro'),
+        el('h1', { class: 'pt-login-title' }, 'Seus contatos, contratos e comissões num só lugar.'),
+        message ? el('p', { class: 'note note-amber' }, icon('info'), el('span', {}, message)) : null,
+        form,
+        el('p', { class: 'fine muted' }, 'Acesso só para parceiros do Fôlego. Esqueceu a senha? Peça uma nova ao Fôlego.')),
+    ));
   }
 
-  async function drawLeads(name = '') {
-    let leads;
+  async function drawShell(tab = 'painel') {
+    let profile;
     try {
-      leads = (await call('GET', '/partner/leads')).leads;
+      profile = await call('GET', '/partner/me');
     } catch {
-      keep('');
-      return drawLogin();
+      return;
     }
-    const rows = leads.map((l) => {
-      const actions = ['contacted', 'converted', 'rejected']
-        .filter((s) => s !== l.status && ['delivered', 'contacted'].includes(l.status))
-        .map((s) => {
-          const b = el('button', { class: 'btn btn-quiet btn-sm', type: 'button' }, { contacted: 'Contatei', converted: 'Converteu', rejected: 'Descartar' }[s]);
-          b.addEventListener('click', async () => {
-            await call('POST', `/partner/leads/${l.id}/status`, { status: s }).catch(() => toast('Não consegui atualizar.'));
-            drawLeads(name);
-          });
-          return b;
-        });
-      return el(
-        'article', { class: 'script' },
-        el('h3', {}, l.revoked ? 'Titular revogou a autorização' : (l.name ?? 'Aguardando entrega')),
-        el('p', { class: 'muted' }, `${STATUS[l.status] ?? l.status} · ${l.category} · ${new Date(l.createdAt).toLocaleDateString('pt-BR')} · ${brl(l.priceCents)}`),
-        l.revoked
-          ? el('p', { class: 'note note-amber' }, 'Apague os dados deste titular dos seus sistemas.')
-          : el('p', {}, [l.phone, l.email, l.uf && `UF ${l.uf}`, l.incomeBand && `renda ${l.incomeBand}`, l.debtBand && `dívidas ${l.debtBand}`].filter(Boolean).join(' · ')),
-        el('div', { class: 'button-row' }, ...actions),
-      );
-    });
-    const out = el('button', { class: 'btn btn-quiet btn-sm', type: 'button' }, 'Sair');
+    const stage = el('div', { class: 'pt-stage', 'aria-live': 'polite' });
+    const nav = el('nav', { class: 'pt-nav', 'aria-label': 'Áreas do portal' });
+    const ctx = { call, profile, toast, go: (t, opts) => show(t, opts) };
+    const show = async (id, opts = {}) => {
+      nav.querySelectorAll('button').forEach((b) => b.setAttribute('aria-current', b.dataset.tab === id ? 'page' : 'false'));
+      stage.replaceChildren(el('p', { class: 'muted', role: 'status' }, 'Carregando…'));
+      try {
+        stage.replaceChildren(await VIEWS[id]({ ...ctx, opts }));
+      } catch (error) {
+        if (!error.silent) stage.replaceChildren(el('p', { class: 'note note-amber' }, icon('alert'), el('span', {}, error.message || 'Não consegui carregar.')));
+      }
+      window.scrollTo({ top: 0 });
+    };
+    for (const [id, label, ic] of TABS) {
+      const b = el('button', { class: 'pt-tab', type: 'button', 'data-tab': id }, icon(ic), el('span', {}, label));
+      b.addEventListener('click', () => show(id));
+      nav.append(b);
+    }
+    const out = el('button', { class: 'btn btn-quiet btn-sm pt-exit', type: 'button' }, 'Sair');
     out.addEventListener('click', () => {
       keep('');
       drawLogin();
     });
-    root.replaceChildren(card(el('h2', {}, name ? `Leads de ${name}` : 'Seus leads'), leads.length === 0 ? el('p', {}, 'Nenhum lead entregue ainda.') : el('div', { class: 'ideas' }, ...rows), out));
+    root.replaceChildren(el('div', { class: 'pt-shell' },
+      el('aside', { class: 'pt-side' }, lockup(profile), el('p', { class: 'pt-side-sub' }, 'Operações em parceria'), nav, out),
+      el('main', { class: 'pt-main' }, stage),
+    ));
+    await show(tab);
   }
 
-  return token ? drawLeads() : drawLogin();
+  return token ? drawShell() : drawLogin();
 }

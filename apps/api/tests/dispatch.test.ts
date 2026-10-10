@@ -20,6 +20,10 @@ const config = { ...loadConfig({ NODE_ENV: 'test' }), webhookSecret: 'segredo-de
 before(async () => {
   db = await createPgliteDb();
   await ensureSchema(db);
+  // As migrações já cadastram a Euro Multiplan; estes testes partem de um banco sem parceiros.
+  await db.query(`DELETE FROM app.partner_campaigns`);
+  await db.query(`DELETE FROM app.partner_users`);
+  await db.query(`DELETE FROM app.partners`);
   gateway = new FakeGateway(config.webhookSecret);
   app = await buildApp({ config, db, gateway, email: mailbox, rateLimits: 'relaxed' });
 });

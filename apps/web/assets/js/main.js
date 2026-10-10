@@ -399,10 +399,7 @@ async function mountPartnerCard() {
       await api.submitLead(state.caseId, body);
       await mountPartnerCard();
     },
-    onRevoke: async () => {
-      await api.revokeLead(state.caseId);
-      await mountPartnerCard();
-    },
+    onBuy: buyMap, // "Concluir meu Mapa": o mesmo caminho do botão de compra (Desbravador abre o incluso; os demais vão ao pagamento)
   });
   const main = root.querySelector('.preview-main');
   if (!node || !main) return;
@@ -418,13 +415,16 @@ function renderPreviewView() {
   void mountPartnerCard();
   renderPreview($('#preview-root'), state.preview, {
     offer: state.mapOffer,
-    onBuy: () => {
-      track('cta', { id: 'buy_map' });
-      if (state.mapOffer?.mode === 'free') return openIncludedMap(); // Desbravador: o Mapa já é do plano, sem tela de pagamento
-      go('checkout');
-    },
+    onBuy: buyMap,
     onWipe: askWipe,
   });
+}
+
+/** Botão de compra do Mapa da prévia. Só o assinante Desbravador (logado) tem o Mapa incluso; todos os demais pagam. */
+function buyMap() {
+  track('cta', { id: 'buy_map' });
+  if (state.mapOffer?.mode === 'free') return openIncludedMap();
+  return go('checkout');
 }
 
 // Desbravador: cria o pedido (sem cobrança) e abre o Mapa na hora.

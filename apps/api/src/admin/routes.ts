@@ -328,6 +328,15 @@ export function registerGestao(app: FastifyInstance, deps: AdminRouteDeps): void
     const a = await admin(req, 'parcerias');
     return partners.resetPassword(ctx, who(a), idParam((req.params as { id: string }).id));
   });
+  // contratos fechados pelo parceiro com contatos do Fôlego e a baixa da comissão do Fôlego
+  app.get(`${P}/parcerias/parceiros/:id/contratos`, async (req) => {
+    await admin(req, 'parcerias');
+    return partners.partnerDeals(ctx, idParam((req.params as { id: string }).id));
+  });
+  app.post(`${P}/parcerias/contratos/:id/comissao`, async (req) => {
+    const a = await admin(req, 'parcerias');
+    return partners.setCommissionStatus(ctx, who(a), idParam((req.params as { id: string }).id), partners.commissionStatusSchema.parse(req.body));
+  });
   app.post(`${P}/parcerias/parceiros/:id/campanhas`, async (req, reply) => {
     const a = await admin(req, 'parcerias');
     return reply.status(201).send(await partners.createCampaign(ctx, who(a), idParam((req.params as { id: string }).id), partners.campaignCreateSchema.parse(req.body)));

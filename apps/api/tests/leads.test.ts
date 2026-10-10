@@ -19,6 +19,11 @@ const config = { ...loadConfig({ NODE_ENV: 'test' }), webhookSecret: 'segredo-de
 before(async () => {
   db = await createPgliteDb();
   await ensureSchema(db);
+  // As migrações já cadastram a Euro Multiplan e ligam os parceiros; estes testes partem de um banco sem parceiros e com o recurso no padrão.
+  await db.query(`DELETE FROM app.partner_campaigns`);
+  await db.query(`DELETE FROM app.partner_users`);
+  await db.query(`DELETE FROM app.partners`);
+  await db.query(`DELETE FROM app.settings WHERE key = 'leadsEnabled'`);
   gateway = new FakeGateway(config.webhookSecret);
   app = await buildApp({ config, db, gateway, rateLimits: 'relaxed' });
   off = await buildApp({ config: { ...config, leadsEnabled: false }, db, gateway, rateLimits: 'relaxed' });

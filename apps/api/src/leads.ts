@@ -38,12 +38,11 @@ async function loadCase(ctx: Ctx, caseId: string): Promise<CaseRow> {
 
 /** Categorias que podemos oferecer a esta pessoa (honestas): consignado só se a troca reduz o custo; renegociação se há dívida em atraso. */
 export function offeredCategories(diagnosis: Diagnosis, debts: DebtInput[]): LeadCategory[] {
-  const out: LeadCategory[] = [];
-  if (diagnosis.refinance.suitabilityOk) out.push('consignado');
-  if (debts.some((d) => d.daysOverdue > 0)) out.push('renegotiation');
-  // Mesmo sem atraso ou perfil de consignado, quem quiser ajuda para buscar recursos com consciência pode falar com um parceiro.
-  if (out.length === 0) out.push('renegotiation');
-  return out;
+  // As duas opções ficam sempre disponíveis e a pessoa marca o que quiser: o consignado (o parceiro avalia margem e vínculo) e a renegociação
+  // (ajuda para negociar e buscar recursos com consciência). A estimativa de economia só aparece quando a troca de fato reduz o custo.
+  void diagnosis;
+  void debts;
+  return ['consignado', 'renegotiation'];
 }
 
 export interface LeadState {
@@ -189,6 +188,9 @@ export async function revokeLead(ctx: Ctx, sessionId: string, caseId: string): P
     await q.query(`DELETE FROM app.lead_contacts WHERE case_id = $1`, [caseId]);
     await q.query(`DELETE FROM app.lead_profiles WHERE case_id = $1`, [caseId]);
     await q.query(`UPDATE app.lead_deliveries SET status = 'rejected' WHERE case_id = $1 AND status IN ('queued','failed')`, [caseId]);
+    // O contrato fechado continua nos números (valor e comissão), mas sem o nome do titular que revogou.
+    await q.query(`UPDATE app.partner_deals SET client_name = NULL WHERE delivery_id IN (SELECT id FROM app.lead_deliveries WHERE case_id = $1)`, [caseId]);
+    await q.query(`DELETE FROM app.partner_events WHERE delivery_id IN (SELECT id FROM app.lead_deliveries WHERE case_id = $1)`, [caseId]);
     await audit(q, `session:${sessionId}`, 'lead_consent_revoked', 'case', caseId);
   });
 }
@@ -223,7 +225,7 @@ export async function deliverPendingLeads(ctx: Ctx, opts: { fetchFn?: typeof fet
     [opts.limit ?? 20],
   );
   for (const d of claimed.rows) {
-    const info = await ctx.db.query<{ webhook_url: string; webhook_secret_enc: Buffer; category: string; consented_at: Date | string }>(
+    const info = await ctx.db.query<{ webhook_url: string | null; webhook_secret_enc: Buffer | null; category: string; consented_at: Date | string }>(
       `SELECT c.webhook_url, c.webhook_secret_enc, c.consent_category AS category, (SELECT created_at FROM app.consents WHERE id = $2) AS consented_at FROM app.partner_campaigns c WHERE c.id = $1`,
       [d.campaign_id, d.consent_id],
     );
@@ -234,6 +236,12 @@ export async function deliverPendingLeads(ctx: Ctx, opts: { fetchFn?: typeof fet
     const pf = profile.rows[0];
     if (!camp || !ct || !pf) {
       await ctx.db.query(`UPDATE app.lead_deliveries SET status = 'rejected' WHERE id = $1`, [d.id]); // revogado
+      continue;
+    }
+    if (!camp.webhook_url || !camp.webhook_secret_enc) {
+      // Campanha só de portal (sem webhook): o contato já está disponível na tela do parceiro.
+      await ctx.db.query(`UPDATE app.lead_deliveries SET status = 'delivered', delivered_at = now() WHERE id = $1`, [d.id]);
+      opts.log?.({ evento: 'lead_no_portal', entrega: d.id });
       continue;
     }
     const secret = ctx.config.secret;
@@ -278,6 +286,11 @@ export interface NewPartner {
   cnpj: string;
   category: 'consignado' | 'bank' | 'fintech' | 'renegotiation';
   email: string;
+  tradeName?: string | undefined;
+  phone?: string | undefined;
+  city?: string | undefined;
+  uf?: string | undefined;
+  address?: string | undefined;
   campaign: {
     name: string;
     consentCategory: LeadCategory;
@@ -286,25 +299,29 @@ export interface NewPartner {
     minIncomeCents?: number | undefined;
     maxIncomeCents?: number | undefined;
     pricePerLeadCents: number;
+    commissionBps?: number | undefined;
     dailyCap: number;
     monthlyBudgetCents?: number | undefined;
-    webhookUrl: string;
+    webhookUrl?: string | undefined;
   };
 }
 
 export async function createPartner(ctx: Ctx, input: NewPartner): Promise<{ partnerId: string; password: string; webhookSecret: string }> {
-  assertPublicHttpsUrl(input.campaign.webhookUrl);
+  if (input.campaign.webhookUrl) assertPublicHttpsUrl(input.campaign.webhookUrl);
   const password = newToken().slice(0, 20);
   const webhookSecret = newToken();
   const partnerId = await ctx.db.tx(async (q) => {
-    const p = await q.query<{ id: string }>(`INSERT INTO app.partners(legal_name, cnpj, category, status) VALUES ($1,$2,$3,'active') RETURNING id`, [input.legalName, input.cnpj, input.category]);
+    const p = await q.query<{ id: string }>(
+      `INSERT INTO app.partners(legal_name, cnpj, category, status, trade_name, phone, city, uf, address) VALUES ($1,$2,$3,'active',$4,$5,$6,$7,$8) RETURNING id`,
+      [input.legalName, input.cnpj, input.category, input.tradeName ?? null, input.phone ?? null, input.city ?? null, input.uf ?? null, input.address ?? null],
+    );
     const id = p.rows[0]!.id;
     await q.query(`INSERT INTO app.partner_users(partner_id, email, password_hash, role) VALUES ($1,$2,$3,'admin')`, [id, input.email, hashPassword(password)]);
     const c = input.campaign;
     await q.query(
-      `INSERT INTO app.partner_campaigns(partner_id, name, status, consent_category, employment_types, ufs, min_income_cents, max_income_cents, price_per_lead_cents, daily_cap, monthly_budget_cents, webhook_url, webhook_secret_enc)
-       VALUES ($1,$2,'active',$3,$4::text[],$5::char(2)[],$6,$7,$8,$9,$10,$11,$12)`,
-      [id, c.name, c.consentCategory, c.employmentTypes, c.ufs, c.minIncomeCents ?? null, c.maxIncomeCents ?? null, c.pricePerLeadCents, c.dailyCap, c.monthlyBudgetCents ?? null, c.webhookUrl, encryptText(ctx.config.secret, webhookSecret)],
+      `INSERT INTO app.partner_campaigns(partner_id, name, status, consent_category, employment_types, ufs, min_income_cents, max_income_cents, price_per_lead_cents, commission_bps, daily_cap, monthly_budget_cents, webhook_url, webhook_secret_enc)
+       VALUES ($1,$2,'active',$3,$4::text[],$5::char(2)[],$6,$7,$8,$9,$10,$11,$12,$13)`,
+      [id, c.name, c.consentCategory, c.employmentTypes, c.ufs, c.minIncomeCents ?? null, c.maxIncomeCents ?? null, c.pricePerLeadCents, c.commissionBps ?? 0, c.dailyCap, c.monthlyBudgetCents ?? null, c.webhookUrl ?? null, c.webhookUrl ? encryptText(ctx.config.secret, webhookSecret) : null],
     );
     await audit(q, 'admin', 'partner_created', 'partner', id, { category: input.category });
     return id;
@@ -314,15 +331,15 @@ export async function createPartner(ctx: Ctx, input: NewPartner): Promise<{ part
 
 const DUMMY_HASH = hashPassword('nao-existe');
 
-export async function partnerLogin(ctx: Ctx, email: string, password: string): Promise<{ token: string; partnerName: string }> {
-  const r = await ctx.db.query<{ id: string; partner_id: string; password_hash: string; legal_name: string; status: string }>(
-    `SELECT u.id, u.partner_id, u.password_hash, p.legal_name, p.status FROM app.partner_users u JOIN app.partners p ON p.id = u.partner_id WHERE u.email = $1`,
+export async function partnerLogin(ctx: Ctx, email: string, password: string): Promise<{ token: string; partnerName: string; tradeName: string | null }> {
+  const r = await ctx.db.query<{ id: string; partner_id: string; password_hash: string; legal_name: string; trade_name: string | null; status: string }>(
+    `SELECT u.id, u.partner_id, u.password_hash, p.legal_name, p.trade_name, p.status FROM app.partner_users u JOIN app.partners p ON p.id = u.partner_id WHERE u.email = $1`,
     [email],
   );
   const u = r.rows[0];
   const ok = verifyPassword(password, u?.password_hash ?? DUMMY_HASH);
   if (!u || !ok || u.status !== 'active') throw new AppError(401, 'invalid_credentials', 'E-mail ou senha incorretos');
-  return { token: signToken(ctx.config.secret, { pid: u.partner_id, uid: u.id }, 12 * 3600), partnerName: u.legal_name };
+  return { token: signToken(ctx.config.secret, { pid: u.partner_id, uid: u.id }, 12 * 3600), partnerName: u.legal_name, tradeName: u.trade_name };
 }
 
 export function partnerFromToken(ctx: Ctx, header: string | undefined): string {
@@ -334,10 +351,12 @@ export function partnerFromToken(ctx: Ctx, header: string | undefined): string {
 
 export async function partnerLeads(ctx: Ctx, partnerId: string): Promise<Record<string, unknown>[]> {
   const r = await ctx.db.query<{
-    id: string; status: string; created_at: Date | string; delivered_at: Date | string | null; price_cents: string; category: string; campaign: string;
+    id: string; status: string; created_at: Date | string; delivered_at: Date | string | null; price_cents: string; category: string; campaign: string; commission_bps: number; deals_n: string; deals_cents: string;
     full_name_enc: Buffer | null; phone_enc: Buffer | null; email_enc: Buffer | null; uf: string | null; employment_type: string | null; income_band: string | null; debt_band: string | null;
   }>(
-    `SELECT d.id, d.status, d.created_at, d.delivered_at, d.price_cents, c.consent_category AS category, c.name AS campaign,
+    `SELECT d.id, d.status, d.created_at, d.delivered_at, d.price_cents, c.consent_category AS category, c.name AS campaign, c.commission_bps,
+            (SELECT count(*) FROM app.partner_deals pd WHERE pd.delivery_id = d.id AND pd.status = 'fechado')::text AS deals_n,
+            (SELECT coalesce(sum(pd.amount_cents), 0) FROM app.partner_deals pd WHERE pd.delivery_id = d.id AND pd.status = 'fechado')::text AS deals_cents,
             lc.full_name_enc, lc.phone_enc, lc.email_enc, lp.uf, lp.employment_type, lp.income_band, lp.debt_band
        FROM app.lead_deliveries d
        JOIN app.partner_campaigns c ON c.id = d.campaign_id
@@ -351,6 +370,7 @@ export async function partnerLeads(ctx: Ctx, partnerId: string): Promise<Record<
     const visible = !revoked && x.status !== 'queued' && x.status !== 'failed' && x.status !== 'rejected';
     return {
       id: x.id, status: x.status, category: x.category, campaign: x.campaign, createdAt: new Date(x.created_at).getTime(), priceCents: num(x.price_cents),
+      commissionBps: x.commission_bps, dealsCount: num(x.deals_n), dealsCents: num(x.deals_cents),
       revoked, // titular revogou: o parceiro deve apagar os dados
       uf: revoked ? null : x.uf, employmentType: revoked ? null : x.employment_type, incomeBand: revoked ? null : x.income_band, debtBand: revoked ? null : x.debt_band,
       name: visible && x.full_name_enc ? decryptText(ctx.config.secret, x.full_name_enc) : null,

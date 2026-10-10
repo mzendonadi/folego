@@ -36,6 +36,7 @@ import * as redo from './redo.ts';
 import { mapOffer } from './map-offer.ts';
 import * as demoAccounts from './demo.ts';
 import { refreshRuntime } from './runtime.ts';
+import * as partnerPortal from './partner-portal.ts';
 import { cardSchema, cardPatchSchema, cardPurchaseSchema, cardPaymentSchema, cardImportSchema, accessSchema, addEntriesSchema, cancelSchema, contributionSchema, createCaseSchema, entryWalletSchema, accountDebtSchema, accountDebtPatchSchema, debtPaymentSchema, monthLimitSchema, plannerSchema, objectiveSchema, inviteSchema, checkoutSchema, profileSchema, referralLeadSchema, referralInviteSchema, recurringDecisionSchema, reminderPatchSchema, reminderSchema, walletSchema, walletPatchSchema, createOrderSchema, emailLinkSchema, emailOnlySchema, goalSchema, incomeInterviewSchema, leadSchema, loginCodeSchema, newPartnerSchema, partnerLoginSchema, partnerStatusSchema, setCategorySchema, categoryNameSchema, setLimitSchema, simulateSchema, subscriptionOrderSchema, toggleIncomeTaskSchema, translationSchema, guidedSchema, uuidParam, monthParam } from './schemas.ts';
 import { EngineInputError } from './engine.ts';
 import { GUIDED_KINDS } from './guided.ts';
@@ -348,6 +349,30 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       await leads.partnerSetStatus(ctx, partnerId, idParam((req.params as { id: string }).id), partnerStatusSchema.parse(req.body).status);
       return { ok: true };
     });
+
+    // Portal de gestão do parceiro (Euro Multiplan & Fôlego): painel, contatos do Fôlego, base própria (planilhas), contratos e comissão.
+    const pid = (req: { headers: { authorization?: string | undefined } }) => leads.partnerFromToken(ctx, req.headers.authorization);
+    const pp = partnerPortal;
+    const qs = (req: { query: unknown }) => req.query as Record<string, string | undefined>;
+    app.get('/api/partner/me', async (req) => pp.partnerProfile(ctx, pid(req)));
+    app.get('/api/partner/summary', async (req) => pp.summary(ctx, pid(req)));
+    app.get('/api/partner/leads/:id', async (req) => pp.leadDetail(ctx, pid(req), idParam((req.params as { id: string }).id)));
+    app.post('/api/partner/leads/:id/events', async (req) => pp.addEvent(ctx, pid(req), { deliveryId: idParam((req.params as { id: string }).id) }, pp.eventSchema.parse(req.body)));
+    app.get('/api/partner/contacts', async (req) => {
+      const q = qs(req);
+      return pp.listContacts(ctx, pid(req), { q: q.q, stage: q.etapa, orgUf: q.orgao, uf: q.uf, status: q.situacao, minMarginCents: q.margem ? Math.round(Number(q.margem) * 100) || undefined : undefined, due: q.vencidas === '1', sort: q.ordem, page: Number(q.pagina) || 0 });
+    });
+    app.get('/api/partner/contacts/facets', async (req) => pp.contactFacets(ctx, pid(req)));
+    app.get('/api/partner/contacts/:id', async (req) => pp.contactDetail(ctx, pid(req), idParam((req.params as { id: string }).id)));
+    app.patch('/api/partner/contacts/:id', async (req) => pp.patchContact(ctx, pid(req), idParam((req.params as { id: string }).id), pp.contactPatchSchema.parse(req.body)));
+    app.post('/api/partner/contacts/:id/events', async (req) => pp.addEvent(ctx, pid(req), { contactId: idParam((req.params as { id: string }).id) }, pp.eventSchema.parse(req.body)));
+    app.get('/api/partner/imports', async (req) => pp.listImports(ctx, pid(req)));
+    app.post('/api/partner/imports', async (req, reply) => reply.status(201).send(await pp.startImport(ctx, pid(req), pp.importStartSchema.parse(req.body))));
+    app.post('/api/partner/imports/:id/rows', { bodyLimit: 6 * 1024 * 1024 }, async (req) => pp.importBatch(ctx, pid(req), idParam((req.params as { id: string }).id), pp.importBatchSchema.parse(req.body).rows));
+    app.post('/api/partner/imports/:id/finish', async (req) => pp.finishImport(ctx, pid(req), idParam((req.params as { id: string }).id)));
+    app.get('/api/partner/deals', async (req) => pp.listDeals(ctx, pid(req), { month: qs(req).mes, origin: qs(req).origem, status: qs(req).situacao }));
+    app.post('/api/partner/deals', async (req, reply) => reply.status(201).send(await pp.createDeal(ctx, pid(req), pp.dealSchema.parse(req.body))));
+    app.patch('/api/partner/deals/:id', async (req) => pp.patchDeal(ctx, pid(req), idParam((req.params as { id: string }).id), pp.dealPatchSchema.parse(req.body)));
   }
 
   // ---------- assinatura (desligada por padrão; exige e-mail configurado) ----------

@@ -99,6 +99,11 @@ export const newPartnerSchema = z.object({
   cnpj: z.string().regex(/^\d{14}$/),
   category: z.enum(['consignado', 'bank', 'fintech', 'renegotiation']),
   email: z.string().trim().toLowerCase().email().max(200),
+  tradeName: z.string().trim().min(2).max(120).optional(),
+  phone: z.string().trim().max(60).optional(),
+  city: z.string().trim().max(80).optional(),
+  uf: z.enum(UFS).optional(),
+  address: z.string().trim().max(200).optional(),
   campaign: z.object({
     name: z.string().trim().min(2).max(100),
     consentCategory: z.enum(['consignado', 'renegotiation']),
@@ -109,7 +114,10 @@ export const newPartnerSchema = z.object({
     pricePerLeadCents: z.number().int().nonnegative().max(1_000_000),
     dailyCap: z.number().int().positive().max(10_000).default(50),
     monthlyBudgetCents: z.number().int().positive().optional(),
-    webhookUrl: z.string().url().max(500),
+    /** Comissão do Fôlego sobre o contrato fechado, em pontos-base (1000 = 10%). Soma-se ao valor por contato. */
+    commissionBps: z.number().int().min(0).max(10_000).default(0),
+    /** Sem webhook, o contato aparece só no portal do parceiro. */
+    webhookUrl: z.string().url().max(500).optional(),
   }),
 });
 

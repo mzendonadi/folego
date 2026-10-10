@@ -17,6 +17,7 @@ export { analyzeCollectionText, buildTranslatorPreview, MAX_TRANSLATOR_CHARS } f
 export type { TranslatorAnalysis, TranslatorPreview, TranslatorFlag, TranslatorRisk, CollectionKind } from './translator.ts';
 export * from './account.ts';
 export * from './cards.ts';
+export * from './partner-import.ts';
 export { buildStrategies } from './strategies.ts';
 export type { Strategies, StrategyScenario, WhatIfExtra, LumpSumScenario, SettlementOption, MonthPlanRow, Milestone, PlaybookItem } from './strategies.ts';
 export { buildPayoffPlan, MAX_PAYOFF_MONTHS } from './payoff.ts';
