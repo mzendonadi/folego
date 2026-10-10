@@ -148,6 +148,7 @@ export const updateReminder = notAvailable;
 export const deleteReminder = notAvailable;
 export const getMapOffer = notAvailable;
 export const getLeadState = notAvailable;
+export const sendContact = notAvailable;
 export const getCards = notAvailable;
 export const createCard = notAvailable;
 export const updateCard = notAvailable;

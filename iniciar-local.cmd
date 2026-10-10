@@ -22,10 +22,9 @@ if not exist "apps\web\node_modules" (
   echo Instalando dependencias do site...
   pushd apps\web & call npm ci & popd
 )
-if not exist "apps\web\assets\vendor" (
-  echo Gerando o pacote do site...
-  pushd apps\web & call npm run build & popd
-)
+rem Sempre gera o site: antes so gerava se a pasta nao existisse, e a landing local ficava para tras da versao publicada.
+echo Gerando o pacote do site...
+pushd apps\web & call npm run build & popd
 set NODE_ENV=development
 set EXPOSE_DEV_CODES=1
 set RATE_LIMITS=relaxed

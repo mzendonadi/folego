@@ -1275,6 +1275,24 @@ fieldset.offer-box { min-inline-size: 0; }
   .cc-add > summary { width: 100%; justify-content: center; }
 }
 
+/* ============ Fale conosco (janela de mensagem direta) ============ */
+.ct-dialog { width: min(100% - 24px, 600px); max-height: calc(100dvh - 24px); padding: 0; border: 0; border-radius: var(--radius); background: var(--surface); color: var(--ink); box-shadow: 0 30px 70px -20px rgba(0, 0, 0, 0.45); overflow: auto; }
+.ct-dialog::backdrop { background: rgba(11, 30, 24, 0.55); }
+.ct-close { position: absolute; top: 10px; right: 10px; }
+.ct-body { padding: var(--s6) var(--s6) var(--s5); display: grid; gap: var(--s3); }
+.ct-body h2 { margin: 0; text-align: center; font-size: 1.5rem; }
+.ct-lead { margin: 0 0 var(--s2); text-align: center; color: var(--muted); }
+.ct-body > .btn { justify-self: center; }
+.ct-form { display: grid; gap: var(--s3); grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ct-form .field { min-width: 0; }
+.ct-form .label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; } /* o texto de apoio dentro do campo faz o papel do rótulo; o rótulo fica para leitores de tela */
+.ct-form .input { min-height: 52px; }
+.ct-form textarea.input { min-height: 160px; resize: vertical; font: inherit; }
+.ct-wide { grid-column: 1 / -1; }
+.ct-actions { display: flex; }
+.ct-trap { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+@media (max-width: 560px) { .ct-body { padding: var(--s5) var(--s4) var(--s4); } .ct-form { grid-template-columns: 1fr; } .ct-actions .btn { width: 100%; justify-content: center; } }
+
 /* ============ Portal do parceiro: "Euro Multiplan & Fôlego" ============ */
 /* Direção: mesa de operações calma. Barra lateral em verde-tinta com a marca dupla, área de trabalho em papel, números grandes em serifa. */
 #partner-root { display: block; }

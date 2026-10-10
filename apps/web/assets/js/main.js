@@ -652,6 +652,13 @@ function bindGlobalClicks() {
     const target = event.target instanceof Element ? event.target : null;
     if (!target) return;
 
+    // "Suporte" e suporte@folego.online, em qualquer tela: abrem a janela de mensagem direta (sem JavaScript, seguem como mailto).
+    const support = target.closest('a[href^="mailto:suporte@folego.online"]');
+    if (support) {
+      event.preventDefault();
+      void import('./contact.js').then((m) => m.openContact());
+      return;
+    }
     if (target.closest('[data-partner]')) state.partnerGoal = true; // convite "Falar com um parceiro": depois do diagnóstico, abre o formulário do parceiro
     if (target.closest('[data-start]')) {
       track('cta', { id: 'start' });

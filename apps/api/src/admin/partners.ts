@@ -14,6 +14,9 @@ export const partnerPatchSchema = z.strictObject({
   legalName: z.string().trim().min(3).max(200).optional(),
   category: z.enum(['consignado', 'bank', 'fintech', 'renegotiation']).optional(),
   status: z.enum(['active', 'suspended']).optional(),
+  cnpj: z.string().regex(/^\d{14}$/).optional(),
+  /** E-mail de acesso ao portal do parceiro (o login do primeiro usuário). A senha não muda. */
+  email: z.string().trim().toLowerCase().email().max(200).optional(),
   tradeName: z.string().trim().min(2).max(120).nullable().optional(),
   phone: z.string().trim().max(60).nullable().optional(),
   city: z.string().trim().max(80).nullable().optional(),
@@ -94,6 +97,20 @@ export async function create(ctx: Ctx, actor: string, input: z.infer<typeof part
 export async function update(ctx: Ctx, actor: string, id: string, patch: z.infer<typeof partnerPatchSchema>) {
   const sets: string[] = [];
   const params: unknown[] = [id];
+  try {
+    if (patch.email) {
+      // O portal tem um login por parceiro (o primeiro usuário). Trocar o e-mail muda o login; a senha continua a mesma.
+      const u = await ctx.db.query(`UPDATE app.partner_users SET email = $2 WHERE id = (SELECT id FROM app.partner_users WHERE partner_id = $1 ORDER BY created_at LIMIT 1)`, [id, patch.email]);
+      if (!u.rowCount) throw new AppError(409, 'no_user', 'Este parceiro ainda não tem acesso ao portal. Gere uma senha primeiro.');
+    }
+    if (patch.cnpj) {
+      const c = await ctx.db.query(`UPDATE app.partners SET cnpj = $2 WHERE id = $1`, [id, patch.cnpj]);
+      if (!c.rowCount) throw notFound();
+    }
+  } catch (e) {
+    if (e instanceof Error && /duplicate key/i.test(e.message)) throw new AppError(409, 'duplicate', 'Já existe um parceiro com este CNPJ ou e-mail.');
+    throw e;
+  }
   for (const [col, v] of [['legal_name', patch.legalName], ['category', patch.category], ['status', patch.status], ['trade_name', patch.tradeName], ['phone', patch.phone], ['city', patch.city], ['uf', patch.uf], ['address', patch.address]] as const) {
     if (v === undefined) continue;
     params.push(v);

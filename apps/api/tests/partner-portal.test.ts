@@ -151,17 +151,17 @@ test('portal: importa sem duplicar (mesmo arquivo de novo = nada novo), completa
     return { b: b.json, fin: fin.json };
   };
   const first = await run(rows.records, 'base.xlsx');
-  assert.deepEqual(first.b, { created: 40, updated: 0, same: 0 });
+  assert.deepEqual(first.b, { created: 40, updated: 0, same: 0, rejected: 0 });
   assert.equal(first.fin.created, 40);
   const again = await run(rows.records, 'base.xlsx');
-  assert.deepEqual(again.b, { created: 0, updated: 0, same: 40 }, 'o mesmo arquivo não cria nem altera nada');
+  assert.deepEqual(again.b, { created: 0, updated: 0, same: 40, rejected: 0 }, 'o mesmo arquivo não cria nem altera nada');
   const total = await db.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.partner_contacts`);
   assert.equal(total.rows[0]!.n, '40');
 
   // versão nova do arquivo: 1 telefone novo e 1 margem diferente (atualiza), 10 contatos novos
   const next = planSheet(await readXlsx(buildXlsx([{ name: 'Base', headers: HEADERS, rows: [...sheetRows(40).slice(0, 2).map((r, i) => (i === 0 ? [...r.slice(0, 4), '21977776666', ...r.slice(5)] : [...r.slice(0, 8), '9999.00'])), ...sheetRows(10, 40)] }])));
   const third = await run(next.records, 'base-v2.xlsx');
-  assert.deepEqual(third.b, { created: 10, updated: 2, same: 0 });
+  assert.deepEqual(third.b, { created: 10, updated: 2, same: 0, rejected: 0 });
   const phones = await admin('GET', '/api/partner/contacts?q=SERVIDOR%20TESTE%200', { headers: auth });
   assert.equal(phones.json.items[0].name, 'SERVIDOR TESTE 0');
   const detail = await admin('GET', `/api/partner/contacts/${phones.json.items[0].id}`, { headers: auth });
@@ -194,8 +194,15 @@ test('portal: importa sem duplicar (mesmo arquivo de novo = nada novo), completa
 
   // validação do servidor: CPF inválido ou campo desconhecido é recusado
   const bad = await admin('POST', '/api/partner/imports', { headers: auth, body: { filename: 'x.xlsx', layout: 'cabecalho', total: 1 } });
-  const rejected = await admin('POST', `/api/partner/imports/${bad.json.importId}/rows`, { headers: auth, body: { rows: [{ ...rows.records[0], cpf: '11111111111' }] } });
-  assert.equal(rejected.status, 400);
+  // Uma linha ruim não derruba o lote: as boas entram e a ruim é contada. E-mail ou telefone inválido só é descartado.
+  const mixed = await admin('POST', `/api/partner/imports/${bad.json.importId}/rows`, { headers: auth, body: { rows: [{ ...rows.records[0], cpf: '11111111111' }, { ...rows.records[1], emails: ['sem-arroba', 'bom@exemplo.com', 'a..b@x.com'], phones: ['123', '21988887777'] }, { campo: 'solto' }] } });
+  assert.equal(mixed.status, 200, JSON.stringify(mixed.json));
+  assert.deepEqual(mixed.json, { created: 0, updated: 1, same: 0, rejected: 2 });
+  const merged = await admin('GET', `/api/partner/contacts?q=${rows.records[1]!.cpf}`, { headers: auth });
+  const mergedDetail = await admin('GET', `/api/partner/contacts/${merged.json.items[0].id}`, { headers: auth });
+  assert.ok(mergedDetail.json.pii.emails.includes('bom@exemplo.com'));
+  assert.ok(!mergedDetail.json.pii.emails.includes('sem-arroba'));
+  assert.ok(mergedDetail.json.pii.phones.includes('21988887777'));
 
   // outro parceiro não enxerga nada disto
   const other = await admin('POST', '/api/admin/partners', { headers: { 'x-admin-token': ADMIN }, body: { legalName: 'Outra ME', cnpj: '11222333000144', category: 'consignado', email: 'outra@teste.com', campaign: { name: 'Campanha outra', consentCategory: 'consignado', pricePerLeadCents: 0, dailyCap: 5 } } });
@@ -260,4 +267,22 @@ test('contatos do Fôlego: entrega só no portal, contrato com comissão em %, b
   const names = await db.query<{ client_name: string | null }>(`SELECT client_name FROM app.partner_deals WHERE id = $1`, [deal.json.id]);
   assert.equal(names.rows[0]!.client_name, null);
   assert.equal((await admin('GET', '/api/partner/deals', { headers: auth })).json.totals.folegoVolumeCents, 3_000_000);
+});
+
+test('backoffice: editar o cadastro inteiro do parceiro, inclusive o e-mail de acesso ao portal (a senha continua)', async () => {
+  const admin = client();
+  const euro = await db.query<{ id: string }>(`SELECT id FROM app.partners WHERE cnpj = '09242004000150'`);
+  const id = euro.rows[0]!.id;
+  const pw = (await partners.resetPassword(ctx(), 'teste', id)).password;
+  await partners.update(ctx(), 'teste', id, { email: 'novo@euro.test', cnpj: '09242004000150', city: 'Curitiba', uf: 'PR', tradeName: 'EURO NOVA', legalName: 'Euro Nova ME' });
+  assert.equal((await admin('POST', '/api/partner/login', { body: { email: 'euro@teste.com', password: pw } })).status, 401, 'o e-mail antigo deixa de entrar');
+  const ok = await admin('POST', '/api/partner/login', { body: { email: 'novo@euro.test', password: pw } });
+  assert.equal(ok.status, 200);
+  assert.equal(ok.json.tradeName, 'EURO NOVA');
+  const listed = (await partners.listPartners(ctx())).partners.find((p) => p.id === id)!;
+  assert.equal(listed.portalEmail, 'novo@euro.test');
+  assert.equal(listed.city, 'Curitiba');
+  // e-mail ou CNPJ de outro parceiro: recusa com mensagem clara
+  await assert.rejects(partners.update(ctx(), 'teste', id, { email: 'outra@teste.com' }), /Já existe/);
+  await assert.rejects(partners.update(ctx(), 'teste', id, { cnpj: '11222333000144' }), /Já existe/);
 });

@@ -140,12 +140,23 @@ export function partnersManager(ctx, { onChange }) {
     const legalName = text('Razão social', { maxlength: '200', value: p.legalName });
     const tradeName = text('Nome fantasia', { maxlength: '120', value: p.tradeName ?? '' });
     const phone = text('Telefone', { maxlength: '60', value: p.phone ?? '' });
+    const cnpj = text('CNPJ', { inputmode: 'numeric', maxlength: '18', value: formatCnpj(p.cnpj) });
+    cnpj.addEventListener('input', () => { cnpj.value = formatCnpj(cnpj.value); });
+    const email = text('E-mail de acesso ao portal', { type: 'email', maxlength: '200', value: p.portalEmail ?? '', autocomplete: 'off' });
+    const city = text('Cidade', { maxlength: '80', value: p.city ?? '' });
+    const uf = select([['', '—'], ...UFS.map((u) => [u, u])], p.uf ?? '', 'Estado');
     const category = select(Object.entries(PARTNER_CATEGORY), p.category, 'Tipo de parceiro');
     const save = el('button', { class: 'btn btn-primary', type: 'button' }, 'Salvar');
     save.addEventListener('click', async () => {
+      if (legalName.value.trim().length < 3) return toast('Informe a razão social.');
+      if (digits(cnpj.value).length !== 14) return toast('O CNPJ precisa ter 14 números.');
+      if (!/^\S+@\S+\.\S+$/.test(email.value.trim())) return toast('Informe um e-mail válido para o acesso ao portal.');
       save.disabled = true;
       try {
-        await api.editarParceiro(p.id, { legalName: legalName.value.trim(), category: category.value, tradeName: tradeName.value.trim().length >= 2 ? tradeName.value.trim() : null, phone: phone.value.trim() || null });
+        const body = { legalName: legalName.value.trim(), category: category.value, tradeName: tradeName.value.trim().length >= 2 ? tradeName.value.trim() : null, phone: phone.value.trim() || null, city: city.value.trim() || null, uf: uf.value || null };
+        if (digits(cnpj.value) !== digits(p.cnpj)) body.cnpj = digits(cnpj.value);
+        if (email.value.trim().toLowerCase() !== (p.portalEmail ?? '').toLowerCase()) body.email = email.value.trim();
+        await api.editarParceiro(p.id, body);
         d.close();
         toast('Parceiro atualizado.');
         onChange();
@@ -166,7 +177,7 @@ export function partnersManager(ctx, { onChange }) {
       }
     });
     d.body.append(
-      el('div', { class: 'bo-form-grid' }, field('Razão social', legalName), field('Nome fantasia', tradeName, 'Aparece no portal do parceiro.'), field('Telefone', phone), field('Tipo', category), field('CNPJ', el('p', { class: 'muted bo-static' }, formatCnpj(p.cnpj))), field('E-mail do portal', el('p', { class: 'muted bo-static' }, p.portalEmail ?? '—'))),
+      el('div', { class: 'bo-form-grid' }, field('Razão social', legalName), field('Nome fantasia', tradeName, 'Aparece no portal do parceiro.'), field('Telefone', phone), field('Tipo', category), field('CNPJ', cnpj), field('E-mail de acesso ao portal', email, 'É o login do parceiro. Trocar o e-mail não muda a senha.'), field('Cidade', city), field('Estado', uf)),
       el('div', { class: 'bo-actions' }, save, reset),
     );
   }

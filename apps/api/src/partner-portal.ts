@@ -37,8 +37,9 @@ export const importRowSchema = z.strictObject({
   marginUsedCents: z.number().int().min(0).max(10_000_000_000).optional(),
   availableMarginCents: z.number().int().min(-10_000_000_000).max(10_000_000_000).optional(),
   cardMarginCents: z.number().int().min(-10_000_000_000).max(10_000_000_000).optional(),
-  phones: z.array(z.string().regex(/^\d{10,11}$/)).max(10),
-  emails: z.array(z.string().email().max(120)).max(5),
+  // Telefone ou e-mail ruim não barra o contato: é descartado e o resto da linha entra.
+  phones: z.array(z.string()).max(12).transform((a) => a.filter((p) => /^\d{10,11}$/.test(p)).slice(0, 10)),
+  emails: z.array(z.string()).max(12).transform((a) => a.filter((e) => e.length <= 120 && z.string().email().safeParse(e).success).slice(0, 5)),
   address: z.strictObject({ street: text(120).optional(), number: text(20).optional(), complement: text(60).optional(), district: text(80).optional(), city: text(80).optional(), uf: z.string().length(2).optional(), cep: z.string().regex(/^\d{8}$/).optional() }),
   bank: z.strictObject({ payer: text(80).optional(), agency: text(20).optional(), account: text(30).optional(), kind: text(20).optional() }),
   extra: z.record(z.string().max(4), z.string().max(160)).refine((o) => Object.keys(o).length <= 90),
@@ -46,7 +47,8 @@ export const importRowSchema = z.strictObject({
 export type ImportRow = z.infer<typeof importRowSchema>;
 
 export const importStartSchema = z.strictObject({ filename: z.string().trim().min(1).max(200), layout: z.enum(['siape', 'cabecalho']), total: z.number().int().min(0).max(2_000_000), invalid: z.number().int().min(0).max(2_000_000).default(0), repeatedInFile: z.number().int().min(0).max(2_000_000).default(0) });
-export const importBatchSchema = z.strictObject({ rows: z.array(importRowSchema).min(1).max(250) });
+/** O lote chega "cru": cada linha é validada separadamente, para uma linha ruim não derrubar as outras 199. */
+export const importBatchSchema = z.strictObject({ rows: z.array(z.unknown()).min(1).max(250) });
 
 const cpfKey = (ctx: Ctx, partnerId: string, cpf: string): string => hmac(ctx.config.secret, `pcpf:${partnerId}:${cpf}`).toString('hex');
 
@@ -86,16 +88,23 @@ export async function startImport(ctx: Ctx, partnerId: string, input: z.infer<ty
   return { importId: r.rows[0]!.id };
 }
 
-export interface BatchResult { created: number; updated: number; same: number }
+export interface BatchResult { created: number; updated: number; same: number; rejected: number }
 
-export async function importBatch(ctx: Ctx, partnerId: string, importId: string, rows: ImportRow[]): Promise<BatchResult> {
+export async function importBatch(ctx: Ctx, partnerId: string, importId: string, raw: unknown[]): Promise<BatchResult> {
   const own = await ctx.db.query(`SELECT 1 FROM app.partner_imports WHERE id = $1 AND partner_id = $2 AND finished_at IS NULL`, [importId, partnerId]);
   if (own.rows.length === 0) throw notFound();
   const secret = ctx.config.secret;
+  const rows: ImportRow[] = [];
+  let rejected = 0;
+  for (const r of raw) {
+    const p = importRowSchema.safeParse(r);
+    if (p.success) rows.push(p.data);
+    else rejected += 1;
+  }
   const unique = new Map<string, ImportRow>();
   for (const r of rows) if (!unique.has(r.cpf)) unique.set(r.cpf, r);
   const keyed = [...unique.values()].map((r) => ({ r, key: cpfKey(ctx, partnerId, r.cpf) }));
-  const out: BatchResult = { created: 0, updated: 0, same: 0 };
+  const out: BatchResult = { created: 0, updated: 0, same: 0, rejected };
   await ctx.db.tx(async (q) => {
     const found = await q.query<{ id: string; cpf_hmac: string; pii_enc: Buffer; available_margin_cents: string | null; card_margin_cents: string | null; service_status: string | null; name: string }>(
       `SELECT id, cpf_hmac, pii_enc, available_margin_cents::text, card_margin_cents::text, service_status, name FROM app.partner_contacts WHERE partner_id = $1 AND cpf_hmac = ANY($2::text[])`,
@@ -131,7 +140,7 @@ export async function importBatch(ctx: Ctx, partnerId: string, importId: string,
       );
       out.updated += 1;
     }
-    await q.query(`UPDATE app.partner_imports SET created_n = created_n + $2, updated_n = updated_n + $3, same_n = same_n + $4 WHERE id = $1`, [importId, out.created, out.updated, out.same]);
+    await q.query(`UPDATE app.partner_imports SET created_n = created_n + $2, updated_n = updated_n + $3, same_n = same_n + $4, invalid_n = invalid_n + $5 WHERE id = $1`, [importId, out.created, out.updated, out.same, rejected]);
   });
   return out;
 }

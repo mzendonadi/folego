@@ -56,6 +56,7 @@ export const updateReminder = impl.updateReminder;
 export const deleteReminder = impl.deleteReminder;
 export const getMapOffer = impl.getMapOffer;
 export const getLeadState = impl.getLeadState;
+export const sendContact = impl.sendContact;
 export const getCards = impl.getCards;
 export const createCard = impl.createCard;
 export const updateCard = impl.updateCard;

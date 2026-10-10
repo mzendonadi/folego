@@ -37,6 +37,7 @@ import { mapOffer } from './map-offer.ts';
 import * as demoAccounts from './demo.ts';
 import { refreshRuntime } from './runtime.ts';
 import * as partnerPortal from './partner-portal.ts';
+import { contactSchema, sendContact } from './contact.ts';
 import { cardSchema, cardPatchSchema, cardPurchaseSchema, cardPaymentSchema, cardImportSchema, accessSchema, addEntriesSchema, cancelSchema, contributionSchema, createCaseSchema, entryWalletSchema, accountDebtSchema, accountDebtPatchSchema, debtPaymentSchema, monthLimitSchema, plannerSchema, objectiveSchema, inviteSchema, checkoutSchema, profileSchema, referralLeadSchema, referralInviteSchema, recurringDecisionSchema, reminderPatchSchema, reminderSchema, walletSchema, walletPatchSchema, createOrderSchema, emailLinkSchema, emailOnlySchema, goalSchema, incomeInterviewSchema, leadSchema, loginCodeSchema, newPartnerSchema, partnerLoginSchema, partnerStatusSchema, setCategorySchema, categoryNameSchema, setLimitSchema, simulateSchema, subscriptionOrderSchema, toggleIncomeTaskSchema, translationSchema, guidedSchema, uuidParam, monthParam } from './schemas.ts';
 import { EngineInputError } from './engine.ts';
 import { GUIDED_KINDS } from './guided.ts';
@@ -284,6 +285,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     const b = referralLeadSchema.parse(req.body);
     await referrals.inviteLead(ctx, { sessionId, friendEmail: b.friendEmail, yourName: b.yourName });
     return reply.status(204).send();
+  });
+
+  // Fale conosco da landing: vira e-mail para o suporte (nada é gravado). Limite baixo e anti-robô (Turnstile + isca).
+  app.post('/api/contact', { config: { rateLimit: { max: 4 * scale, timeWindow: '10 minutes' } } }, async (req) => {
+    await verifyTurnstile(config, req.headers['x-turnstile'], clientIp(req));
+    return sendContact(ctx, contactSchema.parse(req.body));
   });
 
   app.get('/api/features', async () => ({ email: Boolean(deps.email), leads: config.leadsEnabled, subscriptions: config.subscriptionsEnabled && Boolean(deps.email), referrals: config.referralEnabled && Boolean(deps.email), openFinance: Boolean(deps.openFinance), turnstileSiteKey: turnstileEnabled(config) ? config.turnstileSiteKey : null }));

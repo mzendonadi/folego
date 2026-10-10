@@ -73,6 +73,10 @@ export async function emailAccessLink(orderId, email) {
   return request('POST', `/orders/${orderId}/email-link`, { body: { email }, headers: await guard() });
 }
 
+/** Fale conosco da landing: vira e-mail para o suporte (nada é guardado). */
+export async function sendContact(body) {
+  return request('POST', '/contact', { body, headers: await guard() });
+}
 export async function requestLoginCode(email) {
   return request('POST', '/account/login-code', { body: { email }, headers: await guard() });
 }
