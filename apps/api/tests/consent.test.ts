@@ -32,8 +32,10 @@ after(async () => {
 const wait = () => new Promise((r) => setTimeout(r, 60));
 const consent = (ads: boolean) => app.inject({ method: 'POST', url: '/api/consent', headers: { 'x-folego': '1', 'content-type': 'application/json' }, payload: JSON.stringify({ ads }) });
 
+const pageview = (cookie?: string) => app.inject({ method: 'POST', url: '/api/pageview', headers: { 'x-folego': '1', 'content-type': 'application/json', ...(cookie ? { cookie } : {}) }, payload: JSON.stringify({ path: '/conta' }) });
+
 test('sem aceite nenhum PageView sai para a Meta', async () => {
-  await app.inject({ method: 'GET', url: '/' });
+  assert.equal((await pageview()).statusCode, 204);
   await wait();
   assert.equal(sent.length, 0);
 });
@@ -44,9 +46,10 @@ test('aceitar grava o cookie e envia o PageView; as visitas seguintes (com o coo
   assert.match(String(res.headers['set-cookie']), /folego_ads=1/);
   await wait();
   assert.equal(sent.length, 1);
-  await app.inject({ method: 'GET', url: '/', headers: { cookie: 'folego_ads=1' } });
+  assert.equal((await pageview('folego_ads=1')).statusCode, 204);
   await wait();
   assert.equal(sent.length, 2);
+  assert.match(JSON.stringify(sent[1]), /\/conta/);
 });
 
 test('recusar apaga o cookie e não envia nada', async () => {

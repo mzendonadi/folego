@@ -96,15 +96,16 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   await app.register(cookie);
   // PageView para a Meta (IP e navegador do visitante): só com o ACEITE do aviso de cookies (cookie folego_ads=1). Sem aceite, nada sai.
   const ADS_COOKIE = 'folego_ads';
-  if (config.metaPageView && config.metaCapiToken) {
-    app.addHook('onRequest', async (req) => {
-      if (req.method !== 'GET' || req.url !== '/') return;
-      const ck = req.headers.cookie ?? '';
-      if (!new RegExp(`(?:^|;\\s*)${ADS_COOKIE}=1(?:;|$)`).test(ck)) return;
+  // Em produção o nginx entrega o HTML direto do disco (a API não vê o GET /), então quem avisa a cada visita é o navegador: POST /api/pageview.
+  app.post('/api/pageview', { config: { rateLimit: { max: 60 * scale, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const { path } = z.strictObject({ path: z.string().max(200).regex(/^\/[^\s]*$/).default('/') }).parse(req.body ?? {});
+    const ck = req.headers.cookie ?? '';
+    if (config.metaPageView && config.metaCapiToken && new RegExp(`(?:^|;\\s*)${ADS_COOKIE}=1(?:;|$)`).test(ck)) {
       const ua = req.headers['user-agent'];
-      void sendCapi(ctx, { name: 'PageView', eventId: randomUUID(), ip: clientIp(req), userAgent: typeof ua === 'string' ? ua : undefined, url: `${config.publicUrl}/`, fbc: /_fbc=([^;]+)/.exec(ck)?.[1], fbp: /_fbp=([^;]+)/.exec(ck)?.[1] });
-    });
-  }
+      void sendCapi(ctx, { name: 'PageView', eventId: randomUUID(), ip: clientIp(req), userAgent: typeof ua === 'string' ? ua : undefined, url: `${config.publicUrl}${path}`, fbc: /_fbc=([^;]+)/.exec(ck)?.[1], fbp: /_fbp=([^;]+)/.exec(ck)?.[1] });
+    }
+    return reply.status(204).send();
+  });
   await app.register(rateLimit, { global: true, max: 300 * scale, timeWindow: '1 minute', keyGenerator: clientIp });
 
   // Cabeçalhos comuns e proteção CSRF: toda escrita em /api precisa do cabeçalho x-folego (um formulário de

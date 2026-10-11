@@ -55,9 +55,21 @@ export function openConsent() {
   document.body.classList.add('has-cookie-banner');
 }
 
+/** Quem já aceitou: avisa a API de cada visita (o servidor só repassa à Meta se o cookie de aceite estiver presente). */
+async function pageview() {
+  if (!API_BASE) return;
+  try {
+    await fetch(`${API_BASE}/pageview`, { method: 'POST', credentials: 'same-origin', keepalive: true, headers: { 'x-folego': '1', 'content-type': 'application/json' }, body: JSON.stringify({ path: location.pathname || '/' }) });
+  } catch {
+    /* sem rede: sem PageView */
+  }
+}
+
 export function initConsent() {
   document.addEventListener('click', (e) => {
     if (e.target instanceof Element && e.target.closest('[data-cookie-prefs]')) openConsent();
   });
-  if (read() === null) openConsent();
+  const choice = read();
+  if (choice === null) openConsent();
+  else if (choice === 'sim') pageview();
 }
