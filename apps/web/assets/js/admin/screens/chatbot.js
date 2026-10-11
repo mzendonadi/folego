@@ -42,7 +42,9 @@ export async function chatbotScreen(ctx) {
     'Atendimento da assistente',
     kpis(kpi('Respostas da IA', int(m.repliesAi)), kpi('Respostas por regras', int(m.repliesRules), 'sem IA ou no limite'), kpi('Tokens de entrada', int(m.tokensIn)), kpi('Tokens de saída', int(m.tokensOut))),
     m.aiOn
-      ? el('p', { class: 'fine' }, 'IA ligada. Os preços citados pela assistente vêm sempre de "Produtos e preços".')
+      ? el('div', { class: 'bo-stack-sm' },
+          el('p', { class: 'fine' }, `IA ligada (modelo ${m.aiModel}). Os preços citados pela assistente vêm sempre de "Produtos e preços".`),
+          m.aiLastError?.msg ? el('p', { class: 'note note-amber' }, icon('alert'), el('span', {}, `A última tentativa da IA falhou (${dt(m.aiLastError.at)}): ${m.aiLastError.msg}. Enquanto isso a assistente responde por regras.`)) : null)
       : el('p', { class: 'note note-amber' }, icon('alert'), el('span', {}, 'IA desligada ou sem chave: a assistente responde por regras e avisa que a equipe entra em contato. Coloque a chave (ANTHROPIC_API_KEY) nos Secrets para ligar.')),
   );
 

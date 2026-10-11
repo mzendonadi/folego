@@ -19,6 +19,7 @@ const MAX_HISTORY = 14;
 const PER_HOUR = 25;
 const PER_DAY = 80;
 const AI_DAILY_CAP = 400;
+const FALLBACK_MODEL = 'claude-sonnet-5-5';
 export const SUPPORT_PHONE_NOTE = 'Nossa equipe também pode falar com você pelo celular e pelo e-mail que você informou.';
 
 export const startSchema = z.strictObject({
@@ -146,25 +147,46 @@ async function askModel(ctx: Ctx, system: string, history: { role: 'user' | 'ass
   if (!c.aiEnabled || !c.anthropicApiKey) return null;
   if (!(await aiBudgetLeft(ctx))) return null;
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': c.anthropicApiKey,
-        'anthropic-version': '2023-06-01',
-        ...(c.anthropicWorkspaceId ? { 'anthropic-workspace-id': c.anthropicWorkspaceId } : {}),
-      },
-      body: JSON.stringify({ model: c.aiModel, max_tokens: 600, temperature: 0.4, system, messages: history }),
-      signal: AbortSignal.timeout(25_000),
-    });
-    if (!res.ok) return null;
+    const send = (model: string) =>
+      fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': c.anthropicApiKey!,
+          'anthropic-version': '2023-06-01',
+          ...(c.anthropicWorkspaceId ? { 'anthropic-workspace-id': c.anthropicWorkspaceId } : {}),
+        },
+        body: JSON.stringify({ model, max_tokens: 600, system, messages: history }),
+        signal: AbortSignal.timeout(25_000),
+      });
+    let res = await send(c.aiModel);
+    // Modelo configurado não existe para esta conta: tenta o modelo atual padrão antes de desistir.
+    if (res.status === 404 && c.aiModel !== FALLBACK_MODEL) res = await send(FALLBACK_MODEL);
+    if (!res.ok) {
+      // Guarda o motivo (status e tipo do erro, sem segredos) para aparecer na tela Chatbot do backoffice.
+      const err = (await res.json().catch(() => null)) as { error?: { type?: string; message?: string } } | null;
+      await noteAiError(ctx, `HTTP ${res.status} ${err?.error?.type ?? ''} ${(err?.error?.message ?? '').slice(0, 160)}`.trim());
+      return null;
+    }
     const j = (await res.json()) as { content?: { type: string; text?: string }[]; usage?: { input_tokens?: number; output_tokens?: number } };
     const text = (j.content ?? []).filter((b) => b.type === 'text').map((b) => b.text ?? '').join('\n').trim();
-    if (!text || !safe(text)) return null;
+    if (!text || !safe(text)) {
+      await noteAiError(ctx, text ? 'resposta bloqueada pelo filtro de segurança' : 'resposta vazia');
+      return null;
+    }
+    await noteAiError(ctx, null);
     return { text, inTok: j.usage?.input_tokens ?? 0, outTok: j.usage?.output_tokens ?? 0 };
-  } catch {
+  } catch (e) {
+    await noteAiError(ctx, `falha de rede ou tempo esgotado (${e instanceof Error ? e.name : 'erro'})`);
     return null;
   }
+}
+
+/** Último motivo pelo qual a IA não respondeu (null = última chamada deu certo). Só texto técnico, nunca a chave. */
+async function noteAiError(ctx: Ctx, msg: string | null): Promise<void> {
+  await ctx.db
+    .query(`INSERT INTO app.settings(key, value) VALUES ('chat_ai_last_error', $1::jsonb) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`, [JSON.stringify({ at: new Date().toISOString(), msg })])
+    .catch(() => undefined);
 }
 
 /** Resposta sem IA: curta, útil, com preços da tabela e o aviso de que a equipe retorna. */
@@ -421,5 +443,7 @@ export async function chatMetrics(ctx: Ctx, days: number) {
     tokensOut: num(x.tout),
     byDay: byDay.rows.map((d) => ({ day: d.day, leads: num(d.leads), converted: num(d.converted) })),
     aiOn: Boolean(ctx.config.aiEnabled && ctx.config.anthropicApiKey),
+    aiModel: ctx.config.aiModel,
+    aiLastError: (await ctx.db.query<{ value: { at: string; msg: string | null } }>(`SELECT value FROM app.settings WHERE key = 'chat_ai_last_error'`).catch(() => ({ rows: [] as { value: { at: string; msg: string | null } }[] }))).rows[0]?.value ?? null,
   };
 }
