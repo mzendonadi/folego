@@ -139,15 +139,15 @@ export function initChat() {
     const phone = el('input', { class: 'input', id: 'fl-c-tel', type: 'tel', inputmode: 'tel', autocomplete: 'tel-national', maxlength: '16', placeholder: '(11) 91234-5678', required: true });
     const email = el('input', { class: 'input', id: 'fl-c-email', type: 'email', autocomplete: 'email', maxlength: '200', placeholder: 'voce@email.com', required: true });
     const consent = el('input', { type: 'checkbox', id: 'fl-c-ok', required: true });
-    const trap = el('input', { type: 'text', name: 'website', tabindex: '-1', autocomplete: 'off', 'aria-hidden': 'true', class: 'ct-trap' });
+    const trap = el('input', { type: 'text', name: 'fl_hp_q7', tabindex: '-1', autocomplete: 'off', 'aria-hidden': 'true', class: 'ct-trap' }); // isca: nome sem sentido para o preenchimento automático do navegador não completar
     const go = el('button', { class: 'btn btn-primary btn-block', type: 'submit' }, 'Começar a conversa');
     const field = (label, input, hint) => el('div', { class: 'field' }, el('label', { class: 'label', for: input.id }, label), input, hint ? el('span', { class: 'fine' }, hint) : null);
     phone.addEventListener('input', () => { phone.value = formatPhone(phone.value); });
     const form = el('form', { class: 'fl-chat-start', novalidate: true },
       el('h2', {}, 'Oi! Eu sou a FôlIA.'),
-      el('p', { class: 'fl-chat-lead' }, 'Tiro dúvidas, indico o melhor caminho e deixo a nossa equipe pronta para te ajudar. Para começar, deixe seus dados de contato.'),
+      el('p', { class: 'fl-chat-lead' }, 'Tiro dúvidas e indico o melhor caminho. Para começar, deixe seus dados de contato.'),
       field('Nome', name),
-      field('Celular com DDD', phone, 'Só celular, com DDD.'),
+      field('Celular com DDD', phone),
       field('E-mail', email),
       el('label', { class: 'fl-chat-consent' }, consent, el('span', {}, 'Aceito que o Fôlego entre em contato pelo celular e e-mail informados. Posso pedir para parar a qualquer momento.')),
       trap, go,

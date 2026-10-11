@@ -1732,6 +1732,22 @@ body[data-route="partner"] .fl-chat, body[data-route="unsubscribe"] .fl-chat, bo
 .fl-chat-lead { margin: 0; color: var(--ink-2); line-height: 1.45; }
 .fl-chat-consent { display: flex; align-items: flex-start; gap: 10px; font-size: 0.875rem; line-height: 1.4; color: var(--ink-2); }
 .fl-chat-consent input { flex: none; width: 20px; height: 20px; margin-top: 1px; accent-color: var(--primary); }
+@media (min-width: 561px) {
+  /* Computador: o formulário de entrada cabe inteiro na janela, sem barra de rolagem. */
+  .fl-chat-panel { height: min(660px, calc(100dvh - 88px)); }
+  .fl-chat-start { gap: 8px; padding: 14px 20px 4px; overflow-y: auto; }
+  .fl-chat-start h2 { font-size: 1.3rem; }
+  .fl-chat-start .field { gap: 3px; }
+  .fl-chat-start .label { font-size: 0.875rem; }
+  .fl-chat-start .input { min-height: 40px; padding-block: 8px; }
+  .fl-chat-start .btn { min-height: 44px; }
+  .fl-chat-consent { font-size: 0.8125rem; }
+  .fl-chat-start .fl-chat-note { padding: 0 0 8px; }
+}
+@media (min-width: 561px) and (max-height: 700px) {
+  .fl-chat-lead { display: none; }
+  .fl-chat-panel { height: calc(100dvh - 80px); }
+}
 @media (max-width: 560px) {
   .fl-chat-panel { position: fixed; inset: 0; width: auto; height: 100dvh; border: 0; border-radius: 0; }
   .fl-chat.is-open .fl-chat-fab { display: none; }
