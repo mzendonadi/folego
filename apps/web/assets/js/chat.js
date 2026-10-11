@@ -139,7 +139,6 @@ export function initChat() {
     const phone = el('input', { class: 'input', id: 'fl-c-tel', type: 'tel', inputmode: 'tel', autocomplete: 'tel-national', maxlength: '16', placeholder: '(11) 91234-5678', required: true });
     const email = el('input', { class: 'input', id: 'fl-c-email', type: 'email', autocomplete: 'email', maxlength: '200', placeholder: 'voce@email.com', required: true });
     const consent = el('input', { type: 'checkbox', id: 'fl-c-ok', required: true });
-    const trap = el('input', { type: 'text', name: 'fl_hp_q7', tabindex: '-1', autocomplete: 'off', 'aria-hidden': 'true', class: 'ct-trap' }); // isca: nome sem sentido para o preenchimento automático do navegador não completar
     const go = el('button', { class: 'btn btn-primary btn-block', type: 'submit' }, 'Começar a conversa');
     const field = (label, input, hint) => el('div', { class: 'field' }, el('label', { class: 'label', for: input.id }, label), input, hint ? el('span', { class: 'fine' }, hint) : null);
     phone.addEventListener('input', () => { phone.value = formatPhone(phone.value); });
@@ -150,7 +149,7 @@ export function initChat() {
       field('Celular com DDD', phone),
       field('E-mail', email),
       el('label', { class: 'fl-chat-consent' }, consent, el('span', {}, 'Aceito que o Fôlego entre em contato pelo celular e e-mail informados. Posso pedir para parar a qualquer momento.')),
-      trap, go,
+      go,
       el('p', { class: 'fl-chat-note' }, 'Não pedimos CPF, senha nem dados de cartão.'));
     body.replaceChildren(form);
     name.focus();
@@ -170,7 +169,7 @@ export function initChat() {
         }
         const out = await call('POST', '/chat/start', {
           guard: true,
-          body: { origin: document.body.dataset.route === 'account' ? 'prumo' : 'landing', ...(name.value.trim() ? { name: name.value.trim() } : {}), phone: phone.value, email: email.value.trim(), consent: true, ...(Object.keys(utm).length ? { utm } : {}), website: trap.value },
+          body: { origin: document.body.dataset.route === 'account' ? 'prumo' : 'landing', ...(name.value.trim() ? { name: name.value.trim() } : {}), phone: phone.value, email: email.value.trim(), consent: true, ...(Object.keys(utm).length ? { utm } : {}) },
         });
         if (!out.token) throw new Error('Não consegui abrir a conversa agora. Tente de novo.');
         token = out.token;
