@@ -1732,6 +1732,18 @@ body[data-route="partner"] .fl-chat, body[data-route="unsubscribe"] .fl-chat, bo
 .fl-chat-lead { margin: 0; color: var(--ink-2); line-height: 1.45; }
 .fl-chat-consent { display: flex; align-items: flex-start; gap: 10px; font-size: 0.875rem; line-height: 1.4; color: var(--ink-2); }
 .fl-chat-consent input { flex: none; width: 20px; height: 20px; margin-top: 1px; accent-color: var(--primary); }
+/* ===== Aviso de cookies: não bloqueia a página; fica no rodapé da tela ===== */
+.cookie-banner { position: fixed; z-index: 80; left: max(16px, env(safe-area-inset-left)); bottom: max(16px, env(safe-area-inset-bottom)); width: min(560px, calc(100vw - 32px)); display: grid; gap: 10px; padding: 18px 20px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); color: var(--ink); box-shadow: 0 24px 60px -24px rgba(19, 35, 29, 0.5); }
+.cookie-title { margin: 0; font-family: var(--font-display); font-size: 1.15rem; font-weight: 600; line-height: 1.2; }
+.cookie-banner p { margin: 0; font-size: 0.9375rem; line-height: 1.5; color: var(--ink-2); }
+.cookie-banner strong { color: var(--ink); font-weight: 700; }
+.cookie-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.cookie-actions .btn { min-width: 120px; }
+@media (max-width: 560px) {
+  .cookie-banner { left: 0; right: 0; bottom: 0; width: auto; border-radius: 18px 18px 0 0; padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+  .cookie-actions .btn { flex: 1 1 0; }
+  body.has-cookie-banner .fl-chat { display: none; }
+}
 @media (min-width: 561px) {
   /* Computador: o formulário de entrada cabe inteiro na janela, sem barra de rolagem. */
   .fl-chat-panel { height: min(660px, calc(100dvh - 88px)); }

@@ -13,6 +13,7 @@ import { renderAccount } from './account.js';
 import { renderUnsubscribe } from './unsubscribe.js';
 import { renderResumeBanner } from './banner.js';
 import { initChat } from './chat.js';
+import { initConsent } from './consent.js';
 import * as api from './api.js';
 import { loadCatalog, applyCachedCatalog } from './prices.js';
 import { track } from './track.js';
@@ -744,6 +745,7 @@ function init() {
   loadDraft();
   initIntake({ timeline: $('#timeline'), summary: $('#summary'), onComplete: onIntakeComplete, onStep: (id) => track('intake_step', { step: id }) });
   bindGlobalClicks();
+  initConsent(); // aviso de cookies: sem aceite, nada de dados de navegação vai à Meta
   observeReveal();
   observeHero();
   // O convite a parceiros só aparece se o recurso está ligado neste servidor.

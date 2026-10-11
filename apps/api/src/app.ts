@@ -94,11 +94,13 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.addContentTypeParser('application/pdf', { parseAs: 'buffer', bodyLimit: 16 * 1024 * 1024 }, (_req, body, done) => done(null, body));
   app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_req, body, done) => done(null, {}));
   await app.register(cookie);
-  // PageView anônimo para a Meta (desligado por padrão: envia IP e navegador de todo visitante, sem aceite).
+  // PageView para a Meta (IP e navegador do visitante): só com o ACEITE do aviso de cookies (cookie folego_ads=1). Sem aceite, nada sai.
+  const ADS_COOKIE = 'folego_ads';
   if (config.metaPageView && config.metaCapiToken) {
     app.addHook('onRequest', async (req) => {
       if (req.method !== 'GET' || req.url !== '/') return;
       const ck = req.headers.cookie ?? '';
+      if (!new RegExp(`(?:^|;\\s*)${ADS_COOKIE}=1(?:;|$)`).test(ck)) return;
       const ua = req.headers['user-agent'];
       void sendCapi(ctx, { name: 'PageView', eventId: randomUUID(), ip: clientIp(req), userAgent: typeof ua === 'string' ? ua : undefined, url: `${config.publicUrl}/`, fbc: /_fbc=([^;]+)/.exec(ck)?.[1], fbp: /_fbp=([^;]+)/.exec(ck)?.[1] });
     });
@@ -299,6 +301,20 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.post('/api/contact', { config: { rateLimit: { max: 4 * scale, timeWindow: '10 minutes' } } }, async (req) => {
     await verifyTurnstile(config, req.headers['x-turnstile'], clientIp(req));
     return sendContact(ctx, contactSchema.parse(req.body));
+  });
+
+  // Aviso de cookies: guarda a escolha sobre compartilhar dados de navegação com a Meta (publicidade). Aceitar liga o PageView; recusar apaga o cookie.
+  app.post('/api/consent', { config: { rateLimit: { max: 20 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => {
+    const { ads } = z.strictObject({ ads: z.boolean() }).parse(req.body);
+    if (ads) {
+      reply.setCookie(ADS_COOKIE, '1', { httpOnly: true, sameSite: 'lax', secure: config.cookieSecure, path: '/', maxAge: 180 * 24 * 3600 });
+      if (config.metaPageView && config.metaCapiToken) {
+        const ck = req.headers.cookie ?? '';
+        const ua = req.headers['user-agent'];
+        void sendCapi(ctx, { name: 'PageView', eventId: randomUUID(), ip: clientIp(req), userAgent: typeof ua === 'string' ? ua : undefined, url: `${config.publicUrl}/`, fbc: /_fbc=([^;]+)/.exec(ck)?.[1], fbp: /_fbp=([^;]+)/.exec(ck)?.[1] });
+      }
+    } else reply.clearCookie(ADS_COOKIE, { path: '/' });
+    return { ok: true, ads };
   });
 
   // Chatbot (FôlIA): celular com DDD e e-mail obrigatórios para abrir a conversa. Limites por IP; a conversa tem token próprio de 24 h.
