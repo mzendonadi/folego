@@ -156,7 +156,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     turnstileSiteKey: env.TURNSTILE_SITE_KEY ? env.TURNSTILE_SITE_KEY : null,
     turnstileSecret: env.TURNSTILE_SECRET ? env.TURNSTILE_SECRET : null,
     metaCapiToken: env.META_CAPI_TOKEN ? env.META_CAPI_TOKEN : null,
-    metaPixelId: env.META_PIXEL_ID && /^\d{6,20}$/.test(env.META_PIXEL_ID) ? env.META_PIXEL_ID : '1643796570757610',
+    metaPixelId: env.META_PIXEL_ID && /^\d{6,20}$/.test(env.META_PIXEL_ID) ? env.META_PIXEL_ID : '1085904724208873', // pixel "Folego" (Conversions API); o 1643796570757610 é o do navegador e não pode ser o padrão (D-022)
     metaTestEventCode: env.META_TEST_EVENT_CODE ? env.META_TEST_EVENT_CODE : null,
     metaPageView: env.META_CAPI_PAGEVIEW === '1',
     referralDiscountPct: 10,

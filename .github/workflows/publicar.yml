@@ -147,6 +147,9 @@ jobs:
           ANTHROPIC_WORKSPACE_ID: ${{ secrets.ANTHROPIC_WORKSPACE_ID }}
         run: |
           out="$RUNNER_TEMP/prod.env"; : > "$out"; chmod 600 "$out"
+          # Meta Conversions API (decisão do dono em 2026-10-11): pixel certo e PageView anônimo ligado. Não são segredos.
+          printf 'META_PIXEL_ID=1085904724208873\n' >> "$out"
+          printf 'META_CAPI_PAGEVIEW=1\n' >> "$out"
           # IA (roteiros, planejador e chat FôlIA): só grava se o segredo existe; sem ele, o que já está no servidor continua.
           [ -n "$ANTHROPIC_API_KEY" ] && printf 'ANTHROPIC_API_KEY=%s\n' "$ANTHROPIC_API_KEY" >> "$out"
           [ -n "$ANTHROPIC_WORKSPACE_ID" ] && printf 'ANTHROPIC_WORKSPACE_ID=%s\n' "$ANTHROPIC_WORKSPACE_ID" >> "$out"
