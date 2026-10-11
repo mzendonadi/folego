@@ -1,0 +1,100 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Logo Fôlego para reels</title>
+<body style="font:16px system-ui;padding:24px"><p id="log">gerando…</p>
+<script>
+// Logo horizontal do Fôlego (anel aberto + ponto de ar + centro + palavra "fôlego" em Fraunces 560), fundo transparente.
+// Mesma geometria de marca/_build/render.html e dos SVG de marca/svg.
+const C = { verde: '#0E5B49', fundo: '#0A3D31', menta: '#8FE0BE', papel: '#F6F3EC', ambar: '#A55F00', ambarClaro: '#F2B24A' };
+const rad = (d) => (d * Math.PI) / 180;
+function folegoMark(ctx, x, y, size, { ring, dot, puff }) {
+  const s = size / 32;
+  ctx.save();
+  ctx.translate(x - size / 2, y - size / 2);
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = ring;
+  ctx.lineWidth = 2.8 * s;
+  ctx.beginPath();
+  ctx.arc(16 * s, 16 * s, 11.5 * s, rad(-62), rad(217), false);
+  ctx.stroke();
+  ctx.fillStyle = puff;
+  const a = rad(257.5);
+  ctx.beginPath();
+  ctx.arc((16 + 11.5 * Math.cos(a)) * s, (16 + 11.5 * Math.sin(a)) * s, 1.9 * s, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = dot;
+  ctx.beginPath();
+  ctx.arc(16 * s, 16 * s, 4.6 * s, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+const LIGHT = { ring: C.verde, dot: C.menta, puff: C.ambar, word: C.verde };   // para fundo claro
+const DARK = { ring: C.papel, dot: C.menta, puff: C.ambarClaro, word: C.papel }; // para fundo escuro
+
+/** Largura total do logotipo horizontal para a altura h do símbolo. */
+function lockupWidth(ctx, h) {
+  ctx.font = `560 ${h * 0.92}px Fraunces, Georgia, serif`;
+  return h * 1.18 + ctx.measureText('fôlego').width;
+}
+function drawLockup(ctx, x, cy, h, col) {
+  folegoMark(ctx, x + h / 2, cy, h, col);
+  ctx.font = `560 ${h * 0.92}px Fraunces, Georgia, serif`;
+  ctx.fillStyle = col.word;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText('fôlego', x + h * 1.18, cy + h * 0.28);
+}
+const canvas = (w, h, bg) => {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const ctx = c.getContext('2d');
+  if (bg) { ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h); }
+  return [c, ctx];
+};
+/** Logo horizontal em PNG do tamanho justo (com respiro de 0,25 da altura), fundo transparente. */
+function horizontal(col, h = 500) {
+  const [probe, pctx] = canvas(10, 10);
+  const lw = lockupWidth(pctx, h);
+  const pad = h * 0.25;
+  const [c, ctx] = canvas(Math.ceil(lw + pad * 2), Math.ceil(h * 1.5));
+  drawLockup(ctx, pad, c.height / 2, h, col);
+  return c;
+}
+function simbolo(col, size = 2000) {
+  const [c, ctx] = canvas(size, size);
+  folegoMark(ctx, size / 2, size / 2, size * 0.8, col);
+  return c;
+}
+/** Tela de reel 1080x1920 com a logo centralizada (largura da logo = 760 px). */
+function reel(col, bg) {
+  const [c, ctx] = canvas(1080, 1920, bg);
+  const [probe, pctx] = canvas(10, 10);
+  const unit = lockupWidth(pctx, 100);
+  const h = (760 / unit) * 100;
+  drawLockup(ctx, (1080 - 760) / 2, 960, h, col);
+  return c;
+}
+
+const jobs = {
+  'folego-logo-horizontal-para-fundo-claro.png': () => horizontal(LIGHT),
+  'folego-logo-horizontal-para-fundo-escuro.png': () => horizontal(DARK),
+  'folego-simbolo-para-fundo-claro.png': () => simbolo(LIGHT),
+  'folego-simbolo-para-fundo-escuro.png': () => simbolo(DARK),
+  'reel-1080x1920-fundo-papel.png': () => reel(LIGHT, C.papel),
+  'reel-1080x1920-fundo-verde.png': () => reel(DARK, C.fundo),
+};
+
+(async () => {
+  const log = document.getElementById('log');
+  await new FontFace('Fraunces', 'url(/fraunces-latin-wght-normal.woff2)', { weight: '100 900' }).load().then((f) => document.fonts.add(f));
+  await document.fonts.ready;
+  let n = 0;
+  for (const [name, make] of Object.entries(jobs)) {
+    const c = make();
+    await fetch('/salvar/' + encodeURIComponent(name), { method: 'POST', body: c.toDataURL('image/png') });
+    n += 1;
+    log.textContent = `gerado ${n}/${Object.keys(jobs).length}: ${name}`;
+  }
+  log.textContent = `feito: ${n} imagens`;
+})();
+</script>

@@ -67,6 +67,9 @@ No site, a marca do Prumo aparece ao lado do título da área de assinatura.
 | `og-image.png` (1200×630) | prévia ao compartilhar o link (já no site) |
 | `apple-touch-icon.png`, `icon-192/512.png`, `icon-maskable-512.png`, `favicon-32/48.png` | ícones do site e do app instalável (`site.webmanifest`) |
 
+### Logo para vídeo e reels (`marca/reels`)
+PNG com fundo transparente, símbolo + palavra "fôlego" em Fraunces: `folego-logo-horizontal-para-fundo-claro.png` (verde) e `-para-fundo-escuro.png` (creme), `folego-simbolo-para-fundo-claro/escuro.png` (2000×2000) e telas de reel 1080×1920 (`reel-1080x1920-fundo-papel.png` e `-fundo-verde.png`). Os SVG oficiais estão em `reels/svg-oficiais`. Para regerar: `node marca/_build/receber-reels.mjs` e abrir `http://localhost:3201/`.
+
 **Como regerar:** `node marca/_build/receber.mjs`, abrir `http://localhost:3200/` no navegador e esperar "feito". Os PNG são redesenhados com as fontes da marca; edite `marca/_build/render.html` para mudar textos ou formatos.
 
 ## 7. Componentes no produto
