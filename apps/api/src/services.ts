@@ -2,6 +2,7 @@ import { GUIDED_CODES, GUIDED_PRODUCT, buildGuided, guidedKindOfCode } from './g
 import type { GuidedKind } from './guided.ts';
 import { onSubscriptionPaid } from './referrals.ts';
 import { handleBillingEvent, registerRenewal } from './billing.ts';
+import { settlePlanChangePayment } from './plan-change.ts';
 import type { Config } from './config.ts';
 import type { Db, Queryable } from './db.ts';
 import type { PaymentGateway } from './gateway.ts';
@@ -389,10 +390,18 @@ async function confirmPaymentTx(ctx: Ctx, providerPaymentId: string, provider: s
     await q.query(`UPDATE app.orders SET status = 'paid', paid_at = now() WHERE id = $1`, [pay.order_id]);
 
     if (pay.subscriber_id) {
+      // Troca de plano (diferença proporcional do upgrade): muda o plano e NÃO estende o período nem conta como mensalidade.
+      const changed = await settlePlanChangePayment(q, pay.order_id);
+      if (changed) {
+        await audit(q, 'system', 'payment_confirmed', 'order', pay.order_id, { provider: ctx.gateway.name, kind: 'plan_change', result: changed });
+        return 'confirmed';
+      }
       // Pedido de assinatura: não tem caso, entregáveis nem entitlements. Ativa o período no próprio app.subscriptions.
       await activateSubscription(q, pay.subscriber_id, pay.order_id);
       const paidRow = await q.query<{ amount_cents: string }>(`SELECT amount_cents FROM app.payments WHERE id = $1`, [pay.id]);
       await onSubscriptionPaid(ctx, q, pay.subscriber_id, { id: pay.id, amountCents: num(paidRow.rows[0]?.amount_cents ?? 0) });
+      // O crédito de um downgrade vale uma fatura só: já foi abatido nesta.
+      await q.query(`UPDATE app.billing_profiles SET plan_credit_cents = 0 WHERE subscriber_id = $1 AND plan_credit_cents > 0`, [pay.subscriber_id]);
       await audit(q, 'system', 'payment_confirmed', 'order', pay.order_id, { provider: ctx.gateway.name, kind: 'subscription' });
       return 'confirmed';
     }

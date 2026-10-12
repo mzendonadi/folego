@@ -157,6 +157,85 @@ export function drawCardCheckout(plan, mount, { api, onBack = null, onDone, befo
   return stop;
 }
 
+/**
+ * Trocar de plano sem cancelar. A pessoa vê, antes de confirmar, a conta do pró-rata por dia:
+ * upgrade paga hoje só a diferença proporcional dos dias que faltam; downgrade vira desconto na próxima fatura.
+ * Nos meses seguintes vale o preço cheio do plano escolhido.
+ */
+function planChangeCard(ctx, current) {
+  const others = PLANS.filter((p) => p.code !== current.code);
+  const box = el('div', { class: 'acc-stack' });
+  const draw = () => {
+    const buttons = others.map((p) => {
+      const up = p.priceCents > current.priceCents;
+      const b = el('button', { class: `btn ${up ? 'btn-primary' : 'btn-secondary'} btn-sm`, type: 'button' }, `${up ? 'Fazer upgrade para' : 'Mudar para'} ${p.name} · ${brl(p.priceCents)}/mês`);
+      b.addEventListener('click', () => pick(p, b));
+      return b;
+    });
+    box.replaceChildren(
+      el('p', { class: 'muted' }, 'Troque de plano sem cancelar. Você paga só a diferença proporcional dos dias que faltam no mês atual e, nos meses seguintes, o valor normal do plano escolhido.'),
+      el('div', { class: 'button-row no-print' }, ...buttons),
+    );
+  };
+  const nameOf = (code) => PLANS.find((p) => p.code === code)?.name ?? code;
+  async function pick(target, btn) {
+    btn.disabled = true;
+    let q;
+    try {
+      q = await ctx.api.quotePlanChange(target.code);
+    } catch (e) {
+      btn.disabled = false;
+      return toast(e?.message || 'Não consegui calcular agora. Tente de novo.');
+    }
+    btn.disabled = false;
+    const when = dateBr(q.nextChargeOn);
+    const upText = q.waived
+      ? `Faltam só ${q.daysLeft} ${q.daysLeft === 1 ? 'dia' : 'dias'} do mês pago, então liberamos o ${nameOf(q.toPlan)} agora, sem cobrança extra. Em ${when} a mensalidade passa a ser ${brl(q.nextChargeCents)}.`
+      : `Você paga hoje ${brl(q.chargeNowCents)}: a diferença entre os planos pelos ${q.daysLeft} dias que faltam até ${when}. O ${nameOf(q.toPlan)} vale assim que o pagamento passar. Em ${when} a mensalidade passa a ser ${brl(q.nextChargeCents)}, no mesmo dia de sempre.`;
+    const downText = `O ${nameOf(q.toPlan)} vale agora e você deixa de ter os recursos exclusivos do ${nameOf(q.fromPlan)}. A diferença dos ${q.daysLeft} dias que faltam (${brl(q.creditCents)}) vira desconto na próxima fatura: ${brl(q.nextChargeCents)} em ${when}. Depois, ${brl(q.toPriceCents)} por mês.`;
+    const ok = await confirmDialog({
+      title: q.kind === 'upgrade' ? `Mudar para o ${nameOf(q.toPlan)}?` : `Voltar para o ${nameOf(q.toPlan)}?`,
+      text: q.kind === 'upgrade' ? upText : downText,
+      confirmLabel: q.kind === 'upgrade' && !q.waived ? `Pagar ${brl(q.chargeNowCents)} e mudar` : 'Confirmar a troca',
+    });
+    if (!ok) return;
+    box.replaceChildren(el('p', { class: 'muted', role: 'status' }, 'Preparando a troca…'));
+    let out;
+    try {
+      out = await ctx.api.changePlan(target.code);
+    } catch (e) {
+      draw();
+      return toast(e?.message || 'Não consegui trocar agora. Tente de novo.');
+    }
+    if (out.status === 'applied') {
+      toast(`Plano ${nameOf(q.toPlan)} ativado.`);
+      return ctx.reloadAccount();
+    }
+    // Upgrade com cobrança: a diferença é paga na página segura do provedor; esta tela confirma sozinha quando o pagamento passar.
+    const waiting = el('p', { class: 'pix-status', role: 'status' }, icon('clock'), el('span', {}, 'Aguardando a confirmação do pagamento…'));
+    const demo = String(out.checkoutUrl).startsWith('DEMO-CARD');
+    const action = demo
+      ? (() => {
+          const d = el('button', { class: 'btn btn-secondary btn-block', type: 'button' }, 'Simular cartão aprovado');
+          d.addEventListener('click', () => ctx.api.demoConfirmPayment(out.orderId).catch(() => {}));
+          return d;
+        })()
+      : el('a', { class: 'btn btn-primary btn-block', href: out.checkoutUrl, target: '_blank', rel: 'noopener noreferrer' }, `Abrir o pagamento seguro · ${brl(q.chargeNowCents)}`, icon('arrow-right'));
+    box.replaceChildren(el('p', { class: 'muted' }, `Troca para o ${nameOf(q.toPlan)}: diferença proporcional de ${brl(q.chargeNowCents)}. O cartão é digitado na página segura do provedor.`), action, waiting);
+    const id = window.setInterval(async () => {
+      const now = await ctx.api.getAccount().catch(() => null);
+      if (now?.subscription?.plan === q.toPlan) {
+        window.clearInterval(id);
+        toast(`Plano ${nameOf(q.toPlan)} ativado.`);
+        ctx.reloadAccount();
+      }
+    }, 2000);
+    window.setTimeout(() => window.clearInterval(id), 15 * 60_000);
+  }
+  draw();
+  return card(el('h2', {}, 'Trocar de plano'), box);
+}
+
 /** Aba Plano: situação da assinatura mensal, cancelamento com aviso, dados e conta. */
 export function viewPlano(ctx, FEATURE_LABEL) {
   const { acc, plan } = ctx;
@@ -221,6 +300,7 @@ export function viewPlano(ctx, FEATURE_LABEL) {
       el('ul', { class: 'bullets' }, ...plan.features.map((f) => el('li', {}, FEATURE_LABEL[f] ?? f))),
       ...status,
     ),
+    !isMember && b && b.status === 'active' ? planChangeCard(ctx, plan) : null,
     card(
       el('h2', {}, 'Seus dados'),
       el('p', { class: 'muted' }, 'Tudo o que você lançou é seu. Baixe quando quiser, em planilha (abre no Excel e no Google Planilhas) ou em PDF. Se cancelar, o download continua liberado até o fim do mês já pago.'),

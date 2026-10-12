@@ -185,7 +185,7 @@ export async function attribute(ctx: Ctx, subscriberId: string, code: string | u
 /** Dentro da transação do pagamento confirmado: consome um crédito (se a fatura veio com desconto) e premia quem indicou. */
 export async function onSubscriptionPaid(ctx: Ctx, q: Queryable, subscriberId: string, payment: { id: string; amountCents: number }): Promise<void> {
   // 1) fatura com desconto: gasta o crédito mais antigo
-  const prof = await q.query<{ plan: string; referred_by: string | null; referral_id: string | null; referral_credited_at: Date | null; last_charge_at: Date | null; contract_cents: string | null }>(`SELECT plan, referred_by, referral_id, referral_credited_at, last_charge_at, contract_cents FROM app.billing_profiles WHERE subscriber_id = $1`, [subscriberId]);
+  const prof = await q.query<{ plan: string; referred_by: string | null; referral_id: string | null; referral_credited_at: Date | null; last_charge_at: Date | null; contract_cents: string | null; plan_credit_cents: number }>(`SELECT plan, referred_by, referral_id, referral_credited_at, last_charge_at, contract_cents, plan_credit_cents FROM app.billing_profiles WHERE subscriber_id = $1`, [subscriberId]);
   const p = prof.rows[0];
   if (!p) return;
   const plan = planByCode(p.plan);
@@ -194,7 +194,8 @@ export async function onSubscriptionPaid(ctx: Ctx, q: Queryable, subscriberId: s
   const pct = ctx.config.referralDiscountPct;
   // A fatura veio com desconto se o valor cobrado é o do crédito mais antigo: gasta esse crédito (e só um por fatura).
   const next = await q.query<{ id: string; percent: number }>(`SELECT id, percent FROM app.referral_credits WHERE subscriber_id = $1 AND status = 'available' ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED`, [subscriberId]);
-  if (next.rows[0] && list > 0 && payment.amountCents <= discounted(list, next.rows[0].percent) + 1) {
+  // O crédito de um downgrade também baixa a fatura; somamos de volta para não confundir com o desconto de indicação.
+  if (next.rows[0] && list > 0 && payment.amountCents + (p.plan_credit_cents ?? 0) <= discounted(list, next.rows[0].percent) + 1) {
     await q.query(`UPDATE app.referral_credits SET status = 'applied', applied_at = now(), applied_payment_id = $2 WHERE id = $1`, [next.rows[0].id, payment.id]);
     await audit(q, 'system', 'referral_credit_applied', 'subscriber', subscriberId, { credit: next.rows[0].id, percent: next.rows[0].percent, chargedCents: payment.amountCents, listCents: list });
   }
@@ -278,8 +279,8 @@ export async function notifyCredits(ctx: Ctx, opts: { log?: (e: Record<string, u
 /** Mantém o valor da assinatura no provedor igual ao que deve ser cobrado na próxima fatura (com ou sem desconto). */
 export async function syncPrices(ctx: Ctx, opts: { log?: (e: Record<string, unknown>) => void } = {}): Promise<number> {
   if (!ctx.config.subscriptionsEnabled) return 0;
-  const rows = await ctx.db.query<{ subscriber_id: string; provider_subscription_id: string; plan: string; price_cents: string; next_pct: number | null; synced: string | null }>(
-    `SELECT b.subscriber_id, b.provider_subscription_id, b.plan, coalesce(b.contract_cents, pr.price_cents) AS price_cents,
+  const rows = await ctx.db.query<{ subscriber_id: string; provider_subscription_id: string; plan: string; price_cents: string; next_pct: number | null; synced: string | null; plan_credit: number }>(
+    `SELECT b.subscriber_id, b.provider_subscription_id, b.plan, coalesce(b.contract_cents, pr.price_cents) AS price_cents, b.plan_credit_cents AS plan_credit,
             (SELECT c.percent FROM app.referral_credits c WHERE c.subscriber_id = b.subscriber_id AND c.status = 'available' ORDER BY c.created_at LIMIT 1) AS next_pct,
             b.synced_value_cents::text AS synced
        FROM app.billing_profiles b
@@ -289,7 +290,8 @@ export async function syncPrices(ctx: Ctx, opts: { log?: (e: Record<string, unkn
   let changed = 0;
   for (const r of rows.rows) {
     const list = num(r.price_cents);
-    const want = r.next_pct ? discounted(list, r.next_pct) : list; // valor contratado, com o desconto do próximo crédito se houver
+    // valor contratado, com o desconto do próximo crédito de indicação (se houver) e o crédito de um downgrade recente (uma fatura só; nunca abaixo de R$ 5,00)
+    const want = Math.max(500, (r.next_pct ? discounted(list, r.next_pct) : list) - (r.plan_credit ?? 0));
     const have = r.synced === null ? list : num(r.synced);
     if (want === have) continue;
     try {

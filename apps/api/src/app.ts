@@ -25,6 +25,7 @@ import { askPlanner } from './planner.ts';
 import * as program from './coach-program.ts';
 import * as household from './household.ts';
 import * as billing from './billing.ts';
+import * as planChange from './plan-change.ts';
 import * as accountData from './account-data.ts';
 import * as referrals from './referrals.ts';
 import * as insights from './insights.ts';
@@ -521,6 +522,19 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     return { ok: true };
   });
   const accountViewForCancel = async (id: string) => (await sub.accountView(ctx, id)).email;
+  // Trocar de plano sem cancelar: pró-rata por dia (upgrade paga a diferença agora; downgrade vira crédito na próxima fatura).
+  app.get('/api/account/plan-change/quote', { config: { rateLimit: { max: 30 * scale, timeWindow: '10 minutes' } } }, async (req) => {
+    const selfId = await requireSelf(req);
+    await household.assertNotMember(ctx, selfId);
+    const { plan } = z.object({ plan: z.string().min(3).max(30) }).parse(req.query);
+    return planChange.quotePlanChange(ctx, selfId, plan);
+  });
+  app.post('/api/account/plan-change', { config: { rateLimit: { max: 10 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => {
+    const selfId = await requireSelf(req);
+    await household.assertNotMember(ctx, selfId);
+    const { plan, acceptTerms } = z.strictObject({ plan: z.string().min(3).max(30), acceptTerms: z.boolean() }).parse(req.body);
+    return reply.status(201).send(await planChange.startPlanChange(ctx, { subscriberId: selfId, toPlan: plan, acceptTerms }));
+  });
   // Exportação dos dados da própria pessoa (enquanto tem acesso, inclusive depois de cancelar, até o fim do mês pago).
   // Mapa da Virada para quem assina: oferta (Ousado), uso incluído (Desbravador) ou o Mapa ativo. O preço e o prazo que valem são sempre os do servidor.
   app.get('/api/account/map-offer', async (req) => {

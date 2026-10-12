@@ -72,6 +72,10 @@ export interface PaymentGateway {
   cancelCardSubscription(providerSubscriptionId: string): Promise<void>;
   /** Muda o valor das próximas cobranças da assinatura (desconto de indicação, ou volta ao preço cheio). */
   updateCardSubscriptionValue(providerSubscriptionId: string, valueCents: number): Promise<void>;
+  /** Cobrança avulsa no cartão (diferença proporcional de um upgrade). A pessoa paga na página segura do provedor (checkoutUrl). */
+  createOneOffCardCharge(input: { customerId: string; orderId: string; valueCents: number; description: string; dueOn: string }): Promise<{ providerPaymentId: string; checkoutUrl: string }>;
+  /** Cancela uma cobrança avulsa que ainda não foi paga (troca de plano abandonada). Não falha se já não existir. */
+  cancelCharge(providerPaymentId: string): Promise<void>;
 }
 
 /** Provedor de mentira para desenvolvimento e testes. NÃO move dinheiro. */
@@ -123,6 +127,16 @@ export class FakeGateway implements PaymentGateway {
 
   async updateCardSubscriptionValue(providerSubscriptionId: string, valueCents: number): Promise<void> {
     this.values.set(providerSubscriptionId, valueCents);
+  }
+
+  async createOneOffCardCharge(input: { customerId: string; orderId: string; valueCents: number; description: string; dueOn: string }): Promise<{ providerPaymentId: string; checkoutUrl: string }> {
+    const providerPaymentId = `fake_${randomBytes(8).toString('hex')}`;
+    this.status.set(providerPaymentId, 'pending');
+    return { providerPaymentId, checkoutUrl: `DEMO-CARD-${providerPaymentId.toUpperCase()}` };
+  }
+
+  async cancelCharge(_providerPaymentId: string): Promise<void> {
+    // De propósito não apaga: nos testes a cobrança "cancelada" ainda pode ser paga na corrida, e o sistema tem que aguentar.
   }
 
   /** Só no provedor de mentira: o valor que a próxima cobrança teria (undefined = preço cheio do plano). */
@@ -292,6 +306,24 @@ export class AsaasGateway implements PaymentGateway {
     await this.callDelete(`/subscriptions/${encodeURIComponent(providerSubscriptionId)}`);
   }
 
+  /** Cobrança avulsa no cartão: o Asaas devolve a página segura (invoiceUrl) onde a pessoa paga; nada de cartão passa por aqui. */
+  async createOneOffCardCharge(input: { customerId: string; orderId: string; valueCents: number; description: string; dueOn: string }): Promise<{ providerPaymentId: string; checkoutUrl: string }> {
+    const p = (await this.call('POST', '/payments', {
+      customer: input.customerId,
+      billingType: 'CREDIT_CARD',
+      value: input.valueCents / 100,
+      dueDate: input.dueOn,
+      description: input.description,
+      externalReference: input.orderId,
+    })) as { id?: unknown; invoiceUrl?: unknown };
+    if (typeof p.id !== 'string' || typeof p.invoiceUrl !== 'string') throw new AppError(502, 'gateway_error', 'Resposta inesperada do provedor de pagamento.');
+    return { providerPaymentId: p.id, checkoutUrl: p.invoiceUrl };
+  }
+
+  async cancelCharge(providerPaymentId: string): Promise<void> {
+    await this.callDelete(`/payments/${encodeURIComponent(providerPaymentId)}`);
+  }
+
   async getPaymentStatus(providerPaymentId: string, expectedAmountCents: number): Promise<GatewayPaymentStatus> {
     if (providerPaymentId.startsWith('pay_')) {
       const p = (await this.call('GET', `/payments/${encodeURIComponent(providerPaymentId)}`)) as { status?: string; value?: number };
@@ -321,6 +353,8 @@ export class AsaasGateway implements PaymentGateway {
           event: { providerEventId: b.id, providerPaymentId: b.payment.id, providerSubscriptionId: paymentSub, ...(typeof b.payment.value === 'number' ? { valueCents: Math.round(b.payment.value * 100) } : {}) },
         };
       }
+      // Cobrança avulsa (diferença de um upgrade de plano): sem assinatura e sem Pix. Só vale se conhecermos o pagamento (confere em handleWebhook).
+      if (typeof b.payment?.id === 'string') return { kind: 'payment', event: { providerEventId: b.id, providerPaymentId: b.payment.id } };
       return { kind: 'ignore' };
     }
     if (b.event === 'PAYMENT_CREDIT_CARD_CAPTURE_REFUSED' && paymentSub) return { kind: 'billing', event: { providerEventId: b.id, providerSubscriptionId: paymentSub, type: 'charge_refused' } };

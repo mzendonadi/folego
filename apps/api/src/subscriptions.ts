@@ -152,7 +152,7 @@ export async function createSubscriptionOrder(ctx: Ctx, args: { sessionId: strin
 }
 
 /** Desbravador: o Mapa que veio com o plano acompanha o período da assinatura (a cada renovação o prazo se estende). */
-async function extendPlanMaps(q: Queryable, subscriberId: string): Promise<void> {
+export async function extendPlanMaps(q: Queryable, subscriberId: string): Promise<void> {
   const plan = `EXISTS (SELECT 1 FROM app.entitlements e JOIN app.payments p ON p.order_id = e.order_id AND p.provider = 'plan' WHERE e.case_id = c.id AND e.product_code = 'recovery_map')`;
   await q.query(
     `UPDATE app.entitlements e SET expires_at = s.current_period_end

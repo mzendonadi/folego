@@ -101,6 +101,13 @@ export async function createSubscriptionOrder(plan) {
 export async function setSubscriptionCancel(cancel) {
   return request('POST', '/account/subscription-cancel', { body: { cancel } });
 }
+/** Troca de plano sem cancelar: simulação do pró-rata (o que paga hoje, o que vira crédito, quanto será a próxima fatura). */
+export async function quotePlanChange(plan) {
+  return request('GET', `/account/plan-change/quote?plan=${encodeURIComponent(plan)}`);
+}
+export async function changePlan(plan) {
+  return request('POST', '/account/plan-change', { body: { plan, acceptTerms: true } });
+}
 export async function getMonth(month) {
   return request('GET', `/account/month/${month}`);
 }

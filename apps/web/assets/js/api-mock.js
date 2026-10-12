@@ -86,6 +86,8 @@ export const getAccount = async () => ({ email: '', subscription: null });
 export const deleteAccount = notAvailable;
 export const createSubscriptionOrder = notAvailable;
 export const setSubscriptionCancel = notAvailable;
+export const quotePlanChange = notAvailable;
+export const changePlan = notAvailable;
 export const getMonth = notAvailable;
 export const addEntries = notAvailable;
 export const deleteEntry = notAvailable;
