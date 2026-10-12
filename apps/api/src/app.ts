@@ -166,6 +166,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
   // O caractere nulo (\u0000) quebra o Postgres: recusa na entrada, antes de chegar ao banco.
   app.addHook('preValidation', async (req) => {
+    // O tradutor recebe texto de foto (OCR), que pode trazer \u0000: ali o schema limpa o texto em vez de recusar.
+    if (req.url.startsWith('/api/translations') || /^\/api\/orders\/[^/]+\/redo\/translation/.test(req.url)) return;
     if (req.body !== undefined && req.body !== null && typeof req.body === 'object' && JSON.stringify(req.body).includes('\\u0000')) {
       throw new AppError(400, 'invalid_input', 'O texto contém um caractere inválido.');
     }

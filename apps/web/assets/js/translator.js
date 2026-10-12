@@ -4,6 +4,8 @@ import { brl } from './format.js';
 import { CATALOG, daysOf } from './catalog.js';
 import { accessBanner } from './access-banner.js';
 
+const MAX_TEXT = 4000; // igual ao limite da API: texto de foto maior que isso é cortado no começo
+
 const RISK = {
   high: { tone: 'critical', label: 'Risco alto' },
   attention: { tone: 'attention', label: 'Atenção' },
@@ -76,9 +78,10 @@ export function renderTranslator(root, ctx) {
         if (!text) {
           toast('Não consegui ler nada nessa foto. Tente com mais luz e o documento sem dobras, ou digite manualmente.');
         } else {
-          area.value = area.value.trim() ? `${area.value.trim()}\n\n${text}` : text;
+          const joined = area.value.trim() ? `${area.value.trim()}\n\n${text}` : text;
+          area.value = joined.slice(0, MAX_TEXT);
           area.dispatchEvent(new Event('input', { bubbles: true }));
-          toast('Foto lida. A leitura de foto erra às vezes — confira e corrija o texto antes de traduzir.');
+          toast(joined.length > MAX_TEXT ? 'Foto lida. Usei só o começo do texto (limite de 4.000 letras). Confira e corrija antes de traduzir.' : 'Foto lida. A leitura de foto erra às vezes — confira e corrija o texto antes de traduzir.');
           area.focus();
         }
       } catch (error) {
@@ -122,14 +125,29 @@ export function renderTranslator(root, ctx) {
         return;
       }
       try {
-        const { caseId, preview } = await api.createTranslation(area.value);
-        state.translatorCaseId = caseId;
-        drawPreview(preview);
+        // O texto de uma foto pode vir enorme: mandamos o começo (a API também limita e limpa). Falha de rede ou do servidor: uma nova tentativa automática.
+        const text = area.value.trim().slice(0, MAX_TEXT);
+        let created;
+        try {
+          created = await api.createTranslation(text);
+        } catch (first) {
+          if (first?.status && first.status < 500) throw first;
+          await new Promise((r) => setTimeout(r, 1200));
+          created = await api.createTranslation(text);
+        }
+        state.translatorCaseId = created.caseId;
+        drawPreview(created.preview);
       } catch (error) {
         console.error(error);
         btn.disabled = false;
         btn.textContent = idle;
-        toast(error?.status === 429 ? 'Muitas tentativas seguidas. Espere um minutinho.' : 'Não consegui ler agora. Tente de novo.');
+        toast(
+          error?.status === 429
+            ? 'Muitas tentativas seguidas. Espere um minutinho.'
+            : error?.status >= 400 && error?.status < 500
+              ? 'Não consegui entender esse texto. Confira se ele tem a mensagem da cobrança e tente de novo.'
+              : 'Estamos com instabilidade agora. Seu texto continua aqui: toque em "Ler" de novo em alguns segundos.',
+        );
       }
     });
     root.replaceChildren(

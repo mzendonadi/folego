@@ -65,7 +65,22 @@ export const createOrderSchema = z.object({
 });
 
 export const guidedSchema = z.strictObject({ input: z.unknown(), acceptTerms: z.literal(true) });
-export const translationSchema = z.object({ text: z.string().trim().min(8).max(4000), acceptTerms: z.literal(true) });
+/**
+ * Texto de cobrança vindo de FOTO (OCR) sai sujo e comprido: caracteres de controle, "lixo" unicode, páginas inteiras.
+ * Em vez de recusar, limpamos e usamos os primeiros 4000 caracteres: a leitura da cobrança nunca pode falhar por isso.
+ */
+const LONE_SURROGATE = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g;
+export const cleanCollectionText = (raw: string): string => {
+  const cleaned = raw
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f�]/g, ' ')
+    .replace(LONE_SURROGATE, ' ')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/ ?\n ?/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  return cleaned.slice(0, 4000).replace(LONE_SURROGATE, '').trim();
+};
+export const translationSchema = z.object({ text: z.string().max(200_000).transform(cleanCollectionText).pipe(z.string().min(8)), acceptTerms: z.literal(true) });
 
 export const emailLinkSchema = z.object({ email: z.string().trim().toLowerCase().email().max(200) });
 

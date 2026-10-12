@@ -7,7 +7,7 @@ import { buildGuided, guidedKindOfCode } from './guided.ts';
 import type { GuidedKind } from './guided.ts';
 import { analyzeCollectionText, buildPreview, buildTranslatorPreview, diagnose } from './engine.ts';
 import type { DebtInput } from './engine.ts';
-import { createCaseSchema } from './schemas.ts';
+import { cleanCollectionText, createCaseSchema } from './schemas.ts';
 import type { Ctx } from './services.ts';
 import { audit, orderOf, todaySaoPaulo } from './services.ts';
 
@@ -15,7 +15,7 @@ import { audit, orderOf, todaySaoPaulo } from './services.ts';
 export const MAX_REDO = 200;
 
 export const redoMapSchema = createCaseSchema.omit({ acceptTerms: true });
-export const redoTranslatorSchema = z.strictObject({ text: z.string().trim().min(8).max(4000) });
+export const redoTranslatorSchema = z.strictObject({ text: z.string().max(200_000).transform(cleanCollectionText).pipe(z.string().min(8)) });
 export const redoGuidedSchema = z.strictObject({ input: z.unknown() });
 
 export type RedoKind = 'map' | 'translator' | GuidedKind;
