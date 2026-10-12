@@ -1732,6 +1732,9 @@ body[data-route="partner"] .fl-chat, body[data-route="unsubscribe"] .fl-chat, bo
 .fl-chat-lead { margin: 0; color: var(--ink-2); line-height: 1.45; }
 .fl-chat-consent { display: flex; align-items: flex-start; gap: 10px; font-size: 0.875rem; line-height: 1.4; color: var(--ink-2); }
 .fl-chat-consent input { flex: none; width: 20px; height: 20px; margin-top: 1px; accent-color: var(--primary); }
+/* Nome de marca dentro de uma frase (ex.: Prumo): fonte dos títulos, verde da marca e um pouco maior, para não se perder no texto. */
+.brand-word { font-family: var(--font-display); font-weight: 650; font-size: 1.14em; letter-spacing: -0.005em; color: var(--primary); }
+
 /* Condições do Prumo logo abaixo do texto de apresentação: mesma largura, um tom abaixo. */
 .lead.lead-terms { margin-top: var(--s2); font-size: 0.9375rem; font-weight: 600; color: var(--ink-2); }
 
