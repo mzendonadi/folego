@@ -365,6 +365,9 @@ export async function getReferrals() {
 export async function inviteSubscriberFriend({ friendEmail }) {
   return request('POST', '/account/referrals', { body: { email: friendEmail } });
 }
+export async function inviteSubscriberWhatsApp({ phone, friendName, confirmed }) {
+  return request('POST', '/account/referrals/whatsapp', { body: { phone, friendName, confirmed } });
+}
 export async function getRecurring() {
   return request('GET', '/account/recurring');
 }

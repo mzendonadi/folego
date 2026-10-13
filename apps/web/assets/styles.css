@@ -548,6 +548,9 @@ ul, ol { margin: 0; padding: 0; }
 .dialog-head h2 { font-size: 1.5rem; }
 .dialog-body { padding: 0 var(--s5) var(--s4); overflow-y: auto; }
 .dialog-foot { display: flex; justify-content: flex-end; gap: var(--s3); padding: var(--s4) var(--s5) var(--s5); border-top: 1px solid var(--line); }
+/* Rodapé com várias ações de texto longo (ex.: convite por WhatsApp): empilha, a principal em cima, cada uma na largura toda. */
+.dialog-foot.dialog-foot-stack { flex-direction: column-reverse; align-items: stretch; }
+.dialog-foot.dialog-foot-stack .btn { justify-content: center; width: 100%; }
 
 .toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); z-index: 120; max-width: min(520px, calc(100% - 32px)); background: var(--ink); color: var(--paper); padding: 12px 20px; border-radius: 999px; font-weight: 600; box-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.5); animation: toast-in 0.3s var(--ease); }
 @keyframes toast-in { from { opacity: 0; transform: translate(-50%, 10px); } to { opacity: 1; transform: translate(-50%, 0); } }
@@ -1692,6 +1695,19 @@ body[data-route="partner"] .fl-chat, body[data-route="unsubscribe"] .fl-chat, bo
 .fl-chat-fab.is-hint, .fl-chat-fab:focus-visible { gap: 10px; padding: 0 20px 0 14px; }
 .fl-chat-fab.is-hint .fl-chat-fab-text, .fl-chat-fab:focus-visible .fl-chat-fab-text { max-width: 180px; }
 @media (hover: hover) { .fl-chat-fab:hover { gap: 10px; padding: 0 20px 0 14px; } .fl-chat-fab:hover .fl-chat-fab-text { max-width: 180px; } }
+.fl-chat-row { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+/* Indicativo discreto "Fale com a FôlIA": balão pequeno com a pontinha apontando para o botão, flutua de leve. */
+.fl-chat-tip { position: relative; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--ink-2); font: inherit; font-size: 0.75rem; font-weight: 600; line-height: 1.2; white-space: nowrap; cursor: pointer; box-shadow: 0 6px 18px -10px rgba(19, 35, 29, 0.45); opacity: 0; }
+.fl-chat-tip[hidden] { display: none; }
+.fl-chat-tip::after { content: ''; position: absolute; right: -4px; top: 50%; width: 8px; height: 8px; margin-top: -4px; border-top: 1px solid var(--line); border-right: 1px solid var(--line); background: var(--surface); transform: rotate(45deg); }
+.fl-chat-tip:hover { color: var(--ink); border-color: var(--primary); }
+.fl-chat-tip:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.fl-chat-tip.is-in { animation: fl-tip-in 0.5s var(--ease) forwards, fl-tip-float 3.6s ease-in-out 0.5s infinite; }
+@keyframes fl-tip-in { from { opacity: 0; transform: translateX(8px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes fl-tip-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+@media (prefers-reduced-motion: reduce) { .fl-chat-tip.is-in { animation: none; opacity: 1; } }
+.fl-chat.is-open .fl-chat-tip { display: none; }
+@media (max-width: 560px) { .fl-chat-tip { font-size: 0.6875rem; padding: 5px 10px; } }
 .fl-chat-panel { position: relative; display: flex; flex-direction: column; width: min(392px, calc(100vw - 32px)); height: min(620px, calc(100dvh - 120px)); border: 1px solid var(--line); border-radius: 20px; background: var(--surface); color: var(--ink); box-shadow: 0 24px 60px -24px rgba(19, 35, 29, 0.45); overflow: hidden; }
 .fl-chat-panel[hidden] { display: none; }
 .fl-chat-head { display: flex; align-items: center; gap: 12px; padding: 14px 14px 14px 16px; background: var(--primary); color: var(--primary-ink); }

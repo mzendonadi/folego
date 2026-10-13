@@ -145,6 +145,10 @@ jobs:
           PLUGGY_CONNECT_URL: ${{ secrets.PLUGGY_CONNECT_URL }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           ANTHROPIC_WORKSPACE_ID: ${{ secrets.ANTHROPIC_WORKSPACE_ID }}
+          BIRD_API_KEY: ${{ secrets.BIRD_API_KEY }}
+          BIRD_WEBHOOK_SECRET: ${{ secrets.BIRD_WEBHOOK_SECRET }}
+          BIRD_WHATSAPP_FROM: ${{ secrets.BIRD_WHATSAPP_FROM }}
+          BIRD_TEMPLATE_INDICACAO: ${{ secrets.BIRD_TEMPLATE_INDICACAO }}
         run: |
           out="$RUNNER_TEMP/prod.env"; : > "$out"; chmod 600 "$out"
           # Meta Conversions API (decisão do dono em 2026-10-11): pixel certo e PageView anônimo ligado. Não são segredos.
@@ -157,6 +161,15 @@ jobs:
           [ -n "$TURNSTILE_SECRET" ]   && printf 'TURNSTILE_SECRET=%s\n' "$TURNSTILE_SECRET" >> "$out"
           [ -n "$META_CAPI_TOKEN" ]     && printf 'META_CAPI_TOKEN=%s\n' "$META_CAPI_TOKEN" >> "$out"
           [ -n "$META_TEST_EVENT_CODE" ] && printf 'META_TEST_EVENT_CODE=%s\n' "$META_TEST_EVENT_CODE" >> "$out"
+          # WhatsApp do Fôlego pela Bird (convite de indicação do Prumo): só liga com a chave da API. O número é o da empresa (+55 11 91379-2370);
+          # o segredo dos avisos (webhook) e o nome do modelo aprovado são opcionais. Ver deploy/BIRD-WHATSAPP.md.
+          if [ -n "$BIRD_API_KEY" ]; then
+            printf 'BIRD_API_KEY=%s\n' "$BIRD_API_KEY" >> "$out"
+            printf 'BIRD_WHATSAPP_FROM=%s\n' "${BIRD_WHATSAPP_FROM:-+5511913792370}" >> "$out"
+            [ -n "$BIRD_WEBHOOK_SECRET" ] && printf 'BIRD_WEBHOOK_SECRET=%s\n' "$BIRD_WEBHOOK_SECRET" >> "$out"
+            [ -n "$BIRD_TEMPLATE_INDICACAO" ] && printf 'BIRD_TEMPLATE_INDICACAO=%s\n' "$BIRD_TEMPLATE_INDICACAO" >> "$out"
+            echo "Bird: chave presente, o convite por WhatsApp será ligado."
+          fi
           # Open Finance (Pluggy): só liga com as DUAS chaves; o segredo dos avisos e o endereço do widget são opcionais.
           if [ -n "$PLUGGY_CLIENT_ID" ] && [ -n "$PLUGGY_CLIENT_SECRET" ]; then
             printf 'PLUGGY_CLIENT_ID=%s\n' "$PLUGGY_CLIENT_ID" >> "$out"

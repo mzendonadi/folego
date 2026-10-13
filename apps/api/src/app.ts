@@ -28,6 +28,8 @@ import * as billing from './billing.ts';
 import * as planChange from './plan-change.ts';
 import * as accountData from './account-data.ts';
 import * as referrals from './referrals.ts';
+import { handleBirdEvent, verifyBirdSignature } from './bird.ts';
+import { referralWhatsappSchema } from './schemas.ts';
 import * as insights from './insights.ts';
 import { verifyTurnstile, turnstileEnabled } from './turnstile.ts';
 import * as chatbot from './chatbot.ts';
@@ -66,6 +68,8 @@ export interface AppDeps {
   whatsapp?: import('./whatsapp.ts').WaTransport;
   /** Agente de IA de vendas do WhatsApp (ausente = só atendimento humano). */
   salesAgent?: import('./whatsapp.ts').SalesAgent;
+  /** WhatsApp do Fôlego pela Bird (ausente = Bird real se configurada; senão desligado). */
+  bird?: import('./bird.ts').BirdTransport;
   /** 'relaxed' só para testes que criam muitas requisições do mesmo IP. */
   rateLimits?: 'strict' | 'relaxed';
 }
@@ -297,8 +301,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.post('/api/referrals/lead', { config: { rateLimit: { max: 5 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => {
     const sessionId = await requireSession(req);
     const b = referralLeadSchema.parse(req.body);
-    await referrals.inviteLead(ctx, { sessionId, friendEmail: b.friendEmail, yourName: b.yourName });
-    return reply.status(204).send();
+    return referrals.inviteLead(ctx, { sessionId, friendEmail: b.friendEmail, yourName: b.yourName });
   });
 
   // Fale conosco da landing: vira e-mail para o suporte (nada é gravado). Limite baixo e anti-robô (Turnstile + isca).
@@ -551,9 +554,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
   // Indicações: assinante (com desconto na próxima fatura) e comprador de produto Pix (só gera lead).
   app.get('/api/account/referrals', async (req) => referrals.overview(ctx, await requireSubscriber(req)));
-  app.post('/api/account/referrals', { config: { rateLimit: { max: 10 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => {
-    await referrals.inviteBySubscriber(ctx, await requireSelf(req), referralInviteSchema.parse(req.body).email);
-    return reply.status(204).send();
+  app.post('/api/account/referrals', { config: { rateLimit: { max: 10 * scale, timeWindow: '10 minutes' } } }, async (req) => referrals.inviteBySubscriber(ctx, await requireSelf(req), referralInviteSchema.parse(req.body).email));
+  // Convite pelo WhatsApp do Fôlego (Bird): entra na fila e sai em horário comercial.
+  app.post('/api/account/referrals/whatsapp', { config: { rateLimit: { max: 10 * scale, timeWindow: '10 minutes' } } }, async (req) => {
+    const b = referralWhatsappSchema.parse(req.body);
+    return referrals.inviteBySubscriberWhatsApp(ctx, await requireSelf(req), b);
   });
   // Cobranças recorrentes (todos os planos) e base do simulador "e se...?" (Ousado e Desbravador).
   app.get('/api/account/recurring', async (req) => insights.recurringReport(ctx, await requireSubscriber(req)));
@@ -804,6 +809,27 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         await handleWhatsAppWebhook(ctx, acc, parsed, { log: (e) => req.log.warn(e) });
       } catch (error) {
         req.log.error({ erro: error instanceof Error ? error.message.slice(0, 200) : 'erro' }, 'whatsapp_webhook_falhou');
+      }
+      return { ok: true };
+    });
+    // Avisos da Bird (status das mensagens e respostas, como "SAIR"): padrão Standard Webhooks. Sem o segredo configurado, o endereço não existe.
+    scope.post('/webhooks/bird', { config: { rateLimit: { max: 600 * scale, timeWindow: '1 minute' } } }, async (req, reply) => {
+      const secret = config.bird?.webhookSecret;
+      if (!secret) return reply.status(404).send({ error: 'not_found' });
+      const raw = typeof req.body === 'string' ? req.body : '';
+      const h = req.headers;
+      const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+      if (!verifyBirdSignature(secret, { id: one(h['webhook-id']), timestamp: one(h['webhook-timestamp']), signature: one(h['webhook-signature']) }, raw)) return reply.status(401).send({ error: 'invalid_signature' });
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        return reply.status(400).send({ error: 'invalid_json' });
+      }
+      try {
+        await handleBirdEvent(ctx, parsed, { log: (e) => req.log.warn(e) });
+      } catch (error) {
+        req.log.error({ erro: error instanceof Error ? error.message.slice(0, 200) : 'erro' }, 'bird_webhook_falhou');
       }
       return { ok: true };
     });

@@ -32,6 +32,8 @@ export interface Ctx {
   whatsapp?: import('./whatsapp.ts').WaTransport;
   /** Agente de IA de vendas do WhatsApp. Ausente = só atendimento humano (padrão). */
   salesAgent?: import('./whatsapp.ts').SalesAgent;
+  /** WhatsApp do próprio Fôlego pela Bird. Ausente = usa a Bird real se houver chave em config.bird; sem chave, desligado. Nos testes entra um falso. */
+  bird?: import('./bird.ts').BirdTransport;
 }
 
 export const TERMS_VERSION = 'minuta-2026-09-26';

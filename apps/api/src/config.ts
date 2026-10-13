@@ -58,6 +58,8 @@ export interface Config {
   canceledPurgeDays: number;
   /** Programa de indicações (convites por e-mail e desconto para assinantes). */
   referralEnabled: boolean;
+  /** WhatsApp do Fôlego pela Bird (convite de indicação do Prumo). Sem a chave e o número, o convite por WhatsApp fica desligado e só o link de compartilhar funciona. */
+  bird: { apiKey: string; from: string; baseUrl: string; template: string; language: string; webhookSecret: string | null } | null;
   /** Agregador de Open Finance (Pluggy). Sem as duas chaves, as contas conectadas ficam desligadas. */
   openFinance: { clientId: string; clientSecret: string; baseUrl: string } | null;
   /** Endereço do widget de conexão do agregador (deve estar liberado na CSP). */
@@ -153,6 +155,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     campaignDailyCap: 200,
     canceledPurgeDays: 15,
     referralEnabled: true,
+    bird: env.BIRD_API_KEY && env.BIRD_API_KEY.length >= 20 && env.BIRD_WHATSAPP_FROM
+      ? {
+          apiKey: env.BIRD_API_KEY,
+          from: env.BIRD_WHATSAPP_FROM,
+          baseUrl: (env.BIRD_BASE_URL ?? (env.BIRD_API_KEY.startsWith('bk_eu1_') ? 'https://eu1.platform.bird.com' : 'https://platform.bird.com')).replace(/\/+$/, ''),
+          template: env.BIRD_TEMPLATE_INDICACAO ?? 'indicacao_prumo',
+          language: env.BIRD_TEMPLATE_LANGUAGE ?? 'pt-BR',
+          webhookSecret: env.BIRD_WEBHOOK_SECRET && env.BIRD_WEBHOOK_SECRET.length >= 16 ? env.BIRD_WEBHOOK_SECRET : null,
+        }
+      : null,
     turnstileSiteKey: env.TURNSTILE_SITE_KEY ? env.TURNSTILE_SITE_KEY : null,
     turnstileSecret: env.TURNSTILE_SECRET ? env.TURNSTILE_SECRET : null,
     metaCapiToken: env.META_CAPI_TOKEN ? env.META_CAPI_TOKEN : null,

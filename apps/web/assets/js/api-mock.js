@@ -188,6 +188,7 @@ export const updateProfile = notAvailable;
 export const inviteLeadFriend = notAvailable;
 export const getReferrals = notAvailable;
 export const inviteSubscriberFriend = notAvailable;
+export const inviteSubscriberWhatsApp = notAvailable;
 export const getRecurring = notAvailable;
 export const setRecurringDecision = notAvailable;
 export const getScenarioBase = notAvailable;

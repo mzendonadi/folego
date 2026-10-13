@@ -12,6 +12,12 @@ import type { Queryable } from './db.ts';
 import { planByCode } from './engine.ts';
 import { requireFeature } from './subscriptions.ts';
 import { createHash } from 'node:crypto';
+import { birdOf, birdOff, birdStats, contactKey, processBirdQueue, queueInvite } from './bird.ts';
+import { waPhone } from './whatsapp.ts';
+
+const WA_LIMIT = 15; // convites por WhatsApp por assinante (no total)
+const WA_PER_DAY = 5; // e no máximo 5 por dia
+const WA_COOLDOWN_DAYS = 90; // o mesmo telefone não recebe de novo dentro deste prazo
 
 const ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
 const SESSION_LIMIT = 5; // convites por comprador de Pix
@@ -122,7 +128,13 @@ async function sendSubscriberMail(ctx: Ctx, to: string, who: string, code: strin
 // ---------------------------------------------------------------------------
 // Indicar: comprador de produto Pix (lead) e assinante (com bônus)
 // ---------------------------------------------------------------------------
-export async function inviteLead(ctx: Ctx, args: { sessionId: string; friendEmail: string; yourName: string }): Promise<void> {
+/** Resultado de um convite: 'sent' = saiu; 'blocked' = não enviamos (já recebeu há pouco, ou a pessoa pediu para não receber; não dizemos qual). */
+export type InviteResult = { status: 'sent' } | { status: 'blocked' };
+
+const MAIL_DOWN = () => new AppError(503, 'email_unavailable', 'O envio de e-mail está fora do ar neste momento. Tente de novo em alguns minutos ou compartilhe o seu link.');
+const MAIL_FAILED = () => new AppError(502, 'email_failed', 'Não consegui enviar o e-mail agora. Nada foi registrado: tente de novo em alguns minutos.');
+
+export async function inviteLead(ctx: Ctx, args: { sessionId: string; friendEmail: string; yourName: string }): Promise<InviteResult> {
   if (!ctx.config.referralEnabled) throw notFound();
   const paid = await ctx.db.query(`SELECT 1 FROM app.orders WHERE session_id = $1 AND status = 'paid' LIMIT 1`, [args.sessionId]);
   if (paid.rows.length === 0) throw new AppError(403, 'not_a_customer', 'A indicação fica disponível depois que você usa um produto do Fôlego.');
@@ -131,12 +143,20 @@ export async function inviteLead(ctx: Ctx, args: { sessionId: string; friendEmai
   if (num(used.rows[0]?.n ?? 0) >= SESSION_LIMIT) throw new AppError(429, 'referral_limit', `Você já indicou ${SESSION_LIMIT} amigos. Obrigado por espalhar o Fôlego!`);
   const name = firstName(args.yourName);
   if (!name) throw new AppError(422, 'name_required', 'Diga o seu primeiro nome para o seu amigo saber quem indicou.');
-  if (await suppressed(ctx, friend)) return; // silencioso: não revelamos quem pediu para não receber
-  await ctx.db.query(`INSERT INTO app.referrals(kind, referrer_session_id, referrer_name, friend_email) VALUES ('lead',$1,$2,$3)`, [args.sessionId, name, friend]);
-  await sendLeadMail(ctx, friend, name);
+  if (!ctx.email) throw MAIL_DOWN();
+  if (await suppressed(ctx, friend)) return { status: 'blocked' }; // não revelamos se foi cooldown ou pedido de quem não quer receber
+  // Grava antes de enviar (dois cliques seguidos não duplicam) e desfaz se o envio falhar: assim a indicação não fica "gasta" sem e-mail nenhum.
+  const ins = await ctx.db.query<{ id: string }>(`INSERT INTO app.referrals(kind, referrer_session_id, referrer_name, friend_email) VALUES ('lead',$1,$2,$3) RETURNING id`, [args.sessionId, name, friend]);
+  try {
+    await sendLeadMail(ctx, friend, name);
+  } catch {
+    await ctx.db.query(`DELETE FROM app.referrals WHERE id = $1`, [ins.rows[0]!.id]);
+    throw MAIL_FAILED();
+  }
+  return { status: 'sent' };
 }
 
-export async function inviteBySubscriber(ctx: Ctx, subscriberId: string, friendEmail: string): Promise<void> {
+export async function inviteBySubscriber(ctx: Ctx, subscriberId: string, friendEmail: string): Promise<InviteResult> {
   if (!ctx.config.referralEnabled) throw notFound();
   await requireFeature(ctx, subscriberId, 'ledger');
   const friend = friendEmail.trim().toLowerCase();
@@ -147,10 +167,57 @@ export async function inviteBySubscriber(ctx: Ctx, subscriberId: string, friendE
   // Quem já é assinante ativo não rende indicação.
   const already = await ctx.db.query(`SELECT 1 FROM app.subscribers b JOIN app.billing_profiles p ON p.subscriber_id = b.id AND p.status IN ('active','past_due') WHERE lower(b.email::text) = $1`, [friend]);
   if (already.rows.length > 0) throw new AppError(409, 'already_subscriber', 'Esta pessoa já usa o Prumo. Que tal indicar outra?');
-  if (await suppressed(ctx, friend)) return;
+  if (!ctx.email) throw MAIL_DOWN();
+  if (await suppressed(ctx, friend)) return { status: 'blocked' };
   const code = await ensureReferralCode(ctx, subscriberId);
-  await ctx.db.query(`INSERT INTO app.referrals(kind, referrer_subscriber_id, referrer_name, friend_email) VALUES ('subscriber',$1,$2,$3)`, [subscriberId, firstName(me.rows[0]?.display_name, me.rows[0]?.email), friend]);
-  await sendSubscriberMail(ctx, friend, firstName(me.rows[0]?.display_name, me.rows[0]?.email), code);
+  const who = firstName(me.rows[0]?.display_name, me.rows[0]?.email);
+  const ins = await ctx.db.query<{ id: string }>(`INSERT INTO app.referrals(kind, referrer_subscriber_id, referrer_name, friend_email) VALUES ('subscriber',$1,$2,$3) RETURNING id`, [subscriberId, who, friend]);
+  try {
+    await sendSubscriberMail(ctx, friend, who, code);
+  } catch {
+    await ctx.db.query(`DELETE FROM app.referrals WHERE id = $1`, [ins.rows[0]!.id]);
+    throw MAIL_FAILED();
+  }
+  return { status: 'sent' };
+}
+
+/** Convite pelo WhatsApp do Fôlego (modelo aprovado na Bird). O assinante confirma que o amigo o conhece; o envio sai pela fila, em horário comercial. */
+export type WaInviteResult = { status: 'queued' } | { status: 'blocked'; reason: 'recent' | 'optout' };
+
+export async function inviteBySubscriberWhatsApp(ctx: Ctx, subscriberId: string, args: { phone: string; friendName: string; confirmed: boolean }): Promise<WaInviteResult> {
+  if (!ctx.config.referralEnabled) throw notFound();
+  await requireFeature(ctx, subscriberId, 'ledger');
+  if (!birdOf(ctx)) throw birdOff();
+  if (!args.confirmed) throw new AppError(422, 'confirm_required', 'Confirme que a pessoa conhece você e vai gostar de receber o convite.');
+  const digits = waPhone(args.phone);
+  if (!digits) throw new AppError(422, 'invalid_phone', 'Digite o telefone com DDD, por exemplo (41) 99999-0000.');
+  const friendName = firstName(args.friendName);
+  if (!friendName) throw new AppError(422, 'name_required', 'Digite o primeiro nome do seu amigo.');
+  const total = await ctx.db.query<{ n: string; today: string }>(
+    `SELECT count(*)::text AS n, count(*) FILTER (WHERE created_at > now() - interval '24 hours')::text AS today FROM app.referrals WHERE referrer_subscriber_id = $1 AND channel = 'whatsapp'`,
+    [subscriberId],
+  );
+  if (num(total.rows[0]?.n ?? 0) >= WA_LIMIT) throw new AppError(429, 'referral_limit', `Você chegou ao limite de ${WA_LIMIT} convites por WhatsApp. Compartilhe o seu link pelo seu próprio WhatsApp!`);
+  if (num(total.rows[0]?.today ?? 0) >= WA_PER_DAY) throw new AppError(429, 'referral_daily_limit', `Você já enviou ${WA_PER_DAY} convites hoje. Continue amanhã.`);
+  const key = contactKey(ctx, digits);
+  const optedOut = await ctx.db.query(`SELECT 1 FROM app.msg_contacts WHERE phone_key = $1 AND opted_out`, [key]);
+  if (optedOut.rows.length > 0) return { status: 'blocked', reason: 'optout' };
+  const recent = await ctx.db.query(`SELECT 1 FROM app.referrals WHERE friend_phone_key = $1 AND created_at > now() - make_interval(days => ${WA_COOLDOWN_DAYS})`, [key]);
+  if (recent.rows.length > 0) return { status: 'blocked', reason: 'recent' };
+  const me = await ctx.db.query<{ email: string; display_name: string | null }>(`SELECT email::text AS email, display_name FROM app.subscribers WHERE id = $1`, [subscriberId]);
+  const code = await ensureReferralCode(ctx, subscriberId);
+  const ins = await ctx.db.query<{ id: string }>(
+    `INSERT INTO app.referrals(kind, referrer_subscriber_id, referrer_name, channel, friend_phone_key, friend_name) VALUES ('subscriber',$1,$2,'whatsapp',$3,$4) RETURNING id`,
+    [subscriberId, firstName(me.rows[0]?.display_name, me.rows[0]?.email), key, friendName],
+  );
+  const queued = await queueInvite(ctx, { subscriberId, referralId: ins.rows[0]!.id, e164digits: digits, friendName, link: `${ctx.config.publicUrl}/conta?ind=${code}` });
+  if (!queued) {
+    await ctx.db.query(`DELETE FROM app.referrals WHERE id = $1`, [ins.rows[0]!.id]);
+    return { status: 'blocked', reason: 'optout' };
+  }
+  await audit(ctx.db, `subscriber:${subscriberId}`, 'referral_whatsapp_queued', 'referral', ins.rows[0]!.id, {});
+  await processBirdQueue(ctx).catch(() => 0); // tenta já (se for horário comercial); se falhar, o worker repete
+  return { status: 'queued' };
 }
 
 // ---------------------------------------------------------------------------
@@ -217,12 +284,23 @@ const mask = (email: string) => {
   return `${u.slice(0, 2)}${'*'.repeat(Math.max(1, Math.min(6, u.length - 2)))}@${d}`;
 };
 
+/** Quem foi convidado, sem expor dados: e-mail mascarado, ou o primeiro nome (convite por WhatsApp). */
+const friendLabel = (r: { friend_email: string | null; friend_name: string | null; channel: string }) => (r.channel === 'whatsapp' || !r.friend_email ? `${r.friend_name ?? 'Amigo'} (WhatsApp)` : mask(r.friend_email));
+
+/** Situação do envio por WhatsApp em palavras simples. */
+const deliveryLabel = (s: string | null): string => ({ fila: 'Na fila', enviando: 'Enviando', aceita: 'Enviada', enviada: 'Enviada', entregue: 'Entregue', lida: 'Lida', falhou: 'Não foi possível enviar', cancelada: 'Cancelada' })[s ?? ''] ?? 'Na fila';
+
 export async function overview(ctx: Ctx, subscriberId: string) {
   await requireFeature(ctx, subscriberId, 'ledger');
   const code = await ensureReferralCode(ctx, subscriberId);
   const counts = await ctx.db.query<{ sent: string; converted: string }>(`SELECT count(*)::text AS sent, count(*) FILTER (WHERE status = 'converted')::text AS converted FROM app.referrals WHERE referrer_subscriber_id = $1`, [subscriberId]);
   const cr = await ctx.db.query<{ available: string; applied: string }>(`SELECT count(*) FILTER (WHERE status = 'available')::text AS available, count(*) FILTER (WHERE status = 'applied')::text AS applied FROM app.referral_credits WHERE subscriber_id = $1`, [subscriberId]);
-  const recent = await ctx.db.query<{ friend_email: string; status: string; created_at: Date; converted_at: Date | null }>(`SELECT friend_email::text AS friend_email, status, created_at, converted_at FROM app.referrals WHERE referrer_subscriber_id = $1 ORDER BY created_at DESC LIMIT 20`, [subscriberId]);
+  const recent = await ctx.db.query<{ friend_email: string | null; friend_name: string | null; channel: string; delivery: string | null; status: string; created_at: Date; converted_at: Date | null }>(
+    `SELECT r.friend_email::text AS friend_email, r.friend_name, r.channel, r.status, r.created_at, r.converted_at,
+            (SELECT m.status FROM app.msg_log m WHERE m.referral_id = r.id AND m.direction = 'out' ORDER BY m.created_at DESC LIMIT 1) AS delivery
+       FROM app.referrals r WHERE r.referrer_subscriber_id = $1 ORDER BY r.created_at DESC LIMIT 20`,
+    [subscriberId],
+  );
   const prof = await ctx.db.query<{ plan: string; status: string; contract_cents: string | null }>(`SELECT plan, status, contract_cents FROM app.billing_profiles WHERE subscriber_id = $1`, [subscriberId]);
   const plan = prof.rows[0] ? planByCode(prof.rows[0].plan) : null;
   const price = plan ? await ctx.db.query<{ price_cents: string }>(`SELECT price_cents FROM app.products WHERE code = $1`, [plan.productCode]) : { rows: [] as { price_cents: string }[] };
@@ -239,7 +317,8 @@ export async function overview(ctx: Ctx, subscriberId: string) {
     converted: num(counts.rows[0]?.converted ?? 0),
     credits: { available, applied: num(cr.rows[0]?.applied ?? 0) },
     next: available > 0 && list > 0 ? { percent: pct, valueCents: discounted(list, pct), listCents: list, months: available } : null,
-    recent: recent.rows.map((r) => ({ friend: mask(r.friend_email), status: r.status, at: new Date(r.created_at).toISOString(), convertedAt: r.converted_at ? new Date(r.converted_at).toISOString() : null })),
+    whatsappInvite: birdOf(ctx) !== null,
+    recent: recent.rows.map((r) => ({ friend: friendLabel(r), channel: r.channel, delivery: r.channel === 'whatsapp' ? deliveryLabel(r.delivery) : null, status: r.status, at: new Date(r.created_at).toISOString(), convertedAt: r.converted_at ? new Date(r.converted_at).toISOString() : null })),
   };
 }
 
@@ -326,8 +405,8 @@ export async function adminOverview(ctx: Ctx) {
        FROM app.subscribers b WHERE b.deleted_at IS NULL AND (EXISTS (SELECT 1 FROM app.referrals r WHERE r.referrer_subscriber_id = b.id) OR EXISTS (SELECT 1 FROM app.referral_credits c WHERE c.subscriber_id = b.id))
       ORDER BY (SELECT count(*) FROM app.referrals r WHERE r.referrer_subscriber_id = b.id AND r.status = 'converted') DESC, 3 DESC LIMIT 30`,
   );
-  const recent = await ctx.db.query<{ kind: string; referrer: string | null; referrer_name: string | null; friend_email: string; status: string; created_at: Date; converted_at: Date | null }>(
-    `SELECT r.kind, b.email::text AS referrer, r.referrer_name, r.friend_email::text AS friend_email, r.status, r.created_at, r.converted_at FROM app.referrals r LEFT JOIN app.subscribers b ON b.id = r.referrer_subscriber_id ORDER BY r.created_at DESC LIMIT 40`,
+  const recent = await ctx.db.query<{ kind: string; referrer: string | null; referrer_name: string | null; friend_email: string | null; friend_name: string | null; channel: string; status: string; created_at: Date; converted_at: Date | null }>(
+    `SELECT r.kind, b.email::text AS referrer, r.referrer_name, r.friend_email::text AS friend_email, r.friend_name, r.channel, r.status, r.created_at, r.converted_at FROM app.referrals r LEFT JOIN app.subscribers b ON b.id = r.referrer_subscriber_id ORDER BY r.created_at DESC LIMIT 40`,
   );
   const kv = k.rows[0];
   const subs = num(kv?.subs ?? 0);
@@ -338,7 +417,8 @@ export async function adminOverview(ctx: Ctx) {
     kpis: { leadInvites: num(kv?.leads ?? 0), subscriberInvites: subs, converted, conversionPct: subs > 0 ? Math.round((converted / subs) * 100) : 0, creditsAvailable: num(kv?.avail ?? 0), creditsApplied: num(kv?.applied ?? 0), manualCredits: num(kv?.manual ?? 0) },
     top: top.rows.map((t) => ({ subscriberId: t.subscriber_id, email: t.email, sent: num(t.sent), converted: num(t.converted), available: num(t.avail), applied: num(t.applied) })),
     reconcile: await reconcile(ctx),
-    recent: recent.rows.map((r) => ({ kind: r.kind, referrer: r.referrer ?? r.referrer_name ?? '—', friend: mask(r.friend_email), status: r.status, at: new Date(r.created_at).toISOString(), convertedAt: r.converted_at ? new Date(r.converted_at).toISOString() : null })),
+    whatsapp: await birdStats(ctx),
+    recent: recent.rows.map((r) => ({ kind: r.kind, referrer: r.referrer ?? r.referrer_name ?? '—', friend: friendLabel(r), channel: r.channel, status: r.status, at: new Date(r.created_at).toISOString(), convertedAt: r.converted_at ? new Date(r.converted_at).toISOString() : null })),
   };
 }
 

@@ -41,8 +41,14 @@ export function card(title, ...children) {
 }
 export const cardOpts = (o) => ({ __card: true, ...o });
 
-export function kpi(label, value, sub = null, tone = '') {
-  return el('div', { class: `bo-kpi ${tone ? `bo-kpi-${tone}` : ''}` }, el('span', { class: 'bo-kpi-label' }, label), el('strong', { class: 'bo-kpi-value' }, value), sub ? el('span', { class: 'bo-kpi-sub muted' }, sub) : null);
+/** Cartão de indicador. Com `onClick` vira um botão: ao clicar (ou Enter/Espaço) abre o detalhe do que o número mostra. */
+export function kpi(label, value, sub = null, tone = '', onClick = null) {
+  const kids = [el('span', { class: 'bo-kpi-label' }, label), el('strong', { class: 'bo-kpi-value' }, value), sub ? el('span', { class: 'bo-kpi-sub muted' }, sub) : null];
+  const cls = `bo-kpi ${tone ? `bo-kpi-${tone}` : ''}`;
+  if (!onClick) return el('div', { class: cls }, ...kids);
+  const b = el('button', { class: `${cls} is-click`, type: 'button', 'aria-haspopup': 'dialog', 'aria-label': `${label}: ${value}. Ver detalhes` }, ...kids);
+  b.addEventListener('click', onClick);
+  return b;
 }
 export const kpis = (...items) => el('div', { class: 'bo-kpis', tabindex: '0', role: 'group', 'aria-label': 'Indicadores' }, ...items);
 

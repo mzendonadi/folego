@@ -96,6 +96,7 @@ export const updateProfile = impl.updateProfile;
 export const inviteLeadFriend = impl.inviteLeadFriend;
 export const getReferrals = impl.getReferrals;
 export const inviteSubscriberFriend = impl.inviteSubscriberFriend;
+export const inviteSubscriberWhatsApp = impl.inviteSubscriberWhatsApp;
 export const getRecurring = impl.getRecurring;
 export const setRecurringDecision = impl.setRecurringDecision;
 export const getScenarioBase = impl.getScenarioBase;

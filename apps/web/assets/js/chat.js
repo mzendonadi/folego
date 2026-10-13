@@ -63,13 +63,16 @@ export function initChat() {
   let started = false;
   let busy = false;
 
-  const fab = el('button', { class: 'fl-chat-fab', type: 'button', 'aria-label': 'Abrir o chat com a FôlIA', 'aria-expanded': 'false', 'aria-controls': 'fl-chat-panel' }, mark(30), el('span', { class: 'fl-chat-fab-text' }, 'Fale com a FôlIA'));
+  const fab = el('button', { class: 'fl-chat-fab', type: 'button', 'aria-label': 'Abrir o chat com a FôlIA', 'aria-expanded': 'false', 'aria-controls': 'fl-chat-panel' }, mark(30));
+  // Indicativo discreto ao lado do botão: aparece depois de uns segundos, flutua de leve e some assim que a pessoa abre o chat.
+  const tip = el('button', { class: 'fl-chat-tip', type: 'button', hidden: true, tabindex: '-1', 'aria-hidden': 'true' }, 'Fale com a FôlIA');
+  const row = el('div', { class: 'fl-chat-row' }, tip, fab);
   const log = el('div', { class: 'fl-chat-log', role: 'log', 'aria-live': 'polite', 'aria-label': 'Conversa com a FôlIA' });
   const body = el('div', { class: 'fl-chat-body' });
   const close = el('button', { class: 'fl-chat-close', type: 'button', 'aria-label': 'Fechar o chat' }, icon('x'));
   const head = el('header', { class: 'fl-chat-head' }, el('span', { class: 'fl-chat-avatar' }, mark(26)), el('div', { class: 'fl-chat-who' }, el('strong', {}, 'FôlIA'), el('span', {}, 'Assistente virtual do Fôlego')), close);
   const panel = el('section', { class: 'fl-chat-panel', id: 'fl-chat-panel', role: 'dialog', 'aria-label': 'Chat com a FôlIA', hidden: true }, head, body);
-  const root = el('div', { class: 'fl-chat' }, panel, fab);
+  const root = el('div', { class: 'fl-chat' }, panel, row);
   document.body.append(root);
 
   const bubble = (role, text) => el('div', { class: `fl-msg fl-msg-${role === 'user' ? 'me' : 'bot'}` }, el('p', {}, text));
@@ -212,15 +215,21 @@ export function initChat() {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !panel.hidden) { closePanel(); fab.focus(); }
   });
-  // Um convite discreto, uma vez por visita: o botão se abre num rótulo por alguns segundos e volta a ser só o ícone.
-  if (!prefersReducedMotion()) {
-    let seen = false;
-    try { seen = sessionStorage.getItem('folego:chat-hint') === '1'; } catch { /* ignora */ }
-    if (!seen) {
-      setTimeout(() => {
-        if (panel.hidden) { fab.classList.add('is-hint'); setTimeout(() => fab.classList.remove('is-hint'), 6000); }
-        try { sessionStorage.setItem('folego:chat-hint', '1'); } catch { /* ignora */ }
-      }, 9000);
-    }
+  // O indicativo some para sempre nesta visita quando a pessoa abre o chat (ou toca nele).
+  let tipOff = false;
+  try { tipOff = sessionStorage.getItem('folego:chat-tip') === '1'; } catch { /* ignora */ }
+  const hideTip = () => {
+    tipOff = true;
+    tip.hidden = true;
+    try { sessionStorage.setItem('folego:chat-tip', '1'); } catch { /* ignora */ }
+  };
+  tip.addEventListener('click', () => { hideTip(); openPanel(); });
+  fab.addEventListener('click', hideTip);
+  if (!tipOff) {
+    setTimeout(() => {
+      if (tipOff || !panel.hidden) return;
+      tip.hidden = false;
+      tip.classList.add('is-in');
+    }, 2500);
   }
 }

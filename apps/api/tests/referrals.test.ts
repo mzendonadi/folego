@@ -12,20 +12,30 @@ import { handleWebhook } from '../src/services.ts';
 import { ensureDefaultEbook, sendEbookGifts } from '../src/ebook.ts';
 import { notifyCredits, syncPrices, optOutToken } from '../src/referrals.ts';
 import { refreshMarket, loadExchanges } from '../src/market.ts';
+import { FakeBird, BirdError, processBirdQueue } from '../src/bird.ts';
+import { createHmac } from 'node:crypto';
 
 let db: Db;
 let app: FastifyInstance;
 let gateway: FakeGateway;
 let pdf: Buffer;
 const mailbox = new MemorySender();
-const config = { ...loadConfig({ NODE_ENV: 'test' }), webhookSecret: 'segredo-de-teste', subscriptionsEnabled: true, adminEmails: ['dono@exemplo.com'] };
-const ctx = () => ({ db, config, gateway, email: mailbox });
+const fakeBird = new FakeBird();
+const BIRD_SECRET_RAW = Buffer.from('segredo-do-webhook-da-bird-0123456789');
+const config = {
+  ...loadConfig({ NODE_ENV: 'test' }),
+  webhookSecret: 'segredo-de-teste',
+  subscriptionsEnabled: true,
+  adminEmails: ['dono@exemplo.com'],
+  bird: { apiKey: 'bk_test_0123456789012345', from: '+5511913792370', baseUrl: 'http://bird.invalid', template: 'indicacao_prumo', language: 'pt-BR', webhookSecret: `whsec_${BIRD_SECRET_RAW.toString('base64')}` },
+};
+const ctx = () => ({ db, config, gateway, email: mailbox, bird: fakeBird });
 
 before(async () => {
   db = await createPgliteDb();
   await ensureSchema(db);
   gateway = new FakeGateway(config.webhookSecret);
-  app = await buildApp({ config, db, gateway, email: mailbox, rateLimits: 'relaxed' });
+  app = await buildApp({ config, db, gateway, email: mailbox, bird: fakeBird, rateLimits: 'relaxed' });
   pdf = await readFile(new URL('../src/assets/folego-ebook.pdf', import.meta.url));
 });
 after(async () => {
@@ -155,7 +165,9 @@ test('indicação de quem comprou no Pix: só gera lead (sem bônus), com limite
   const sid = (await db.query<{ id: string }>(`SELECT id FROM app.sessions WHERE subscriber_id = (SELECT id FROM app.subscribers WHERE email = 'comprador-pix@exemplo.com') ORDER BY created_at DESC LIMIT 1`)).rows[0]!.id;
   await db.query(`INSERT INTO app.orders(case_id, subscriber_id, session_id, status, total_cents, idempotency_key, paid_at) VALUES (NULL,$2,$1,'paid',2900,'ref-test-1', now())`, [sid, await idOf('comprador-pix@exemplo.com')]);
   mailbox.sent.length = 0;
-  assert.equal((await c('POST', '/api/referrals/lead', { body: { friendEmail: 'Amigo@Exemplo.com', yourName: 'Bia Souza' } })).status, 204);
+  const sentLead = await c('POST', '/api/referrals/lead', { body: { friendEmail: 'Amigo@Exemplo.com', yourName: 'Bia Souza' } });
+  assert.equal(sentLead.status, 200);
+  assert.equal(sentLead.json.status, 'sent');
   const m = mailbox.sent[0]!;
   assert.equal(m.to, 'amigo@exemplo.com');
   assert.match(m.subject, /Bia indicou o Fôlego/);
@@ -165,8 +177,9 @@ test('indicação de quem comprou no Pix: só gera lead (sem bônus), com limite
   assert.equal((await db.query(`SELECT 1 FROM app.referral_credits`)).rows.length, 0, 'lead não gera crédito nenhum');
 
   mailbox.sent.length = 0;
-  await c('POST', '/api/referrals/lead', { body: { friendEmail: 'amigo@exemplo.com', yourName: 'Bia' } });
+  const dup = await c('POST', '/api/referrals/lead', { body: { friendEmail: 'amigo@exemplo.com', yourName: 'Bia' } });
   assert.equal(mailbox.sent.length, 0, 'o mesmo amigo não recebe de novo dentro do prazo');
+  assert.equal(dup.json.status, 'blocked', 'e a tela é avisada de que NÃO enviamos (antes dizia "enviado")');
   assert.equal((await c('POST', '/api/referrals/lead', { body: { friendEmail: 'nao-e-email', yourName: 'Bia' } })).status, 400);
 
   // descadastro: o amigo pede para não receber e ninguém mais consegue enviar
@@ -191,7 +204,9 @@ test('indicação de assinante: cada amigo que assina vale 10% na próxima fatur
   assert.equal((await x('POST', '/api/account/referrals', { body: { email: 'indicador@exemplo.com' } })).status, 422, 'não indica a si mesmo');
 
   mailbox.sent.length = 0;
-  assert.equal((await x('POST', '/api/account/referrals', { body: { email: 'Amiga1@Exemplo.com' } })).status, 204);
+  const sentInvite = await x('POST', '/api/account/referrals', { body: { email: 'Amiga1@Exemplo.com' } });
+  assert.equal(sentInvite.status, 200);
+  assert.equal(sentInvite.json.status, 'sent');
   const inv = mailbox.sent[0]!;
   assert.equal(inv.to, 'amiga1@exemplo.com');
   assert.ok(inv.html.includes(`ind=${ov.code}`));
@@ -201,7 +216,7 @@ test('indicação de assinante: cada amigo que assina vale 10% na próxima fatur
   await subscribe(y1, 'amiga1@exemplo.com', 'controle', ov.code);
   assert.equal((await x('GET', '/api/account/referrals')).json.credits.available, 1);
   assert.equal((await x('GET', '/api/account/referrals')).json.converted, 1);
-  assert.equal((await x('POST', '/api/account/referrals', { body: { email: 'amiga2@exemplo.com' } })).status, 204);
+  assert.equal((await x('POST', '/api/account/referrals', { body: { email: 'amiga2@exemplo.com' } })).json.status, 'sent');
   const y2 = client();
   await subscribe(y2, 'amiga2@exemplo.com', 'desbravador');
   const after = (await x('GET', '/api/account/referrals')).json;
@@ -238,6 +253,123 @@ test('indicação de assinante: cada amigo que assina vale 10% na próxima fatur
   assert.equal(gateway.valueOf(sub), 3999, 'acabaram os créditos: volta ao preço cheio');
   const paid = (await db.query<{ amount_cents: string }>(`SELECT p.amount_cents FROM app.payments p JOIN app.orders o ON o.id = p.order_id WHERE o.subscriber_id = $1 AND p.status = 'confirmed' ORDER BY p.created_at`, [await idOf('indicador@exemplo.com')])).rows.map((r) => Number(r.amount_cents));
   assert.deepEqual(paid, [3999, 3599, 3599]);
+});
+
+test('convite por e-mail: se o envio falha, a indicação não é gasta; se já recebeu, a tela é avisada', async () => {
+  const x = client();
+  await subLogin(x, 'indicador@exemplo.com');
+  const real = mailbox.send.bind(mailbox);
+  mailbox.send = async () => { throw new Error('Resend respondeu 500'); };
+  const fail = await x('POST', '/api/account/referrals', { body: { email: 'caiu@exemplo.com' } });
+  assert.equal(fail.status, 502);
+  assert.equal(fail.json.error, 'email_failed');
+  assert.equal((await db.query(`SELECT 1 FROM app.referrals WHERE friend_email = 'caiu@exemplo.com'`)).rows.length, 0, 'nada registrado: dá para tentar de novo agora');
+  mailbox.send = real;
+  mailbox.sent.length = 0;
+  assert.equal((await x('POST', '/api/account/referrals', { body: { email: 'caiu@exemplo.com' } })).json.status, 'sent');
+  assert.equal(mailbox.sent.length, 1);
+  mailbox.sent.length = 0;
+  assert.equal((await x('POST', '/api/account/referrals', { body: { email: 'caiu@exemplo.com' } })).json.status, 'blocked');
+  assert.equal(mailbox.sent.length, 0);
+});
+
+const brNoon = new Date('2026-10-13T15:00:00Z'); // meio-dia em Brasília
+const brNight = new Date('2026-10-14T01:00:00Z'); // 22h em Brasília (horário de silêncio)
+const readyNow = (id: string) => db.query(`UPDATE app.msg_log SET status = 'fila', provider_message_id = NULL, attempts = 0, error = NULL, send_after = now() - interval '1 minute' WHERE id = $1`, [id]);
+const signedBird = async (event: unknown, opts: { secret?: Buffer; ts?: number } = {}) => {
+  const body = JSON.stringify(event);
+  const id = `msg_${Math.random().toString(36).slice(2)}`;
+  const ts = String(opts.ts ?? Math.floor(Date.now() / 1000));
+  const sig = createHmac('sha256', opts.secret ?? BIRD_SECRET_RAW).update(`${id}.${ts}.${body}`).digest('base64');
+  const res = await app.inject({ method: 'POST', url: '/webhooks/bird', headers: { 'content-type': 'application/json', 'webhook-id': id, 'webhook-timestamp': ts, 'webhook-signature': `v1,${sig}` }, payload: body });
+  return res.statusCode;
+};
+
+test('convite por WhatsApp (Bird): fila, horário comercial, telefone protegido, status, SAIR e limites', async () => {
+  const x = client();
+  await subLogin(x, 'indicador@exemplo.com');
+  const ov = (await x('GET', '/api/account/referrals')).json;
+  assert.equal(ov.whatsappInvite, true);
+  const body = { phone: '(41) 99999-0001', friendName: 'bruno silva', confirmed: true };
+
+  assert.equal((await x('POST', '/api/account/referrals/whatsapp', { body: { ...body, confirmed: false } })).json.error, 'confirm_required', 'precisa confirmar que conhece a pessoa');
+  assert.equal((await x('POST', '/api/account/referrals/whatsapp', { body: { ...body, phone: '123' } })).status, 400);
+  assert.equal((await x('POST', '/api/account/referrals/whatsapp', { body: { ...body, phone: '(00) 12345-0000' } })).json.error, 'invalid_phone');
+
+  const ok = await x('POST', '/api/account/referrals/whatsapp', { body });
+  assert.equal(ok.status, 200);
+  assert.equal(ok.json.status, 'queued');
+  const row = (await db.query<{ id: string; phone_key: string }>(`SELECT id, phone_key FROM app.msg_log WHERE purpose = 'indicacao_prumo' ORDER BY created_at DESC LIMIT 1`)).rows[0]!;
+  const contact = (await db.query<{ phone_enc: Buffer }>(`SELECT phone_enc FROM app.msg_contacts WHERE phone_key = $1`, [row.phone_key])).rows[0]!;
+  assert.equal(Buffer.from(contact.phone_enc).includes('5541999990001'), false, 'telefone nunca em texto puro no banco');
+  assert.equal((await db.query(`SELECT 1 FROM app.referrals WHERE friend_phone_key = $1 AND channel = 'whatsapp' AND friend_name = 'Bruno'`, [row.phone_key])).rows.length, 1);
+
+  // horário de silêncio: 22h em Brasília, a mensagem espera na fila
+  await readyNow(row.id);
+  fakeBird.sent.length = 0;
+  assert.equal(await processBirdQueue(ctx(), { now: brNight }), 0);
+  assert.equal(fakeBird.sent.length, 0);
+  assert.equal((await db.query<{ status: string }>(`SELECT status FROM app.msg_log WHERE id = $1`, [row.id])).rows[0]!.status, 'fila');
+
+  // meio-dia: sai, com o nome e o link de indicação do assinante, e a Bird não duplica (chave de idempotência = id do registro)
+  await readyNow(row.id);
+  assert.equal(await processBirdQueue(ctx(), { now: brNoon }), 1);
+  const sent = fakeBird.sent[0]!;
+  assert.equal(sent.to, '+5541999990001');
+  assert.equal(sent.template, 'indicacao_prumo');
+  assert.equal(sent.params[0], 'Bruno');
+  assert.ok(sent.params[1]!.includes(`?ind=${ov.code}`));
+  assert.equal(sent.idempotencyKey, row.id);
+  assert.equal((await db.query<{ status: string }>(`SELECT status FROM app.msg_log WHERE id = $1`, [row.id])).rows[0]!.status, 'aceita');
+
+  // falha temporária: volta para a fila com espera; falha definitiva (422): marca "falhou" na hora
+  await readyNow(row.id);
+  fakeBird.failNext = new BirdError('Bird 503', 503, true);
+  assert.equal(await processBirdQueue(ctx(), { now: brNoon }), 0);
+  const retry = (await db.query<{ status: string; attempts: number }>(`SELECT status, attempts FROM app.msg_log WHERE id = $1`, [row.id])).rows[0]!;
+  assert.deepEqual([retry.status, retry.attempts], ['fila', 1]);
+  await readyNow(row.id);
+  fakeBird.failNext = new BirdError('Bird 422: número inválido', 422, false);
+  await processBirdQueue(ctx(), { now: brNoon });
+  assert.equal((await db.query<{ status: string }>(`SELECT status FROM app.msg_log WHERE id = $1`, [row.id])).rows[0]!.status, 'falhou');
+
+  // avisos da Bird: assinatura obrigatória; status só avança (um "falhou" atrasado não desfaz "entregue")
+  await readyNow(row.id);
+  await processBirdQueue(ctx(), { now: brNoon });
+  const evt = (type: string) => ({ type, timestamp: new Date().toISOString(), data: { whatsapp_id: 'x', metadata: { ref: row.id } } });
+  assert.equal(await signedBird(evt('whatsapp.delivered'), { secret: Buffer.from('outro-segredo-qualquer-0123456789') }), 401, 'assinatura errada');
+  assert.equal(await signedBird(evt('whatsapp.delivered'), { ts: Math.floor(Date.now() / 1000) - 3600 }), 401, 'aviso velho demais (repetição)');
+  assert.equal(await signedBird(evt('whatsapp.delivered')), 200);
+  assert.equal((await db.query<{ status: string }>(`SELECT status FROM app.msg_log WHERE id = $1`, [row.id])).rows[0]!.status, 'entregue');
+  assert.equal(await signedBird(evt('whatsapp.sent')), 200);
+  assert.equal(await signedBird(evt('whatsapp.failed')), 200);
+  assert.equal((await db.query<{ status: string }>(`SELECT status FROM app.msg_log WHERE id = $1`, [row.id])).rows[0]!.status, 'entregue');
+  const shown = (await x('GET', '/api/account/referrals')).json.recent.find((r: any) => r.friend === 'Bruno (WhatsApp)');
+  assert.equal(shown.delivery, 'Entregue');
+
+  // o mesmo telefone não recebe de novo (90 dias)
+  const dup = await x('POST', '/api/account/referrals/whatsapp', { body });
+  assert.deepEqual([dup.json.status, dup.json.reason], ['blocked', 'recent']);
+
+  // SAIR: nunca mais. Vale até para quem ainda está na fila.
+  const other = { phone: '41 99999-0002', friendName: 'Carla', confirmed: true };
+  assert.equal((await x('POST', '/api/account/referrals/whatsapp', { body: other })).json.status, 'queued');
+  assert.equal(await signedBird({ type: 'whatsapp.received', timestamp: new Date().toISOString(), data: { from: { phone_number: '+5541999990002' }, body: { text: { text: ' Sair ' } } } }), 200);
+  const again = await x('POST', '/api/account/referrals/whatsapp', { body: other });
+  assert.deepEqual([again.json.status, again.json.reason], ['blocked', 'optout']);
+  assert.equal((await db.query(`SELECT 1 FROM app.msg_log WHERE status = 'fila' AND phone_key = (SELECT phone_key FROM app.msg_contacts WHERE opted_out)`)).rows.length, 0, 'nada pendente para quem saiu');
+
+  // limite diário: 5 por dia (já foram Bruno e Carla)
+  for (const n of [3, 4, 5]) assert.equal((await x('POST', '/api/account/referrals/whatsapp', { body: { phone: `41 99999-000${n}`, friendName: 'Amigo', confirmed: true } })).json.status, 'queued');
+  const capped = await x('POST', '/api/account/referrals/whatsapp', { body: { phone: '41 99999-0006', friendName: 'Amigo', confirmed: true } });
+  assert.equal(capped.status, 429);
+});
+
+test('webhook da Bird: sem segredo configurado o endereço não existe', async () => {
+  const off = await buildApp({ config: { ...config, bird: null }, db, gateway, email: mailbox, rateLimits: 'relaxed' });
+  const res = await off.inject({ method: 'POST', url: '/webhooks/bird', headers: { 'content-type': 'application/json' }, payload: '{}' });
+  assert.equal(res.statusCode, 404);
+  await off.close();
 });
 
 test('backoffice: Indicações mostra os números, permite ajustar créditos com motivo e o desconto é configurável', async () => {

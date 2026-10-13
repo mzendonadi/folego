@@ -153,6 +153,7 @@ export const cpfSchema = z.string().trim().transform((v) => v.replace(/[.\-\s]/g
 export const checkoutSchema = z.object({ plan: z.enum(['controle', 'ousado', 'desbravador']), acceptTerms: z.literal(true), cpf: cpfSchema.optional(), adsConsent: z.boolean().optional(), fbc: z.string().regex(/^fb\.1\.\d{10,14}\.[A-Za-z0-9_-]{6,200}$/).optional(), name: z.string().trim().min(5).max(100).regex(/\S+\s+\S+/, 'Informe nome e sobrenome').optional(), phone: z.string().trim().transform((v) => v.replace(/\D/g, '')).refine((d) => /^\d{10,11}$/.test(d), 'Celular inválido').optional(), referralCode: z.string().trim().toLowerCase().max(40).optional() });
 export const referralLeadSchema = z.object({ friendEmail: z.string().trim().toLowerCase().email().max(200), yourName: z.string().trim().min(2).max(40) });
 export const referralInviteSchema = z.object({ email: z.string().trim().toLowerCase().email().max(200) });
+export const referralWhatsappSchema = z.object({ phone: z.string().trim().min(8).max(24), friendName: z.string().trim().min(2).max(40), confirmed: z.boolean() });
 export const creditAdjustSchema = z.object({ subscriberId: z.string().uuid(), delta: z.number().int().min(-12).max(12), reason: z.string().trim().min(3).max(200) });
 export const ebookPatchSchema = z.object({ title: z.string().trim().min(2).max(160).optional(), active: z.boolean().optional() });
 export const ebookTestSchema = z.object({ to: z.string().trim().toLowerCase().email().max(200).optional() });

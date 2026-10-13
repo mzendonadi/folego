@@ -43,6 +43,13 @@ x-api-env: &api-env
   PLUGGY_BASE_URL: ${PLUGGY_BASE_URL:-}
   # Segredo dos avisos (webhook) do agregador: 16+ caracteres. Sem ele, o endereço /webhooks/openfinance não existe.
   OPENFINANCE_WEBHOOK_SECRET: ${OPENFINANCE_WEBHOOK_SECRET:-}
+  # WhatsApp do Fôlego pela Bird (convite de indicação do Prumo). Sem BIRD_API_KEY, o envio pelo WhatsApp do Fôlego fica desligado (só o link de compartilhar).
+  BIRD_API_KEY: ${BIRD_API_KEY:-}
+  BIRD_WHATSAPP_FROM: ${BIRD_WHATSAPP_FROM:-}
+  BIRD_WEBHOOK_SECRET: ${BIRD_WEBHOOK_SECRET:-}
+  BIRD_TEMPLATE_INDICACAO: ${BIRD_TEMPLATE_INDICACAO:-}
+  BIRD_BASE_URL: ${BIRD_BASE_URL:-}
+  BIRD_TEMPLATE_LANGUAGE: ${BIRD_TEMPLATE_LANGUAGE:-}
 
 services:
   postgres:

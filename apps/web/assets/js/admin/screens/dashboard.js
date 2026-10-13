@@ -1,6 +1,6 @@
 // Dashboard: os indicadores que respondem "quantos vieram, quantos preencheram, quantos pagaram, como, e por quê não".
 import { api } from '../api.js';
-import { el, brl, int, pct, duration, card, cardOpts, kpi, kpis, grid, table, bar, columns, badge, periodSelect, EMPLOYMENT, PRODUCT, PLAN, WEEKDAY, VIEW } from '../ui.js';
+import { el, brl, int, pct, duration, card, cardOpts, kpi, kpis, grid, table, bar, columns, badge, drawer, periodSelect, EMPLOYMENT, PRODUCT, PLAN, WEEKDAY, VIEW } from '../ui.js';
 
 export async function dashboardScreen(ctx) {
   const days = ctx.state.days;
@@ -12,17 +12,60 @@ export async function dashboardScreen(ctx) {
   const sub = d.subscriptions;
   const overall = step('visitors') > 0 ? (step('paid') / step('visitors')) * 100 : null;
 
+  // ---------- detalhe de cada cartão (gaveta) ----------
+  const h3 = (t) => el('h3', {}, t);
+  const note = (t) => el('p', { class: 'muted' }, t);
+  const tr = d.traffic;
+  const p0 = d.profile;
+  const funnelTable = () => table([{ label: 'Etapa', render: (s) => s.label }, { label: 'Pessoas', align: 'right', render: (s) => int(s.count) }, { label: 'Do passo anterior', align: 'right', render: (s) => pct(s.pctOfPrev) }], steps);
+  const sourcesTable = () => table([{ label: 'Origem', render: (s) => (s.medium ? `${s.source} / ${s.medium}` : s.source) }, { label: 'Visitas', align: 'right', render: (s) => int(s.visitors) }, { label: 'Diagnósticos', align: 'right', render: (s) => int(s.cases) }, { label: 'Pagaram', align: 'right', render: (s) => int(s.paid) }, { label: 'Receita', align: 'right', render: (s) => brl(s.revenueCents) }], tr.sources, { emptyText: 'Sem visitas rastreadas ainda.' });
+  const viewsTable = () => table([{ label: 'Tela', render: (v) => VIEW[v.view] ?? v.view }, { label: 'Pessoas', align: 'right', render: (v) => int(v.sessions) }, { label: 'Aberturas', align: 'right', render: (v) => int(v.events) }], tr.views, { emptyText: 'Sem dados.' });
+  const productsTable = () => table([{ label: 'Produto', render: (x) => PRODUCT[x.code] ?? x.name }, { label: 'Vendas', align: 'right', render: (x) => int(x.units) }, { label: 'Receita', align: 'right', render: (x) => brl(x.cents) }, { label: 'Ticket', align: 'right', render: (x) => (x.units ? brl(Math.round(x.cents / x.units)) : '—') }], rev.byProduct, { emptyText: 'Nenhuma venda no período.' });
+  const methodsTable = () => table([{ label: 'Meio', render: (m) => (m.method === 'pix' ? 'Pix' : m.method === 'card' ? 'Cartão' : m.method) }, { label: 'Pagamentos', align: 'right', render: (m) => int(m.orders) }, { label: 'Valor', align: 'right', render: (m) => brl(m.cents) }], rev.byMethod, { emptyText: 'Nenhum pagamento confirmado no período.' });
+  const dayChart = () => columns(rev.byDay.map((x) => ({ label: new Date(`${x.day}T12:00:00`).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }), value: x.cents })), { label: 'Receita por dia', format: brl });
+  const plansTable = () => table([{ label: 'Plano', render: (x) => PLAN[x.plan] ?? x.plan }, { label: 'Pagando', align: 'right', render: (x) => int(x.payingCount) }, { label: 'Em débito', align: 'right', render: (x) => int(x.delinquent) }, { label: 'Receita/mês', align: 'right', render: (x) => brl(x.mrrCents) }], sub.byPlan, { emptyText: 'Sem assinantes.' });
+  const segTable = (rows, labelOf = (k) => k) => table([{ label: 'Grupo', render: (s) => labelOf(s.key) }, { label: 'Casos', align: 'right', render: (s) => int(s.cases) }, { label: 'Pagaram', align: 'right', render: (s) => int(s.paid) }, { label: 'Conversão', align: 'right', render: (s) => pct(s.conversionPct) }], rows, { emptyText: 'Sem dados.' });
+  /** Abre a gaveta; `link` leva à tela completa (só aparece se a pessoa tem a permissão). */
+  function detail(title, build, link = null) {
+    const dw = drawer(title);
+    const nodes = build().filter(Boolean);
+    if (link && ctx.can(link.perm)) {
+      const go = el('button', { class: 'btn btn-secondary btn-sm', type: 'button' }, link.label);
+      go.addEventListener('click', () => {
+        dw.close();
+        history.pushState(null, '', `/gestao/${link.route}`);
+        window.dispatchEvent(new PopStateEvent('popstate'));
+      });
+      nodes.push(el('div', { class: 'bo-actions' }, go));
+    }
+    dw.body.append(el('div', { class: 'bo-detail' }, ...nodes));
+  }
+  const period = `Período: últimos ${days === 3650 ? 'todos os' : days} ${days === 3650 ? 'registros' : 'dias'}.`;
+  const DETAILS = {
+    visitors: () => detail('Visitantes', () => [note(`${period} Quem entrou no site e o que fez.${tr.trackingSince ? ` Rastreamento desde ${new Date(tr.trackingSince).toLocaleDateString('pt-BR')}.` : ''}`), kpis(kpi('Visitantes', int(step('visitors'))), kpi('Pagaram', int(step('paid')), `${pct(overall)} dos visitantes`, 'good')), h3('Funil'), funnelTable(), h3('De onde vêm as visitas'), sourcesTable(), h3('O que as pessoas fazem no site'), viewsTable(), note(`Tempo mediano da primeira visita ao pagamento: ${duration(tr.medianSecondsToPay)}.`)], { route: 'jornada', perm: 'jornada', label: 'Abrir Jornada e funil' }),
+    diagnosed: () => detail('Diagnósticos feitos', () => [note(`${period} Perfil de quem fez o diagnóstico e quanto converte.`), kpis(kpi('Diagnósticos', int(step('diagnosed')), `${pct(steps.find((s) => s.key === 'diagnosed')?.pctOfPrev)} de quem começou`), kpi('Dívida média', brl(p0.avgDebtCents)), kpi('Com dívida em atraso', int(p0.withOverdue), p0.cases ? `${pct((p0.withOverdue / p0.cases) * 100)} dos casos` : '')), h3('Por vínculo de trabalho'), segTable(p0.byEmployment, (k) => EMPLOYMENT[k] ?? k), h3('Por faixa de renda'), segTable(p0.byIncome), h3('Por estado'), segTable(p0.byUf.slice(0, 12)), h3('Por tamanho da dívida'), segTable(p0.byDebt), h3('Tipos de dívida mais comuns'), table([{ label: 'Tipo', render: (k) => k.kind }, { label: 'Casos', align: 'right', render: (k) => int(k.cases) }], p0.debtKinds, { emptyText: 'Sem dados.' })], { route: 'jornada', perm: 'jornada', label: 'Abrir Jornada e funil' }),
+    paid: () => detail('Quem pagou', () => [note(`${period} Pagamentos confirmados.`), kpis(kpi('Pagaram', int(step('paid')), `${pct(overall)} dos visitantes`, 'good'), kpi('Receita', brl(rev.grossCents), `${int(rev.orders)} pedidos pagos`, 'good'), kpi('Conversão do diagnóstico', pct(ab.conversionPct), `${int(ab.paid)} pagaram`)), h3('O que compraram'), productsTable(), h3('Como pagaram'), methodsTable(), note(`Tempo mediano da primeira visita ao pagamento: ${duration(tr.medianSecondsToPay)}.`)], { route: 'clientes', perm: 'clientes', label: 'Abrir Clientes' }),
+    revenue: () => detail('Receita', () => [note(`${period} Soma dos pedidos pagos.`), kpis(kpi('Receita', brl(rev.grossCents), `${int(rev.orders)} pedidos pagos`, 'good'), kpi('Ticket médio', brl(rev.avgTicketCents))), h3('Por dia'), dayChart(), h3('Por produto'), productsTable(), h3('Por meio de pagamento'), methodsTable()], { route: 'clientes', perm: 'clientes', label: 'Abrir Clientes' }),
+    ticket: () => detail('Ticket médio', () => [note(`${period} Receita dividida pelos pedidos pagos; abaixo, o ticket de cada produto.`), kpis(kpi('Ticket médio', brl(rev.avgTicketCents)), kpi('Pedidos pagos', int(rev.orders)), kpi('Receita', brl(rev.grossCents))), h3('Por produto'), productsTable()]),
+    mrr: () => detail('Receita recorrente (mês)', () => [note('Soma das mensalidades de quem está pagando hoje.'), kpis(kpi('Receita recorrente (mês)', brl(sub.mrrCents), `${int(sub.payingCount)} assinantes pagando`), kpi('Vencendo em 7 dias', int(sub.expiringSoon), brl(sub.mrrAtRiskCents), sub.expiringSoon ? 'warn' : ''), kpi('Em débito', int(sub.delinquent), sub.delinquent ? `${brl(sub.lostMrrCents)}/mês parados` : 'nenhuma', sub.delinquent ? 'bad' : '')), h3('Por plano'), plansTable()], { route: 'assinaturas', perm: 'assinaturas', label: 'Abrir Assinaturas' }),
+    subs: () => detail('Assinaturas', () => [note(`${period} Situação das assinaturas do Prumo.`), kpis(kpi('Em dia', int(sub.upToDate)), kpi('Vencendo em 7 dias', int(sub.expiringSoon), brl(sub.mrrAtRiskCents), sub.expiringSoon ? 'warn' : ''), kpi('Não vão renovar', int(sub.cancelling)), kpi('Em débito', int(sub.delinquent), '', sub.delinquent ? 'bad' : ''), kpi('Renovação', pct(sub.renewalRatePct), 'quem já pagou 2+ vezes'), kpi('Novos no período', int(sub.newSubscribers))), h3('Por plano'), plansTable()], { route: 'assinaturas', perm: 'assinaturas', label: 'Abrir Assinaturas' }),
+    abandon: () => detail('Preencheram e não pagaram', () => [note(`${period} Quem fez o diagnóstico e não comprou.`), kpis(kpi('Não pagaram', int(ab.filledNotPaid)), kpi('Só viram o resultado', int(ab.neverOpenedCheckout), 'nem abriram o pagamento'), kpi('Abriram o Pix e desistiram', int(ab.abandonedCheckout)), kpi('Conversão do diagnóstico', pct(ab.conversionPct), `${int(ab.paid)} pagaram`)), rev.unpaidOrders && Object.keys(rev.unpaidOrders).length ? el('p', {}, `Pedidos não pagos no período: ${Object.entries(rev.unpaidOrders).map(([k, v]) => `${v} ${k}`).join(', ')}.`) : null, h3('Perfil de quem não paga'), segTable(p0.byIncome), note('As hipóteses para melhorar a conversão estão em Marketing → Insights.')], { route: 'marketing', perm: 'marketing', label: 'Abrir Marketing' }),
+    profile: () => detail('Perfil dos clientes', () => [note(`${period} Quem são as pessoas que fazem o diagnóstico.`), kpis(kpi('Diagnósticos', int(p0.cases)), kpi('Dívida total informada', brl(p0.totalDebtCents)), kpi('Dívida média', brl(p0.avgDebtCents)), kpi('Com dívida em atraso', int(p0.withOverdue), p0.cases ? `${pct((p0.withOverdue / p0.cases) * 100)} dos casos` : '')), h3('Por vínculo de trabalho'), segTable(p0.byEmployment, (k) => EMPLOYMENT[k] ?? k), h3('Por faixa de renda'), segTable(p0.byIncome), h3('Por faixa etária'), segTable(p0.byAge), h3('Por estado'), segTable(p0.byUf.slice(0, 12)), h3('Por tamanho da dívida'), segTable(p0.byDebt)]),
+    ai: () => detail('Uso de IA', () => [note(`${period} Quantos textos a IA escreveu e quanto ela consumiu.`), kpis(kpi('Escritas pela IA', int(d.ai.ai)), kpi('Pelo modelo fixo', int(d.ai.template)), kpi('Tokens de entrada', int(d.ai.inputTokens)), kpi('Tokens de saída', int(d.ai.outputTokens))), note('Compare os tokens com o custo da sua conta Anthropic para saber quanto a IA custa por entrega.')]),
+  };
+  const open = (key) => () => DETAILS[key]();
+
   const head = el('div', { class: 'bo-toolbar' }, el('p', { class: 'muted' }, `Período: últimos ${days === 3650 ? 'todos os' : days} ${days === 3650 ? 'registros' : 'dias'}. Atualizado às ${new Date(d.generatedAt).toLocaleTimeString('pt-BR')}.`), periodSelect(days, (v) => ctx.setDays(v)));
 
   const top = kpis(
-    kpi('Visitantes', int(step('visitors')), d.traffic.trackingSince ? `desde ${new Date(d.traffic.trackingSince).toLocaleDateString('pt-BR')}` : 'rastreamento novo'),
-    kpi('Diagnósticos feitos', int(step('diagnosed')), `${pct(steps.find((s) => s.key === 'diagnosed')?.pctOfPrev)} de quem começou`),
-    kpi('Pagaram', int(step('paid')), `${pct(overall)} dos visitantes`, 'good'),
-    kpi('Receita', brl(rev.grossCents), `${int(rev.orders)} pedidos pagos`, 'good'),
-    kpi('Ticket médio', brl(rev.avgTicketCents)),
-    kpi('Receita recorrente (mês)', brl(sub.mrrCents), `${int(sub.payingCount)} assinantes pagando`),
-    kpi('Assinaturas em débito', int(sub.delinquent), sub.delinquent ? `${brl(sub.lostMrrCents)}/mês parados` : 'nenhuma', sub.delinquent ? 'bad' : ''),
-    kpi('Preencheram e não pagaram', int(ab.filledNotPaid), `${int(ab.abandonedCheckout)} abriram o Pix`, ab.filledNotPaid ? 'warn' : ''),
+    kpi('Visitantes', int(step('visitors')), d.traffic.trackingSince ? `desde ${new Date(d.traffic.trackingSince).toLocaleDateString('pt-BR')}` : 'rastreamento novo', '', open('visitors')),
+    kpi('Diagnósticos feitos', int(step('diagnosed')), `${pct(steps.find((s) => s.key === 'diagnosed')?.pctOfPrev)} de quem começou`, '', open('diagnosed')),
+    kpi('Pagaram', int(step('paid')), `${pct(overall)} dos visitantes`, 'good', open('paid')),
+    kpi('Receita', brl(rev.grossCents), `${int(rev.orders)} pedidos pagos`, 'good', open('revenue')),
+    kpi('Ticket médio', brl(rev.avgTicketCents), null, '', open('ticket')),
+    kpi('Receita recorrente (mês)', brl(sub.mrrCents), `${int(sub.payingCount)} assinantes pagando`, '', open('mrr')),
+    kpi('Assinaturas em débito', int(sub.delinquent), sub.delinquent ? `${brl(sub.lostMrrCents)}/mês parados` : 'nenhuma', sub.delinquent ? 'bad' : '', open('subs')),
+    kpi('Preencheram e não pagaram', int(ab.filledNotPaid), `${int(ab.abandonedCheckout)} abriram o Pix`, ab.filledNotPaid ? 'warn' : '', open('abandon')),
   );
 
   const funnel = card(
@@ -43,7 +86,7 @@ export async function dashboardScreen(ctx) {
 
   const aband = card(
     'Preencheram e não quiseram pagar',
-    kpis(kpi('Não pagaram', int(ab.filledNotPaid)), kpi('Só viram o resultado', int(ab.neverOpenedCheckout), 'nem abriram o pagamento'), kpi('Abriram o Pix e desistiram', int(ab.abandonedCheckout)), kpi('Conversão do diagnóstico', pct(ab.conversionPct), `${int(ab.paid)} pagaram`)),
+    kpis(kpi('Não pagaram', int(ab.filledNotPaid), null, '', open('abandon')), kpi('Só viram o resultado', int(ab.neverOpenedCheckout), 'nem abriram o pagamento', '', open('abandon')), kpi('Abriram o Pix e desistiram', int(ab.abandonedCheckout), null, '', open('abandon')), kpi('Conversão do diagnóstico', pct(ab.conversionPct), `${int(ab.paid)} pagaram`, '', open('paid'))),
     el('p', { class: 'muted' }, 'Veja o perfil de quem não paga em "Perfil dos clientes" e as hipóteses em Marketing → Insights.'),
     rev.unpaidOrders && Object.keys(rev.unpaidOrders).length ? el('p', { class: 'fine' }, `Pedidos não pagos no período: ${Object.entries(rev.unpaidOrders).map(([k, v]) => `${v} ${k}`).join(', ')}.`) : null,
   );
@@ -82,7 +125,7 @@ export async function dashboardScreen(ctx) {
 
   const subs = card(
     'Assinaturas',
-    kpis(kpi('Em dia', int(sub.upToDate)), kpi('Vencendo em 7 dias', int(sub.expiringSoon), brl(sub.mrrAtRiskCents), sub.expiringSoon ? 'warn' : ''), kpi('Não vão renovar', int(sub.cancelling)), kpi('Em débito', int(sub.delinquent), '', sub.delinquent ? 'bad' : ''), kpi('Renovação', pct(sub.renewalRatePct), 'quem já pagou 2+ vezes'), kpi('Novos no período', int(sub.newSubscribers))),
+    kpis(kpi('Em dia', int(sub.upToDate), null, '', open('subs')), kpi('Vencendo em 7 dias', int(sub.expiringSoon), brl(sub.mrrAtRiskCents), sub.expiringSoon ? 'warn' : '', open('subs')), kpi('Não vão renovar', int(sub.cancelling), null, '', open('subs')), kpi('Em débito', int(sub.delinquent), '', sub.delinquent ? 'bad' : '', open('subs')), kpi('Renovação', pct(sub.renewalRatePct), 'quem já pagou 2+ vezes', '', open('subs')), kpi('Novos no período', int(sub.newSubscribers), null, '', open('subs'))),
     table(
       [{ label: 'Plano', render: (p) => PLAN[p.plan] ?? p.plan }, { label: 'Pagando', align: 'right', render: (p) => int(p.payingCount) }, { label: 'Em débito', align: 'right', render: (p) => int(p.delinquent) }, { label: 'Receita/mês', align: 'right', render: (p) => brl(p.mrrCents) }],
       sub.byPlan,
@@ -101,7 +144,7 @@ export async function dashboardScreen(ctx) {
   const p = d.profile;
   const profile = el(
     'div', { class: 'bo-stack' },
-    card('Perfil dos clientes', kpis(kpi('Diagnósticos', int(p.cases)), kpi('Dívida total informada', brl(p.totalDebtCents)), kpi('Dívida média', brl(p.avgDebtCents)), kpi('Com dívida em atraso', int(p.withOverdue), p.cases ? `${pct((p.withOverdue / p.cases) * 100)} dos casos` : ''))),
+    card('Perfil dos clientes', kpis(kpi('Diagnósticos', int(p.cases), null, '', open('profile')), kpi('Dívida total informada', brl(p.totalDebtCents), null, '', open('profile')), kpi('Dívida média', brl(p.avgDebtCents), null, '', open('profile')), kpi('Com dívida em atraso', int(p.withOverdue), p.cases ? `${pct((p.withOverdue / p.cases) * 100)} dos casos` : '', '', open('profile')))),
     grid(2, seg('Por vínculo de trabalho', p.byEmployment, (k) => EMPLOYMENT[k] ?? k), seg('Por faixa de renda', p.byIncome), seg('Por estado', p.byUf.slice(0, 12)), seg('Por faixa etária', p.byAge), seg('Por tamanho da dívida', p.byDebt), card('Tipos de dívida mais comuns', table([{ label: 'Tipo', render: (k) => k.kind }, { label: 'Casos', align: 'right', render: (k) => int(k.cases) }], p.debtKinds, { emptyText: 'Sem dados.' }))),
   );
 
@@ -131,7 +174,7 @@ export async function dashboardScreen(ctx) {
     card('Dia da semana', el('ul', { class: 'bo-list' }, ...rev.weekdays.map((w) => el('li', {}, el('span', {}, WEEKDAY[w.weekday]), bar(w.orders, Math.max(...rev.weekdays.map((x) => x.orders), 1)), el('strong', {}, int(w.orders)))))),
   );
 
-  const ai = card('Uso de IA', kpis(kpi('Escritas pela IA', int(d.ai.ai)), kpi('Pelo modelo fixo', int(d.ai.template)), kpi('Tokens de entrada', int(d.ai.inputTokens)), kpi('Tokens de saída', int(d.ai.outputTokens))), el('p', { class: 'fine' }, 'Compare os tokens com o custo da sua conta Anthropic para saber quanto a IA custa por entrega.'));
+  const ai = card('Uso de IA', kpis(kpi('Escritas pela IA', int(d.ai.ai), null, '', open('ai')), kpi('Pelo modelo fixo', int(d.ai.template), null, '', open('ai')), kpi('Tokens de entrada', int(d.ai.inputTokens), null, '', open('ai')), kpi('Tokens de saída', int(d.ai.outputTokens), null, '', open('ai'))), el('p', { class: 'fine' }, 'Compare os tokens com o custo da sua conta Anthropic para saber quanto a IA custa por entrega.'));
 
   return el('div', { class: 'bo-stack' }, head, top, grid(2, funnel, aband), byDay, grid(2, products, methods), subs, profile, traffic, timing, ai, saudeCard(saude));
 }
