@@ -70,6 +70,10 @@ const firstName = (name: string | null | undefined, email = '') => {
   return clean ? clean.charAt(0).toUpperCase() + clean.slice(1).toLowerCase() : '';
 };
 
+/** Nome completo limpo e com iniciais maiúsculas ("bruno  silva" vira "Bruno Silva"), para o modelo do WhatsApp. */
+const fullName = (raw: string | null | undefined): string =>
+  (raw ?? '').replace(/[^\p{L}\s'-]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 40).split(' ').map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w)).join(' ');
+
 async function suppressed(ctx: Ctx, friendEmail: string): Promise<boolean> {
   const o = await ctx.db.query(`SELECT 1 FROM app.referral_optout WHERE email_hash = $1`, [emailHash(friendEmail)]);
   if (o.rows.length > 0) return true;
@@ -191,8 +195,8 @@ export async function inviteBySubscriberWhatsApp(ctx: Ctx, subscriberId: string,
   if (!args.confirmed) throw new AppError(422, 'confirm_required', 'Confirme que a pessoa conhece você e vai gostar de receber o convite.');
   const digits = waPhone(args.phone);
   if (!digits) throw new AppError(422, 'invalid_phone', 'Digite o telefone com DDD, por exemplo (41) 99999-0000.');
-  const friendName = firstName(args.friendName);
-  if (!friendName) throw new AppError(422, 'name_required', 'Digite o primeiro nome do seu amigo.');
+  const friendName = fullName(args.friendName);
+  if (friendName.length < 2) throw new AppError(422, 'name_required', 'Digite o nome do seu amigo.');
   const total = await ctx.db.query<{ n: string; today: string }>(
     `SELECT count(*)::text AS n, count(*) FILTER (WHERE created_at > now() - interval '24 hours')::text AS today FROM app.referrals WHERE referrer_subscriber_id = $1 AND channel = 'whatsapp'`,
     [subscriberId],
@@ -210,7 +214,7 @@ export async function inviteBySubscriberWhatsApp(ctx: Ctx, subscriberId: string,
     `INSERT INTO app.referrals(kind, referrer_subscriber_id, referrer_name, channel, friend_phone_key, friend_name) VALUES ('subscriber',$1,$2,'whatsapp',$3,$4) RETURNING id`,
     [subscriberId, firstName(me.rows[0]?.display_name, me.rows[0]?.email), key, friendName],
   );
-  const queued = await queueInvite(ctx, { subscriberId, referralId: ins.rows[0]!.id, e164digits: digits, friendName, link: `${ctx.config.publicUrl}/conta?ind=${code}` });
+  const queued = await queueInvite(ctx, { subscriberId, referralId: ins.rows[0]!.id, e164digits: digits, subscriberName: fullName(me.rows[0]?.display_name) || firstName(null, me.rows[0]?.email), friendName, code });
   if (!queued) {
     await ctx.db.query(`DELETE FROM app.referrals WHERE id = $1`, [ins.rows[0]!.id]);
     return { status: 'blocked', reason: 'optout' };

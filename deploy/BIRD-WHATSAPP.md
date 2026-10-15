@@ -15,7 +15,15 @@ Em **Minha conta > Indique e ganhe**, o botão **Convidar por WhatsApp** abre um
 
 O segundo botão só aparece quando as chaves da Bird estão configuradas.
 
-## Texto do modelo (para criar na Bird)
+## Modelo APROVADO (vale este)
+
+Nome na Bird: **Fôlego Indicação Prumo** (o sistema usa o identificador `folego-indicacao-prumo`; se o identificador real na Bird for outro, cadastre-o no segredo `BIRD_TEMPLATE_INDICACAO`). Variáveis nomeadas: `nome_do_assinante` (ex.: José Pereira), `nome_da_indicacao` (ex.: Carlos Alberto), `codigo` (código do link de acesso, ex.: abc23xyz; a Bird encurta o link em `brd5.us`). Rodapé: "Para não receber mais, responda SAIR."
+
+Texto: "Olá, {nome_da_indicacao}! Seu amigo, {nome_do_assinante} é cliente do Prumo, o app de finanças do Fôlego, e está gostando tanto que lembrou de você. O Prumo reúne em um só lugar o controle de gastos, as dívidas com plano de quitação, lembretes de contas e um coach que mostra, todo dia, o próximo passo. Você acompanha o dinheiro com calma e vê o progresso mês a mês. Por isso, gostaria de compartilhar com você o acesso à plataforma para que você conhecer melhor a solução. Se quiser saber mais, acesse: {link} Abraços!"
+
+A versão inicial abaixo foi reprovada e ficou só como histórico.
+
+## Texto do modelo inicial (reprovado)
 
 Nome (slug): `indicacao_prumo` · Idioma: Português (Brasil), `pt-BR` · Categoria: **Marketing** (convite promocional; "Utilidade" seria reprovado).
 

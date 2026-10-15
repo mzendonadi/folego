@@ -27,7 +27,7 @@ const config = {
   webhookSecret: 'segredo-de-teste',
   subscriptionsEnabled: true,
   adminEmails: ['dono@exemplo.com'],
-  bird: { apiKey: 'bk_test_0123456789012345', from: '+5511913792370', baseUrl: 'http://bird.invalid', template: 'indicacao_prumo', language: 'pt-BR', webhookSecret: `whsec_${BIRD_SECRET_RAW.toString('base64')}` },
+  bird: { apiKey: 'bk_test_0123456789012345', from: '+5511913792370', baseUrl: 'http://bird.invalid', template: 'folego-indicacao-prumo', language: 'pt-BR', webhookSecret: `whsec_${BIRD_SECRET_RAW.toString('base64')}` },
 };
 const ctx = () => ({ db, config, gateway, email: mailbox, bird: fakeBird });
 
@@ -302,7 +302,7 @@ test('convite por WhatsApp (Bird): fila, horário comercial, telefone protegido,
   const row = (await db.query<{ id: string; phone_key: string }>(`SELECT id, phone_key FROM app.msg_log WHERE purpose = 'indicacao_prumo' ORDER BY created_at DESC LIMIT 1`)).rows[0]!;
   const contact = (await db.query<{ phone_enc: Buffer }>(`SELECT phone_enc FROM app.msg_contacts WHERE phone_key = $1`, [row.phone_key])).rows[0]!;
   assert.equal(Buffer.from(contact.phone_enc).includes('5541999990001'), false, 'telefone nunca em texto puro no banco');
-  assert.equal((await db.query(`SELECT 1 FROM app.referrals WHERE friend_phone_key = $1 AND channel = 'whatsapp' AND friend_name = 'Bruno'`, [row.phone_key])).rows.length, 1);
+  assert.equal((await db.query(`SELECT 1 FROM app.referrals WHERE friend_phone_key = $1 AND channel = 'whatsapp' AND friend_name = 'Bruno Silva'`, [row.phone_key])).rows.length, 1);
 
   // horário de silêncio: 22h em Brasília, a mensagem espera na fila
   await readyNow(row.id);
@@ -316,9 +316,11 @@ test('convite por WhatsApp (Bird): fila, horário comercial, telefone protegido,
   assert.equal(await processBirdQueue(ctx(), { now: brNoon }), 1);
   const sent = fakeBird.sent[0]!;
   assert.equal(sent.to, '+5541999990001');
-  assert.equal(sent.template, 'indicacao_prumo');
-  assert.equal(sent.params[0], 'Bruno');
-  assert.ok(sent.params[1]!.includes(`?ind=${ov.code}`));
+  assert.equal(sent.template, 'folego-indicacao-prumo');
+  assert.equal(sent.params.nome_da_indicacao, 'Bruno Silva');
+  assert.equal(sent.params.codigo, ov.code);
+  assert.ok(sent.params.nome_do_assinante && sent.params.nome_do_assinante.length > 1);
+  assert.deepEqual(Object.keys(sent.params).sort(), ['codigo', 'nome_da_indicacao', 'nome_do_assinante']);
   assert.equal(sent.idempotencyKey, row.id);
   assert.equal((await db.query<{ status: string }>(`SELECT status FROM app.msg_log WHERE id = $1`, [row.id])).rows[0]!.status, 'aceita');
 
@@ -344,7 +346,7 @@ test('convite por WhatsApp (Bird): fila, horário comercial, telefone protegido,
   assert.equal(await signedBird(evt('whatsapp.sent')), 200);
   assert.equal(await signedBird(evt('whatsapp.failed')), 200);
   assert.equal((await db.query<{ status: string }>(`SELECT status FROM app.msg_log WHERE id = $1`, [row.id])).rows[0]!.status, 'entregue');
-  const shown = (await x('GET', '/api/account/referrals')).json.recent.find((r: any) => r.friend === 'Bruno (WhatsApp)');
+  const shown = (await x('GET', '/api/account/referrals')).json.recent.find((r: any) => r.friend === 'Bruno Silva (WhatsApp)');
   assert.equal(shown.delivery, 'Entregue');
 
   // o mesmo telefone não recebe de novo (90 dias)

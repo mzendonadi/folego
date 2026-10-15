@@ -62,9 +62,9 @@ export function openFriendDialog({ title, intro, askName = false, note, submitLa
   (name ?? email).focus();
 }
 
-/** Texto do convite (o mesmo do modelo aprovado no WhatsApp do Fôlego; no seu próprio WhatsApp a pessoa pode editar antes de enviar). */
+/** Texto do convite pelo WhatsApp do próprio assinante (ele pode editar antes de enviar). O do WhatsApp do Fôlego é o modelo aprovado na Bird, com o nome do assinante. */
 export const whatsappInviteText = (friendName, link) =>
-  `Olá, ${friendName}! Sou assinante do Prumo e com ele tenho reorganizado minhas finanças, atingindo minhas metas com o planejador e estou gostando da experiência. Por isso, gostaria de compartilhar com você o acesso à plataforma para conhecer melhor a solução. Se quiser saber mais, acesse: ${link} Abraços!`;
+  `Olá, ${friendName}!\n\nSou cliente do Prumo, o app de finanças do Fôlego, e estou gostando tanto que lembrei de você.\n\nO Prumo reúne em um só lugar o controle de gastos, as dívidas com plano de quitação, lembretes de contas e um coach que mostra, todo dia, o próximo passo. Você acompanha o dinheiro com calma e vê o progresso mês a mês.\n\nPor isso, gostaria de compartilhar com você o acesso à plataforma para você conhecer melhor a solução.\n\nSe quiser saber mais, acesse: ${link}\n\nAbraços!`;
 
 const onlyDigits = (s) => String(s ?? '').replace(/\D/g, '');
 
@@ -88,7 +88,7 @@ export function openWhatsAppDialog({ link, officialEnabled, onSubmit, onSent = (
   const cancel = el('button', { class: 'btn btn-quiet', type: 'button' }, 'Agora não');
   const form = el(
     'form', { class: 'tool-form', novalidate: true },
-    el('div', { class: 'field' }, el('label', { class: 'label', for: 'rw-nome' }, 'Primeiro nome do seu amigo'), name),
+    el('div', { class: 'field' }, el('label', { class: 'label', for: 'rw-nome' }, 'Nome do seu amigo'), name),
     el('div', { class: 'field' }, el('label', { class: 'label', for: 'rw-fone' }, 'WhatsApp do seu amigo (com DDD)'), phone),
     el('div', { class: 'field' }, el('span', { class: 'label' }, 'Mensagem'), preview),
     officialEnabled

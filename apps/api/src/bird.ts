@@ -20,8 +20,8 @@ export interface BirdSend {
   to: string;
   template: string;
   language: string;
-  /** Valores de {{1}}, {{2}}… na ordem. */
-  params: string[];
+  /** Variáveis nomeadas do modelo (nome_do_assinante, nome_da_indicacao, codigo). */
+  params: Record<string, string>;
   /** Mesma chave = mesma mensagem: se a resposta se perder e o envio for repetido, a Bird não duplica. */
   idempotencyKey: string;
   /** Devolvido pela Bird nos avisos de status: é como achamos o registro. */
@@ -64,7 +64,7 @@ export class HttpBird implements BirdTransport {
         body: JSON.stringify({
           from: this.cfg.from,
           to: m.to,
-          template: { slug: m.template, language: m.language, components: [{ type: 'body', parameters: m.params.map((text) => ({ type: 'text', text })) }] },
+          template: { slug: m.template, language: m.language, components: [{ type: 'body', parameters: Object.entries(m.params).map(([name, text]) => ({ type: 'text', name, text })) }] },
           tags: [{ name: 'purpose', value: m.purpose }],
           metadata: { ref: m.ref },
         }),
@@ -132,7 +132,7 @@ export function nextSendTime(now = new Date()): Date {
   return t;
 }
 
-export interface QueueInvite { subscriberId: string; referralId: string; e164digits: string; friendName: string; link: string }
+export interface QueueInvite { subscriberId: string; referralId: string; e164digits: string; subscriberName: string; friendName: string; code: string }
 
 /** Põe o convite na fila. Quem pediu para não receber (SAIR) não entra: devolve null. */
 export async function queueInvite(ctx: Ctx, a: QueueInvite): Promise<string | null> {
@@ -141,7 +141,7 @@ export async function queueInvite(ctx: Ctx, a: QueueInvite): Promise<string | nu
   const tpl = birdTemplate(ctx);
   const r = await ctx.db.query<{ id: string }>(
     `INSERT INTO app.msg_log(direction, purpose, phone_key, subscriber_id, referral_id, template_slug, params_enc, status, send_after) VALUES ('out','indicacao_prumo',$1,$2,$3,$4,$5,'fila',$6) RETURNING id`,
-    [c.key, a.subscriberId, a.referralId, tpl.slug, encryptText(ctx.config.secret, JSON.stringify([a.friendName, a.link])), nextSendTime()],
+    [c.key, a.subscriberId, a.referralId, tpl.slug, encryptText(ctx.config.secret, JSON.stringify({ nome_do_assinante: a.subscriberName, nome_da_indicacao: a.friendName, codigo: a.code })), nextSendTime()],
   );
   return r.rows[0]!.id;
 }
@@ -174,7 +174,7 @@ export async function processBirdQueue(ctx: Ctx, opts: { log?: (e: Record<string
       continue;
     }
     try {
-      const params = m.params_enc ? (JSON.parse(decryptText(ctx.config.secret, m.params_enc)) as string[]) : [];
+      const params = m.params_enc ? (JSON.parse(decryptText(ctx.config.secret, m.params_enc)) as Record<string, string>) : {};
       const out = await bird.send({ to: `+${decryptText(ctx.config.secret, c.phone_enc)}`, template: m.template_slug, language: lang, params, idempotencyKey: m.id, ref: m.id, purpose: m.purpose });
       await ctx.db.query(`UPDATE app.msg_log SET status = 'aceita', provider_message_id = $2, error = NULL WHERE id = $1`, [m.id, out.messageId]);
       ok += 1;
