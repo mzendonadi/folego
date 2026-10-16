@@ -34,7 +34,29 @@ const qs = (o = {}) => {
   return s ? `?${s}` : '';
 };
 
+// WhatsApp do Fôlego (caixa de entrada): chamadas JSON, envio de arquivo cru e download de mídia, todas em /api/gestao/wa.
+const wa = {
+  call: (method, path, body) => call(method, `/wa${path}`, body),
+  async upload(blob, { mime, filename, purpose }) {
+    const res = await fetch('/api/gestao/wa/media', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'x-folego': '1', 'content-type': 'application/octet-stream', 'x-mime': mime, 'x-filename': encodeURIComponent(filename ?? ''), ...(purpose ? { 'x-purpose': purpose } : {}) },
+      body: blob,
+    });
+    const json = await res.json().catch(() => null);
+    if (!res.ok) throw new ApiError(json?.message ?? (res.status === 413 ? 'O arquivo passa de 16 MB.' : `Não foi possível enviar o arquivo (erro ${res.status}).`), res.status, json?.error);
+    return json;
+  },
+  async blob(path) {
+    const res = await fetch(`/api/gestao/wa${path}`, { credentials: 'same-origin', headers: { 'x-folego': '1' } });
+    if (!res.ok) throw new ApiError('Não foi possível abrir o arquivo.', res.status);
+    return res.blob();
+  },
+};
+
 export const api = {
+  wa,
   loginPassword: (email, password) => call('POST', '/login-password', { email, password }),
   setupCode: (email) => call('POST', '/setup-code', { email }),
   setup: (email, code, password) => call('POST', '/setup', { email, code, password }),

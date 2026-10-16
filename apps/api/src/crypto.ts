@@ -34,6 +34,20 @@ export function decryptText(secret: string, data: Buffer): string {
   return Buffer.concat([decipher.update(data.subarray(28)), decipher.final()]).toString('utf8');
 }
 
+/** Mesma cifra do texto, para arquivos (fotos, áudios, documentos das conversas de WhatsApp). */
+export function encryptBytes(secret: string, plain: Buffer): Buffer {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', dataKey(secret), iv);
+  const body = Buffer.concat([cipher.update(plain), cipher.final()]);
+  return Buffer.concat([iv, cipher.getAuthTag(), body]);
+}
+
+export function decryptBytes(secret: string, data: Buffer): Buffer {
+  const decipher = createDecipheriv('aes-256-gcm', dataKey(secret), data.subarray(0, 12));
+  decipher.setAuthTag(data.subarray(12, 28));
+  return Buffer.concat([decipher.update(data.subarray(28)), decipher.final()]);
+}
+
 // Senha de usuário de parceiro: scrypt com sal por usuário.
 export function hashPassword(password: string): string {
   const salt = randomBytes(16);

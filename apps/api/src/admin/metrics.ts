@@ -337,7 +337,7 @@ export async function partnerships(ctx: Ctx, days: number) {
   );
   const interviews = await one(ctx, `SELECT count(*) AS n, count(*) FILTER (WHERE hours_band IN ('10_20h','mais_20h')) AS committed FROM app.income_interviews WHERE created_at >= ${from}`, [days]);
   const deliveries = await rows<{ status: string; n: string; cents: string }>(ctx, `SELECT status, count(*) AS n, coalesce(sum(price_cents),0) AS cents FROM app.lead_deliveries GROUP BY 1`);
-  const partners = num((await one(ctx, `SELECT count(*) AS n FROM app.partners`)).n);
+  const partners = num((await one(ctx, `SELECT count(*) AS n FROM app.partners WHERE NOT internal`)).n);
   return {
     consentedCases,
     consentedByCategory: consented.map((c) => ({ category: c.category, count: num(c.n) })),

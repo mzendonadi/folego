@@ -6,6 +6,8 @@
 //  - o agente de IA é só uma interface (SalesAgent): desligado por padrão, com limite por hora e passagem para humano.
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { decryptText, encryptText, hmac } from './crypto.ts';
+import { BirdWaTransport } from './wa-bird.ts';
+import { loadMedia, previewOf, signedMediaUrl, storeMedia } from './wa-media.ts';
 import { AppError } from './errors.ts';
 import type { Ctx } from './services.ts';
 import { audit, num, todaySaoPaulo } from './services.ts';
@@ -35,8 +37,11 @@ export function phoneKey(secret: string, partnerId: string, e164: string): strin
 // ---------------------------------------------------------------------------------------------------------------------
 // Transporte (Meta). Em testes entra um falso por Ctx.whatsapp.
 // ---------------------------------------------------------------------------------------------------------------------
-export interface WaCredentials { phoneNumberId: string; token: string }
-export interface WaTemplateCall { name: string; language: string; params: string[] }
+/** `ref`: id interno da mensagem; a Bird o devolve nos avisos de status (metadata.ref) e é assim que achamos a mensagem. */
+export interface WaCredentials { phoneNumberId: string; token: string; provider?: 'meta' | 'bird'; appId?: string | null; ref?: string }
+export interface WaTemplateCall { name: string; language: string; params: string[]; paramNames?: string[] | null }
+export interface MediaSend { kind: 'image' | 'audio' | 'document' | 'video'; mime: string; filename: string | null; caption: string; bytes: Buffer; publicUrl: string; voice: boolean }
+export interface BusinessProfile { about: string; description: string; email: string; websites: string[]; address: string; vertical: string; photoUrl: string | null }
 
 export class WaError extends Error {
   readonly status: number;
@@ -55,6 +60,19 @@ export interface WaTransport {
   sendText(cred: WaCredentials, to: string, text: string): Promise<{ id: string }>;
   sendTemplate(cred: WaCredentials, to: string, tpl: WaTemplateCall): Promise<{ id: string }>;
   profile(cred: WaCredentials): Promise<{ displayPhone: string | null; verifiedName: string | null }>;
+  /** Foto, áudio, documento ou vídeo. A Meta recebe o arquivo (upload); a Bird busca em `publicUrl`. */
+  sendMedia?(cred: WaCredentials, to: string, m: MediaSend): Promise<{ id: string }>;
+  /** Baixa uma mídia recebida (por id na Meta; por endereço na Bird). */
+  downloadMedia?(cred: WaCredentials, ref: { id?: string; url?: string }): Promise<{ bytes: Buffer; mime: string }>;
+  getBusinessProfile?(cred: WaCredentials): Promise<BusinessProfile>;
+  updateBusinessProfile?(cred: WaCredentials, p: Partial<Omit<BusinessProfile, 'photoUrl'>>): Promise<void>;
+  setBusinessPhoto?(cred: WaCredentials, bytes: Buffer, mime: string): Promise<void>;
+}
+
+/** Chama o método opcional do transporte ou explica que este número não tem o recurso. */
+export function need<T>(fn: T | undefined, what: string): T {
+  if (!fn) throw new WaError(`Este número não permite ${what}.`, 422, null);
+  return fn;
 }
 
 export class CloudTransport implements WaTransport {
@@ -95,6 +113,64 @@ export class CloudTransport implements WaTransport {
     const j = await this.call(cred, `${cred.phoneNumberId}?fields=display_phone_number,verified_name`, { method: 'GET' });
     return { displayPhone: (j.display_phone_number as string | undefined) ?? null, verifiedName: (j.verified_name as string | undefined) ?? null };
   }
+
+  private async form(cred: WaCredentials, path: string, body: FormData): Promise<Record<string, unknown>> {
+    let res: Response;
+    try {
+      res = await this.fetchFn(`${GRAPH}/${path}`, { method: 'POST', headers: { authorization: `Bearer ${cred.token}` }, body, signal: AbortSignal.timeout(60_000) });
+    } catch (e) {
+      throw new WaError(`Sem resposta da Meta: ${e instanceof Error ? e.message.slice(0, 80) : 'rede'}`, 0, null);
+    }
+    const json = (await res.json().catch(() => ({}))) as { error?: { message?: string; code?: number; error_data?: { details?: string } } } & Record<string, unknown>;
+    if (!res.ok) throw new WaError(json.error?.error_data?.details ?? json.error?.message ?? `Erro ${res.status} da Meta`, res.status, json.error?.code ?? null);
+    return json;
+  }
+
+  async sendMedia(cred: WaCredentials, to: string, m: MediaSend): Promise<{ id: string }> {
+    const fd = new FormData();
+    fd.append('messaging_product', 'whatsapp');
+    fd.append('type', m.mime);
+    fd.append('file', new Blob([new Uint8Array(m.bytes)], { type: m.mime }), m.filename ?? 'arquivo');
+    const up = await this.form(cred, `${cred.phoneNumberId}/media`, fd);
+    const mediaId = String(up.id ?? '');
+    if (!mediaId) throw new WaError('A Meta não devolveu o identificador do arquivo enviado.', 502, null);
+    const content = m.kind === 'audio' ? { id: mediaId } : m.kind === 'document' ? { id: mediaId, caption: m.caption || undefined, filename: m.filename ?? undefined } : { id: mediaId, caption: m.caption || undefined };
+    const j = await this.call(cred, `${cred.phoneNumberId}/messages`, { method: 'POST', body: { messaging_product: 'whatsapp', to, type: m.kind, [m.kind]: content } });
+    return { id: String((j.messages as { id?: string }[] | undefined)?.[0]?.id ?? '') };
+  }
+
+  async downloadMedia(cred: WaCredentials, ref: { id?: string; url?: string }): Promise<{ bytes: Buffer; mime: string }> {
+    if (!ref.id) throw new WaError('Mídia sem identificador.', 422, null);
+    const meta = await this.call(cred, ref.id, { method: 'GET' });
+    const url = String(meta.url ?? '');
+    if (!url.startsWith('https://')) throw new WaError('A Meta não devolveu o endereço do arquivo.', 502, null);
+    const res = await this.fetchFn(url, { headers: { authorization: `Bearer ${cred.token}` }, signal: AbortSignal.timeout(60_000) });
+    if (!res.ok) throw new WaError(`Não consegui baixar o arquivo (erro ${res.status}).`, res.status, null);
+    const bytes = Buffer.from(await res.arrayBuffer());
+    return { bytes, mime: String(meta.mime_type ?? res.headers.get('content-type') ?? 'application/octet-stream') };
+  }
+
+  async getBusinessProfile(cred: WaCredentials): Promise<BusinessProfile> {
+    const j = await this.call(cred, `${cred.phoneNumberId}/whatsapp_business_profile?fields=about,address,description,email,profile_picture_url,websites,vertical`, { method: 'GET' });
+    const p = ((j.data as Record<string, unknown>[] | undefined)?.[0] ?? {}) as Record<string, unknown>;
+    return { about: String(p.about ?? ''), description: String(p.description ?? ''), email: String(p.email ?? ''), websites: Array.isArray(p.websites) ? (p.websites as string[]) : [], address: String(p.address ?? ''), vertical: String(p.vertical ?? ''), photoUrl: (p.profile_picture_url as string | undefined) ?? null };
+  }
+
+  async updateBusinessProfile(cred: WaCredentials, p: Partial<Omit<BusinessProfile, 'photoUrl'>>): Promise<void> {
+    await this.call(cred, `${cred.phoneNumberId}/whatsapp_business_profile`, { method: 'POST', body: { messaging_product: 'whatsapp', ...p } });
+  }
+
+  /** Foto do perfil da empresa: upload retomável da Meta (precisa do ID do app) e depois troca do perfil. */
+  async setBusinessPhoto(cred: WaCredentials, bytes: Buffer, mime: string): Promise<void> {
+    if (!cred.appId) throw new WaError('Para trocar a foto do perfil, informe o ID do app da Meta em Conexão.', 422, null);
+    const s = await this.call(cred, `${cred.appId}/uploads?file_length=${bytes.length}&file_type=${encodeURIComponent(mime)}&file_name=perfil`, { method: 'POST' });
+    const uploadId = String(s.id ?? '');
+    if (!uploadId) throw new WaError('A Meta não abriu o envio da foto.', 502, null);
+    const up = await this.fetchFn(`${GRAPH}/${uploadId}`, { method: 'POST', headers: { authorization: `OAuth ${cred.token}`, file_offset: '0' }, body: new Uint8Array(bytes), signal: AbortSignal.timeout(60_000) });
+    const handle = ((await up.json().catch(() => ({}))) as { h?: string }).h;
+    if (!up.ok || !handle) throw new WaError('A Meta recusou a foto do perfil.', up.status || 502, null);
+    await this.call(cred, `${cred.phoneNumberId}/whatsapp_business_profile`, { method: 'POST', body: { messaging_product: 'whatsapp', profile_picture_handle: handle } });
+  }
 }
 
 /** Só desenvolvimento (WHATSAPP_FAKE=1, nunca em produção): não chama a Meta, só imprime o que seria enviado. */
@@ -111,9 +187,27 @@ export class ConsoleTransport implements WaTransport {
   async profile(): Promise<{ displayPhone: string | null; verifiedName: string | null }> {
     return { displayPhone: '+55 11 90000-0000', verifiedName: 'Número de teste (local)' };
   }
+  async sendMedia(_c: WaCredentials, to: string, m: MediaSend): Promise<{ id: string }> {
+    console.log(`[whatsapp de mentira] ${m.kind} (${m.mime}, ${m.bytes.length} bytes) para ${to}${m.caption ? `: ${m.caption}` : ''}`);
+    return { id: `wamid.local.${(this.n += 1)}` };
+  }
+  async downloadMedia(): Promise<{ bytes: Buffer; mime: string }> {
+    // 1 pixel PNG: serve para ver o fluxo de mídia recebida em desenvolvimento
+    return { bytes: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64'), mime: 'image/png' };
+  }
+  async getBusinessProfile(): Promise<BusinessProfile> {
+    return { about: 'Perfil de teste', description: 'Descrição de teste', email: 'teste@exemplo.com', websites: [], address: '', vertical: 'FINANCE', photoUrl: null };
+  }
+  async updateBusinessProfile(): Promise<void> {
+    console.log('[whatsapp de mentira] perfil da empresa atualizado');
+  }
+  async setBusinessPhoto(): Promise<void> {
+    console.log('[whatsapp de mentira] foto do perfil atualizada');
+  }
 }
 
-export const transportOf = (ctx: Ctx): WaTransport => ctx.whatsapp ?? new CloudTransport();
+/** O transporte da conta: Meta (padrão), Bird (número do próprio Fôlego), ou o falso injetado nos testes. */
+export const transportOf = (ctx: Ctx, provider: 'meta' | 'bird' = 'meta'): WaTransport => ctx.whatsapp ?? (provider === 'bird' ? new BirdWaTransport(ctx.config.bird) : new CloudTransport());
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Agente de IA (gancho). Nada é chamado se não houver agente registrado em Ctx.salesAgent E o parceiro ligar.
@@ -172,17 +266,22 @@ export interface WaAccount {
   agent: AgentConfig;
   displayPhone: string | null;
   wabaId: string | null;
+  provider: 'meta' | 'bird';
+  appId: string | null;
 }
 
-interface AccountRow { partner_id: string; phone_number_id: string; token_enc: Buffer; app_secret_enc: Buffer; verify_token: string; status: 'ativa' | 'pausada'; daily_cap: number; quiet_start: number; quiet_end: number; agent: unknown; display_phone: string | null; waba_id: string | null }
-const ACCOUNT_COLS = 'partner_id, phone_number_id, token_enc, app_secret_enc, verify_token, status, daily_cap, quiet_start, quiet_end, agent, display_phone, waba_id';
+interface AccountRow { partner_id: string; phone_number_id: string; token_enc: Buffer | null; app_secret_enc: Buffer | null; verify_token: string; status: 'ativa' | 'pausada'; daily_cap: number; quiet_start: number; quiet_end: number; agent: unknown; display_phone: string | null; waba_id: string | null; provider: 'meta' | 'bird'; app_id: string | null }
+const ACCOUNT_COLS = 'partner_id, phone_number_id, token_enc, app_secret_enc, verify_token, status, daily_cap, quiet_start, quiet_end, agent, display_phone, waba_id, provider, app_id';
 
 function accountOf(ctx: Ctx, r: AccountRow): WaAccount {
   return {
-    partnerId: r.partner_id, phoneNumberId: r.phone_number_id, token: decryptText(ctx.config.secret, r.token_enc), appSecret: decryptText(ctx.config.secret, r.app_secret_enc), verifyToken: r.verify_token,
-    status: r.status, dailyCap: r.daily_cap, quietStart: r.quiet_start, quietEnd: r.quiet_end, agent: agentConfigOf(r.agent), displayPhone: r.display_phone, wabaId: r.waba_id,
+    partnerId: r.partner_id, phoneNumberId: r.phone_number_id, token: r.token_enc ? decryptText(ctx.config.secret, r.token_enc) : '', appSecret: r.app_secret_enc ? decryptText(ctx.config.secret, r.app_secret_enc) : '', verifyToken: r.verify_token,
+    status: r.status, dailyCap: r.daily_cap, quietStart: r.quiet_start, quietEnd: r.quiet_end, agent: agentConfigOf(r.agent), displayPhone: r.display_phone, wabaId: r.waba_id, provider: r.provider, appId: r.app_id,
   };
 }
+
+/** Credenciais para o transporte: na Bird o "ID do número" é o próprio número (+55...) usado em `from`. */
+export const credOf = (acc: WaAccount): WaCredentials => ({ phoneNumberId: acc.provider === 'bird' ? `+${acc.phoneNumberId}` : acc.phoneNumberId, token: acc.token, provider: acc.provider, appId: acc.appId });
 
 export async function loadAccount(ctx: Ctx, partnerId: string): Promise<WaAccount | null> {
   const r = await ctx.db.query<AccountRow>(`SELECT ${ACCOUNT_COLS} FROM app.wa_accounts WHERE partner_id = $1`, [partnerId]);
@@ -214,14 +313,16 @@ export const templateSlots = (body: string): number => Math.max(0, ...[...body.m
 export interface ThreadRow {
   id: string; partner_id: string; contact_id: string | null; delivery_id: string | null; phone_enc: Buffer; display_name: string | null; state: string; mode: string;
   last_inbound_at: Date | string | null; last_message_at: Date | string | null; unread_n: number; opted_out: boolean; ai_replies_hour: number; ai_hour_start: Date | string | null;
+  optin?: boolean; avatar_media_id?: string | null; notes_enc?: Buffer | null;
 }
-export const THREAD_COLS = 'id, partner_id, contact_id, delivery_id, phone_enc, display_name, state, mode, last_inbound_at, last_message_at, unread_n, opted_out, ai_replies_hour, ai_hour_start';
+export const THREAD_COLS = 'id, partner_id, contact_id, delivery_id, phone_enc, display_name, state, mode, last_inbound_at, last_message_at, unread_n, opted_out, ai_replies_hour, ai_hour_start, optin, avatar_media_id, notes_enc';
 
 /** A pessoa pode receber modelo/disparo? Contato do Fôlego (autorizou), base própria marcada "sim", ou quem já escreveu. */
 export async function mayReceiveTemplates(ctx: Ctx, t: ThreadRow): Promise<boolean> {
   if (t.opted_out) return false;
   if (t.last_inbound_at) return true;
   if (t.delivery_id) return true;
+  if (t.optin) return true; // número adicionado à mão: quem atende declarou que a pessoa autorizou
   if (t.contact_id) {
     const c = await ctx.db.query<{ wa_optin: string }>(`SELECT wa_optin FROM app.partner_contacts WHERE id = $1 AND partner_id = $2`, [t.contact_id, t.partner_id]);
     return c.rows[0]?.wa_optin === 'sim';
@@ -279,23 +380,29 @@ export interface QueueArgs {
   partnerId: string;
   threadId: string;
   author: 'humano' | 'ia' | 'sistema';
-  kind: 'text' | 'template';
+  kind: 'text' | 'template' | 'image' | 'audio' | 'document' | 'video';
   text: string;
   templateId?: string | undefined;
   vars?: string[] | undefined;
   broadcastId?: string | undefined;
+  /** Arquivo já guardado em wa_media (kind image/audio/document/video); `text` é a legenda. */
+  mediaId?: string | undefined;
+  voice?: boolean | undefined;
+  forwarded?: boolean | undefined;
+  sentBy?: string | undefined;
 }
 
 export async function queueMessage(ctx: Ctx, a: QueueArgs): Promise<string> {
   const r = await ctx.db.query<{ id: string }>(
-    `INSERT INTO app.wa_messages(partner_id, thread_id, direction, author, kind, body_enc, template_id, vars_enc, broadcast_id, status) VALUES ($1,$2,'out',$3,$4,$5,$6,$7,$8,'fila') RETURNING id`,
-    [a.partnerId, a.threadId, a.author, a.kind, encryptText(ctx.config.secret, a.text), a.templateId ?? null, a.vars ? encryptText(ctx.config.secret, JSON.stringify(a.vars)) : null, a.broadcastId ?? null],
+    `INSERT INTO app.wa_messages(partner_id, thread_id, direction, author, kind, body_enc, template_id, vars_enc, broadcast_id, media_id, voice, forwarded, sent_by, status) VALUES ($1,$2,'out',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'fila') RETURNING id`,
+    [a.partnerId, a.threadId, a.author, a.kind, encryptText(ctx.config.secret, a.text), a.templateId ?? null, a.vars ? encryptText(ctx.config.secret, JSON.stringify(a.vars)) : null, a.broadcastId ?? null, a.mediaId ?? null, a.voice === true, a.forwarded === true, a.sentBy ?? null],
   );
   await ctx.db.query(`UPDATE app.wa_threads SET last_message_at = now() WHERE id = $1`, [a.threadId]);
   return r.rows[0]!.id;
 }
 
-interface QueuedRow { id: string; thread_id: string; kind: 'text' | 'template'; body_enc: Buffer; vars_enc: Buffer | null; template_id: string | null; attempts: number }
+interface QueuedRow { id: string; thread_id: string; kind: QueueArgs['kind']; body_enc: Buffer; vars_enc: Buffer | null; template_id: string | null; attempts: number; media_id: string | null; voice: boolean }
+const FREE_KINDS = ['text', 'image', 'audio', 'document', 'video'];
 
 /** Worker: manda o que está na fila, respeitando teto diário e horário de silêncio dos disparos (resposta em atendimento sai sempre). */
 export async function processWhatsAppQueue(ctx: Ctx, opts: { log?: (e: Record<string, unknown>) => void } = {}): Promise<number> {
@@ -308,13 +415,13 @@ export async function processWhatsAppQueue(ctx: Ctx, opts: { log?: (e: Record<st
     const used = await ctx.db.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.wa_messages WHERE partner_id = $1 AND direction = 'out' AND kind = 'template' AND sent_at >= $2::timestamptz`, [partner_id, dayStart]);
     const quiet = inQuietHours(brHour(), acc.quietStart, acc.quietEnd);
     const budget = quiet ? 0 : Math.max(0, acc.dailyCap - num(used.rows[0]?.n ?? 0));
-    for (const [kind, limit] of [['text', 30], ['template', Math.min(30, budget)]] as const) {
+    for (const [kinds, limit] of [[FREE_KINDS, 30], [['template'], Math.min(30, budget)]] as const) {
       if (limit <= 0) continue;
       const claimed = await ctx.db.query<QueuedRow>(
         `UPDATE app.wa_messages SET attempts = attempts + 1, next_attempt_at = now() + make_interval(mins => (attempts + 1) * 2)
-          WHERE id IN (SELECT id FROM app.wa_messages WHERE partner_id = $1 AND status = 'fila' AND direction = 'out' AND kind = $2 AND attempts < ${MAX_ATTEMPTS} AND (next_attempt_at IS NULL OR next_attempt_at <= now()) ORDER BY created_at LIMIT $3 FOR UPDATE SKIP LOCKED)
-        RETURNING id, thread_id, kind, body_enc, vars_enc, template_id, attempts`,
-        [partner_id, kind, limit],
+          WHERE id IN (SELECT id FROM app.wa_messages WHERE partner_id = $1 AND status = 'fila' AND direction = 'out' AND kind = ANY($2::text[]) AND attempts < ${MAX_ATTEMPTS} AND (next_attempt_at IS NULL OR next_attempt_at <= now()) ORDER BY created_at LIMIT $3 FOR UPDATE SKIP LOCKED)
+        RETURNING id, thread_id, kind, body_enc, vars_enc, template_id, attempts, media_id, voice`,
+        [partner_id, kinds, limit],
       );
       for (const m of claimed.rows) if (await sendOne(ctx, acc, m, opts)) sent += 1;
     }
@@ -332,18 +439,26 @@ async function sendOne(ctx: Ctx, acc: WaAccount, m: QueuedRow, opts: { log?: (e:
   const thread = t.rows[0];
   if (!thread) return fail('Conversa apagada.');
   if (thread.opted_out && m.kind === 'template') return fail('O contato pediu para não receber mensagens.');
-  if (m.kind === 'text' && !windowOpen(thread.last_inbound_at)) return fail('A janela de 24 h fechou. Envie um modelo aprovado.'); // pode ter fechado enquanto esperava na fila
+  if (m.kind !== 'template' && !windowOpen(thread.last_inbound_at)) return fail('A janela de 24 h fechou. Envie um modelo aprovado.'); // pode ter fechado enquanto esperava na fila
   const to = decryptText(ctx.config.secret, thread.phone_enc);
-  const cred = { phoneNumberId: acc.phoneNumberId, token: acc.token };
+  const cred = { ...credOf(acc), ref: m.id };
+  const transport = transportOf(ctx, acc.provider);
   try {
     let id: string;
     if (m.kind === 'template') {
-      const tpl = m.template_id ? await ctx.db.query<{ name: string; language: string; status: string }>(`SELECT name, language, status FROM app.wa_templates WHERE id = $1`, [m.template_id]) : { rows: [] };
+      const tpl = m.template_id ? await ctx.db.query<{ name: string; language: string; status: string; param_names: string[] | null }>(`SELECT name, language, status, param_names FROM app.wa_templates WHERE id = $1`, [m.template_id]) : { rows: [] };
       if (!tpl.rows[0] || tpl.rows[0].status !== 'aprovado') return fail('Modelo não aprovado.');
       const vars = m.vars_enc ? (JSON.parse(decryptText(ctx.config.secret, m.vars_enc)) as string[]) : [];
-      id = (await transportOf(ctx).sendTemplate(cred, to, { name: tpl.rows[0].name, language: tpl.rows[0].language, params: vars })).id;
+      id = (await transport.sendTemplate(cred, to, { name: tpl.rows[0].name, language: tpl.rows[0].language, params: vars, paramNames: tpl.rows[0].param_names })).id;
+    } else if (m.kind === 'text') {
+      id = (await transport.sendText(cred, to, decryptText(ctx.config.secret, m.body_enc))).id;
     } else {
-      id = (await transportOf(ctx).sendText(cred, to, decryptText(ctx.config.secret, m.body_enc))).id;
+      if (!m.media_id) return fail('Arquivo não encontrado.');
+      const file = await loadMedia(ctx, m.media_id, acc.partnerId).catch(() => null);
+      if (!file) return fail('O arquivo foi apagado.');
+      id = (await need(transport.sendMedia?.bind(transport), 'enviar arquivos')(cred, to, {
+        kind: m.kind, mime: file.mime, filename: file.filename, caption: decryptText(ctx.config.secret, m.body_enc), bytes: file.bytes, publicUrl: signedMediaUrl(ctx, file.id), voice: m.voice,
+      })).id;
     }
     await ctx.db.query(`UPDATE app.wa_messages SET status = 'enviada', wa_id = nullif($2, ''), sent_at = now(), error = NULL WHERE id = $1`, [m.id, id]);
     return true;
@@ -367,7 +482,8 @@ export function validSignature(appSecret: string, rawBody: string, header: strin
   return got.length === expected.length && timingSafeEqual(got, expected);
 }
 
-interface InboundMessage { id: string; from: string; type: string; text?: { body?: string }; button?: { text?: string }; interactive?: { button_reply?: { title?: string }; list_reply?: { title?: string } } }
+interface MetaMedia { id?: string; mime_type?: string; caption?: string; filename?: string; voice?: boolean }
+interface InboundMessage { id: string; from: string; type: string; text?: { body?: string }; button?: { text?: string }; interactive?: { button_reply?: { title?: string }; list_reply?: { title?: string } }; image?: MetaMedia; audio?: MetaMedia; video?: MetaMedia; document?: MetaMedia; sticker?: MetaMedia }
 interface StatusUpdate { id: string; status: string; errors?: { code?: number; title?: string; message?: string }[] }
 export interface WebhookBody { entry?: { changes?: { value?: { metadata?: { phone_number_id?: string }; contacts?: { profile?: { name?: string } }[]; messages?: InboundMessage[]; statuses?: StatusUpdate[] } }[] }[] }
 
@@ -376,8 +492,53 @@ const textOf = (m: InboundMessage): string => {
   if (m.type === 'button') return m.button?.text ?? '';
   if (m.type === 'interactive') return m.interactive?.button_reply?.title ?? m.interactive?.list_reply?.title ?? '';
   const names: Record<string, string> = { image: 'imagem', audio: 'áudio', video: 'vídeo', document: 'documento', sticker: 'figurinha', location: 'localização', contacts: 'contato' };
-  return `[${names[m.type] ?? m.type} recebido(a): abra no WhatsApp para ver]`;
+  return `[${names[m.type] ?? m.type} recebido(a): este tipo não aparece aqui, abra no WhatsApp para ver]`;
 };
+
+export interface InboundIn {
+  waId: string;
+  e164: string;
+  name: string | null;
+  kind: 'text' | 'image' | 'audio' | 'document' | 'video' | 'sticker';
+  text: string;
+  voice?: boolean;
+  media?: { mime: string; filename: string | null; fetch: () => Promise<{ bytes: Buffer; mime: string }> };
+}
+
+/** Uma mensagem que chegou (Meta ou Bird): acha a conversa, guarda o arquivo, trata SAIR e chama o agente. Devolve false se já tinha sido tratada. */
+export async function ingestInbound(ctx: Ctx, acc: WaAccount, m: InboundIn, opts: { log?: (e: Record<string, unknown>) => void } = {}): Promise<boolean> {
+  const dup = await ctx.db.query(`SELECT 1 FROM app.wa_messages WHERE partner_id = $1 AND wa_id = $2`, [acc.partnerId, m.waId]);
+  if (dup.rows.length > 0) return false;
+  const thread = await ensureThread(ctx, acc.partnerId, m.e164, { name: m.name });
+  let text = m.text.slice(0, 4000);
+  let mediaId: string | null = null;
+  if (m.media) {
+    try {
+      const f = await m.media.fetch();
+      mediaId = (await storeMedia(ctx, acc.partnerId, { mime: f.mime || m.media.mime, filename: m.media.filename, bytes: f.bytes, origin: 'in', hint: m.kind })).id;
+    } catch (e) {
+      opts.log?.({ evento: 'whatsapp_midia_falhou', motivo: e instanceof Error ? e.message.slice(0, 100) : 'erro' });
+      text = text || '[Arquivo recebido, mas não consegui baixá-lo. Abra no WhatsApp para ver.]';
+    }
+  }
+  const ins = await ctx.db.query(
+    `INSERT INTO app.wa_messages(partner_id, thread_id, direction, author, kind, body_enc, wa_id, status, media_id, voice) VALUES ($1,$2,'in','contato',$3,$4,$5,'recebida',$6,$7) ON CONFLICT DO NOTHING`,
+    [acc.partnerId, thread.id, m.kind, encryptText(ctx.config.secret, text), m.waId, mediaId, m.voice === true],
+  );
+  if ((ins.rowCount ?? 0) === 0) return false;
+  await ctx.db.query(`UPDATE app.wa_threads SET last_inbound_at = now(), last_message_at = now(), unread_n = unread_n + 1, state = 'aberta' WHERE id = $1`, [thread.id]);
+  // quem escreveu primeiro permitiu a conversa
+  if (thread.contact_id) await ctx.db.query(`UPDATE app.partner_contacts SET wa_optin = 'sim' WHERE id = $1 AND wa_optin = 'desconhecido'`, [thread.contact_id]);
+  if (m.kind === 'text' && isOptOut(text)) {
+    await ctx.db.query(`UPDATE app.wa_threads SET opted_out = true, mode = 'humano', last_inbound_at = now() WHERE id = $1`, [thread.id]);
+    if (thread.contact_id) await ctx.db.query(`UPDATE app.partner_contacts SET wa_optin = 'nao' WHERE id = $1`, [thread.contact_id]);
+    await queueMessage(ctx, { partnerId: acc.partnerId, threadId: thread.id, author: 'sistema', kind: 'text', text: 'Tudo certo: você não receberá mais mensagens por aqui.' });
+    await audit(ctx.db, `partner:${acc.partnerId}`, 'wa_opt_out', 'wa_thread', thread.id);
+    return true;
+  }
+  await maybeAgentReply(ctx, acc, { ...thread, last_inbound_at: new Date().toISOString() }, previewOf(m.kind, text), opts);
+  return true;
+}
 
 const STATUS_RANK: Record<string, number> = { fila: 0, enviada: 1, entregue: 2, lida: 3 };
 const STATUS_MAP: Record<string, 'enviada' | 'entregue' | 'lida' | 'falhou'> = { sent: 'enviada', delivered: 'entregue', read: 'lida', failed: 'falhou' };
@@ -403,25 +564,19 @@ export async function handleWebhook(ctx: Ctx, acc: WaAccount, body: WebhookBody,
       for (const m of v.messages ?? []) {
         const e164 = waPhone(m.from);
         if (!e164 || !m.id) continue;
-        const text = textOf(m).slice(0, 4000);
-        const thread = await ensureThread(ctx, acc.partnerId, e164, { name: v.contacts?.[0]?.profile?.name ?? null });
-        const ins = await ctx.db.query(
-          `INSERT INTO app.wa_messages(partner_id, thread_id, direction, author, kind, body_enc, wa_id, status) VALUES ($1,$2,'in','contato','text',$3,$4,'recebida') ON CONFLICT DO NOTHING`,
-          [acc.partnerId, thread.id, encryptText(ctx.config.secret, text), m.id],
-        );
-        if ((ins.rowCount ?? 0) === 0) continue; // a Meta reenvia o mesmo evento: já tratado
-        messages += 1;
-        await ctx.db.query(`UPDATE app.wa_threads SET last_inbound_at = now(), last_message_at = now(), unread_n = unread_n + 1, state = 'aberta' WHERE id = $1`, [thread.id]);
-        // quem escreveu primeiro permitiu a conversa
-        if (thread.contact_id) await ctx.db.query(`UPDATE app.partner_contacts SET wa_optin = 'sim' WHERE id = $1 AND wa_optin = 'desconhecido'`, [thread.contact_id]);
-        if (isOptOut(text)) {
-          await ctx.db.query(`UPDATE app.wa_threads SET opted_out = true, mode = 'humano', last_inbound_at = now() WHERE id = $1`, [thread.id]);
-          if (thread.contact_id) await ctx.db.query(`UPDATE app.partner_contacts SET wa_optin = 'nao' WHERE id = $1`, [thread.contact_id]);
-          await queueMessage(ctx, { partnerId: acc.partnerId, threadId: thread.id, author: 'sistema', kind: 'text', text: 'Tudo certo: você não receberá mais mensagens por aqui.' });
-          await audit(ctx.db, `partner:${acc.partnerId}`, 'wa_opt_out', 'wa_thread', thread.id);
-          continue;
+        const base = { waId: m.id, e164, name: v.contacts?.[0]?.profile?.name ?? null };
+        const found = (['image', 'audio', 'video', 'document', 'sticker'] as const).map((k) => [k, m[k]] as const).find(([, x]) => x?.id);
+        let isNew: boolean;
+        if (found) {
+          const [kind, x] = found;
+          isNew = await ingestInbound(ctx, acc, {
+            ...base, kind, text: x!.caption ?? '', voice: x!.voice === true,
+            media: { mime: x!.mime_type ?? 'application/octet-stream', filename: x!.filename ?? null, fetch: () => need(transportOf(ctx, acc.provider).downloadMedia?.bind(transportOf(ctx, acc.provider)), 'baixar arquivos')(credOf(acc), { id: x!.id as string }) },
+          }, opts);
+        } else {
+          isNew = await ingestInbound(ctx, acc, { ...base, kind: 'text', text: textOf(m) }, opts); // a Meta reenvia o mesmo evento: o segundo é ignorado
         }
-        await maybeAgentReply(ctx, acc, { ...thread, last_inbound_at: new Date().toISOString() }, text, opts);
+        if (isNew) messages += 1;
       }
     }
   }

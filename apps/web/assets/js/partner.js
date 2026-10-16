@@ -93,7 +93,9 @@ export function renderPartner(root) {
     const stage = el('div', { class: 'pt-stage', 'aria-live': 'polite' });
     const nav = el('nav', { class: 'pt-nav', 'aria-label': 'Áreas do portal' });
     const side = el('aside', { class: 'pt-side', id: 'pt-side' });
-    const ctx = { call, profile, toast, go: (t, opts) => show(t, opts) };
+    // `raw`: chamada sem JSON (envio de arquivo e download de mídia), com o mesmo login do portal. Devolve a Response.
+    const raw = (method, path, headers = {}, body) => fetch(`/api${path}`, { method, headers: { 'x-folego': '1', ...(token ? { authorization: `Bearer ${token}` } : {}), ...headers }, body });
+    const ctx = { call, raw, profile, toast, go: (t, opts) => show(t, opts) };
     const show = async (id, opts = {}) => {
       side.classList.remove('is-open');
       nav.querySelectorAll('button').forEach((b) => b.setAttribute('aria-current', b.dataset.tab === id ? 'page' : 'false'));

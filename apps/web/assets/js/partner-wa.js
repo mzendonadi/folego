@@ -3,6 +3,7 @@
 import { el, icon, toast } from './dom.js';
 import { confirmDialog } from './confirm.js';
 import { STAGE } from './partner-views.js';
+import { waInbox } from './wa-inbox.js';
 
 const TABS = [['conversas', 'Conversas'], ['disparos', 'Disparos'], ['modelos', 'Modelos'], ['conexao', 'Conexão'], ['agente', 'Agente de IA']];
 const TPL_STATUS = { rascunho: 'Rascunho', em_analise: 'Em análise na Meta', aprovado: 'Aprovado', rejeitado: 'Rejeitado' };
@@ -27,8 +28,8 @@ export async function viewWhatsapp(ctx) {
   const body = el('div', { class: 'pt-stack' });
   let acc = await ctx.call('GET', '/partner/wa/account');
   let tab = acc.connected ? (ctx.opts?.startContact || ctx.opts?.startDelivery || ctx.opts?.thread ? 'conversas' : 'conversas') : 'conexao';
-  let timer = 0;
-  const stop = () => window.clearInterval(timer);
+  let stopInbox = null;
+  const stop = () => { stopInbox?.(); stopInbox = null; };
 
   const bar = el('div', { class: 'pt-filters', role: 'tablist' });
   const paintBar = () => bar.replaceChildren(...TABS.map(([k, l]) => {
@@ -58,6 +59,7 @@ export async function viewWhatsapp(ctx) {
     const waba = input('wa-waba', { inputmode: 'numeric', placeholder: 'opcional', value: acc.wabaId ?? '' });
     const token = input('wa-token', { type: 'password', autocomplete: 'off', placeholder: acc.connected ? 'guardado: preencha só para trocar' : 'Token permanente' });
     const secret = input('wa-secret', { type: 'password', autocomplete: 'off', placeholder: acc.connected ? 'guardado: preencha só para trocar' : 'Segredo do app' });
+    const appId = input('wa-appid', { inputmode: 'numeric', placeholder: 'opcional', value: acc.appId ?? '' });
     const cap = input('wa-cap', { inputmode: 'numeric', value: String(acc.dailyCap ?? 200) });
     const qs = select('wa-qs', Array.from({ length: 24 }, (_, h) => [String(h), `${String(h).padStart(2, '0')}h`]), String(acc.quietStart ?? 20));
     const qe = select('wa-qe', Array.from({ length: 24 }, (_, h) => [String(h), `${String(h).padStart(2, '0')}h`]), String(acc.quietEnd ?? 8));
@@ -65,6 +67,7 @@ export async function viewWhatsapp(ctx) {
     const form = el('form', { class: 'pt-form' },
       field('ID do número de telefone', phoneNumberId, 'Painel da Meta > WhatsApp > Configuração da API.'),
       field('ID da conta do WhatsApp Business (opcional)', waba),
+      field('ID do app da Meta (opcional)', appId, 'Só serve para trocar a foto do perfil da empresa por aqui. Painel da Meta > Configurações do app > Básico.'),
       field('Token de acesso permanente', token, 'Guardado criptografado. Nunca volta para a tela.'),
       field('Segredo do app', secret, 'Configurações do app > Básico. Serve para conferir que o aviso veio mesmo da Meta.'),
       field('Disparos por dia (teto)', cap, 'Protege o seu número. Respostas de atendimento não contam.'),
@@ -75,6 +78,7 @@ export async function viewWhatsapp(ctx) {
       const b = { dailyCap: Number(cap.value) || 200, quietStart: Number(qs.value), quietEnd: Number(qe.value) };
       if (phoneNumberId.value.trim()) b.phoneNumberId = phoneNumberId.value.trim();
       if (waba.value.trim()) b.wabaId = waba.value.trim();
+      if (appId.value.trim()) b.appId = appId.value.trim();
       if (token.value.trim()) b.token = token.value.trim();
       if (secret.value.trim()) b.appSecret = secret.value.trim();
       save.disabled = true;
@@ -108,12 +112,60 @@ export async function viewWhatsapp(ctx) {
         el('p', { class: 'pt-sub' }, 'Cole estes dois dados na tela de Webhooks do app da Meta. É por aqui que as mensagens dos clientes chegam ao portal.'),
         el('div', { class: 'pt-kv' }, el('div', {}, el('dt', {}, 'Endereço'), el('dd', {}, acc.webhookUrl, ' ', copy(acc.webhookUrl))),
           acc.connected ? el('div', {}, el('dt', {}, 'Token de verificação'), el('dd', {}, acc.verifyToken, ' ', copy(acc.verifyToken))) : null)),
+      acc.connected ? await perfilEmpresa() : null,
       el('section', { class: 'pt-card' }, el('h2', { class: 'pt-h2' }, 'Regras que protegem o seu número'),
         el('ul', { class: 'pt-rules' },
           el('li', {}, 'Texto livre só em até 24 h depois da última mensagem do cliente. Fora disso, só modelo aprovado pela Meta.'),
           el('li', {}, 'Disparo só para quem deu permissão: contato do Fôlego, base marcada "tenho autorização" ou quem escreveu primeiro.'),
           el('li', {}, 'Se o cliente escrever SAIR ou PARAR, os envios param na hora e ele é avisado.'),
           el('li', {}, 'Teto diário e horário de silêncio. Quem já recebeu modelo nos últimos 3 dias não recebe de novo.'))));
+  }
+
+  // ------------------------------------------------------------------------------------------------ Perfil da empresa
+  // O que o cliente vê do número: recado, descrição, e-mail, site, endereço e foto (editados direto na Meta).
+  async function perfilEmpresa() {
+    const card = (...kids) => el('section', { class: 'pt-card' }, el('h2', { class: 'pt-h2' }, 'Perfil da empresa no WhatsApp'), ...kids);
+    let p;
+    try { p = await ctx.call('GET', '/partner/wa/business-profile'); } catch (e) { return card(el('p', { class: 'pt-sub' }, e.message)); }
+    if (!p.editable) return card(el('p', { class: 'pt-sub' }, p.note ?? 'Este perfil é editado no painel do provedor.'));
+    const about = input('bp-about', { maxlength: '139', value: p.about ?? '' });
+    const desc = el('textarea', { class: 'input', id: 'bp-desc', rows: '3', maxlength: '512' }, p.description ?? '');
+    const email = input('bp-email', { type: 'email', value: p.email ?? '' });
+    const site = input('bp-site', { type: 'url', placeholder: 'https://', value: p.websites?.[0] ?? '' });
+    const addr = input('bp-addr', { maxlength: '256', value: p.address ?? '' });
+    const save = el('button', { class: 'btn btn-primary', type: 'submit' }, 'Salvar perfil');
+    const form = el('form', { class: 'pt-form' },
+      field('Recado (aparece abaixo do nome)', about, 'Até 139 caracteres.'),
+      el('div', { class: 'field pt-wide' }, el('label', { class: 'label', for: 'bp-desc' }, 'Descrição da empresa'), desc),
+      field('E-mail', email), field('Site', site), field('Endereço', addr), save);
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      save.disabled = true;
+      try {
+        await ctx.call('PUT', '/partner/wa/business-profile', { about: about.value.trim(), description: desc.value.trim(), email: email.value.trim(), websites: site.value.trim() ? [site.value.trim()] : [], address: addr.value.trim() });
+        toast('Perfil salvo na Meta.');
+      } catch (err) { toast(err.message); }
+      save.disabled = false;
+    });
+    const fileIn = el('input', { type: 'file', accept: 'image/jpeg,image/png', tabindex: '-1' });
+    fileIn.hidden = true;
+    const photo = el('button', { class: 'btn btn-secondary', type: 'button' }, 'Trocar a foto do perfil');
+    photo.addEventListener('click', () => (p.photoEditable ? fileIn.click() : toast('Informe o ID do app da Meta em Conexão e salve para poder trocar a foto por aqui.')));
+    fileIn.addEventListener('change', async () => {
+      const f = fileIn.files?.[0];
+      fileIn.value = '';
+      if (!f) return;
+      photo.disabled = true;
+      try {
+        const res = await ctx.raw('POST', '/partner/wa/media', { 'content-type': 'application/octet-stream', 'x-mime': f.type, 'x-filename': encodeURIComponent(f.name), 'x-purpose': 'avatar' }, f);
+        const up = await res.json().catch(() => null);
+        if (!res.ok) throw new Error(up?.message ?? 'Não consegui enviar a foto.');
+        await ctx.call('PUT', '/partner/wa/business-profile/photo', { mediaId: up.id });
+        toast('Foto do perfil atualizada.');
+      } catch (err) { toast(err.message); }
+      photo.disabled = false;
+    });
+    return card(el('p', { class: 'pt-sub' }, 'É assim que o cliente vê o seu número no WhatsApp. A foto precisa ser JPG ou PNG, quadrada, de pelo menos 640 px.'), form, el('div', { class: 'pt-actions' }, photo, fileIn));
   }
 
   // ------------------------------------------------------------------------------------------------ Modelos
@@ -235,128 +287,26 @@ export async function viewWhatsapp(ctx) {
   }
 
   // ------------------------------------------------------------------------------------------------ Conversas
+  // Caixa de entrada completa (mensagens, fotos, documentos, áudios, encaminhar, número novo e perfis): componente compartilhado com o backoffice.
   async function conversas() {
-    const wrap = el('div', { class: 'pt-chat-layout' });
-    const listBox = el('div', { class: 'pt-chat-list' });
-    const chat = el('div', { class: 'pt-chat' }, el('div', { class: 'pt-empty' }, el('strong', {}, 'Escolha uma conversa'), el('p', {}, 'As mensagens dos clientes aparecem aqui assim que chegam.')));
-    wrap.append(listBox, chat);
-    let current = null;
-    let filtro = 'todas';
-    let q = '';
-
-    const paintList = async () => {
-      const p = new URLSearchParams();
-      if (filtro !== 'todas') p.set('filtro', filtro);
-      if (q) p.set('q', q);
-      const r = await ctx.call('GET', `/partner/wa/threads?${p}`);
-      const search = input('wa-q', { type: 'search', placeholder: 'Buscar conversa', value: q, 'aria-label': 'Buscar conversa' });
-      search.addEventListener('change', () => { q = search.value.trim(); paintList(); });
-      const f = el('div', { class: 'pt-filters' }, ...[['todas', 'Todas'], ['nao_lidas', `Não lidas${r.unread ? ` (${r.unread})` : ''}`], ['abertas', 'Abertas'], ['fechadas', 'Encerradas']].map(([k, l]) => {
-        const b = el('button', { class: 'pt-chip', type: 'button', 'aria-selected': String(filtro === k) }, l);
-        b.addEventListener('click', () => { filtro = k; paintList(); });
-        return b;
-      }));
-      listBox.replaceChildren(search, f, ...(r.items.length ? r.items.map((t) => {
-        const row = el('button', { class: `pt-thread${current === t.id ? ' is-on' : ''}${t.unread ? ' is-unread' : ''}`, type: 'button' },
-          el('span', { class: 'pt-thread-top' }, el('strong', {}, t.name), t.unread ? el('span', { class: 'pt-badge' }, String(t.unread)) : null),
-          el('span', { class: 'pt-thread-prev' }, `${t.previewOut ? 'Você: ' : ''}${t.preview || '—'}`),
-          el('span', { class: 'pt-thread-meta' }, t.optedOut ? 'Pediu para não receber' : t.windowOpen ? 'Janela de 24 h aberta' : 'Janela fechada', t.mode === 'ia' ? ' · IA' : ''));
-        row.addEventListener('click', () => open(t.id));
-        return row;
-      }) : [el('p', { class: 'pt-sub' }, 'Nenhuma conversa aqui ainda.')]));
-      return r;
+    const host = {
+      call: (method, path, body) => ctx.call(method, `/partner/wa${path}`, body),
+      async upload(blob, { mime, filename, purpose }) {
+        const res = await ctx.raw('POST', '/partner/wa/media', { 'content-type': 'application/octet-stream', 'x-mime': mime, 'x-filename': encodeURIComponent(filename ?? ''), ...(purpose ? { 'x-purpose': purpose } : {}) }, blob);
+        const json = await res.json().catch(() => null);
+        if (!res.ok) throw new Error(json?.message ?? (res.status === 413 ? 'O arquivo passa de 16 MB.' : `Não consegui enviar o arquivo (erro ${res.status}).`));
+        return json;
+      },
+      async blob(path) {
+        const res = await ctx.raw('GET', `/partner/wa${path}`);
+        if (!res.ok) throw new Error('Não consegui abrir o arquivo.');
+        return res.blob();
+      },
     };
-
-    async function open(id) {
-      current = id;
-      const d = await ctx.call('GET', `/partner/wa/threads/${id}`);
-      const log = el('div', { class: 'pt-msgs', role: 'log', 'aria-live': 'polite' }, ...d.messages.map((m) => el('div', { class: `pt-msg ${m.direction === 'in' ? 'in' : 'out'}${m.status === 'falhou' ? ' bad' : ''}` },
-        el('p', {}, m.text), el('span', { class: 'pt-msg-meta' }, hm(m.at), m.direction === 'out' ? ` · ${m.author === 'ia' ? 'IA' : m.author === 'sistema' ? 'automática' : 'você'}` : '', MSG_STATUS[m.status] ? ` · ${MSG_STATUS[m.status]}` : '', m.error ? ` · ${m.error}` : ''))));
-      const head = el('header', { class: 'pt-chat-head' },
-        el('div', {}, el('h3', {}, d.name), el('p', { class: 'fine muted' }, `${d.phone} · ${OPTIN[d.waOptin] ?? ''}`)),
-        el('div', { class: 'pt-chat-tools' },
-          d.windowOpen ? pill('Janela aberta', 'st-fechado') : pill('Janela fechada', 'st-proposta'),
-          d.optedOut ? pill('Não contatar', 'tone-rejected') : null));
-      const tools = el('div', { class: 'pt-actions' });
-      const close = el('button', { class: 'btn btn-quiet btn-sm', type: 'button' }, d.state === 'aberta' ? 'Encerrar conversa' : 'Reabrir');
-      close.addEventListener('click', async () => { await ctx.call('PATCH', `/partner/wa/threads/${id}`, { state: d.state === 'aberta' ? 'fechada' : 'aberta' }); paintList(); open(id); });
-      tools.append(close);
-      if (!d.optedOut) {
-        const stopBtn = el('button', { class: 'btn btn-quiet btn-sm', type: 'button' }, 'Pediu para não ser contatado');
-        stopBtn.addEventListener('click', async () => {
-          if (!(await confirmDialog({ title: 'Marcar como "não contatar"?', text: 'Nenhuma mensagem será enviada a este contato.', confirmLabel: 'Marcar' }))) return;
-          await ctx.call('PATCH', `/partner/wa/threads/${id}`, { optedOut: true }); open(id); paintList();
-        });
-        tools.append(stopBtn);
-        if (acc.agentAvailable && acc.agent.enabled) {
-          const ai = el('button', { class: 'btn btn-secondary btn-sm', type: 'button' }, d.mode === 'ia' ? 'Assumir (tirar a IA)' : 'Passar para a IA');
-          ai.addEventListener('click', async () => { try { await ctx.call('PATCH', `/partner/wa/threads/${id}`, { mode: d.mode === 'ia' ? 'humano' : 'ia' }); open(id); paintList(); } catch (err) { toast(err.message); } });
-          tools.append(ai);
-        }
-      }
-      chat.replaceChildren(head, log, d.optedOut ? el('p', { class: 'note note-amber' }, icon('info'), el('span', {}, 'Este contato não recebe mais mensagens.')) : compose(d), tools);
-      log.scrollTop = log.scrollHeight;
-    }
-
-    function compose(d) {
-      if (d.windowOpen) {
-        const text = el('textarea', { class: 'input', rows: '2', maxlength: '1000', placeholder: 'Escreva a resposta…', 'aria-label': 'Mensagem' });
-        const send = el('button', { class: 'btn btn-primary', type: 'submit' }, 'Enviar');
-        const f = el('form', { class: 'pt-compose' }, text, send);
-        f.addEventListener('submit', async (e) => {
-          e.preventDefault();
-          if (!text.value.trim()) return;
-          send.disabled = true;
-          try { await ctx.call('POST', `/partner/wa/threads/${d.id}/messages`, { text: text.value.trim() }); open(d.id); paintList(); } catch (err) { send.disabled = false; toast(err.message); }
-        });
-        text.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) f.requestSubmit(); });
-        return f;
-      }
-      return templateSender(d);
-    }
-
-    function templateSender(d) {
-      const holder = el('div', { class: 'pt-compose-tpl' }, el('p', { class: 'fine muted' }, d.canTemplate ? 'A janela de 24 h está fechada. Para falar com este contato, envie um modelo aprovado:' : 'Sem permissão de WhatsApp para este contato. Marque a permissão na ficha dele (só se você a tem) ou aguarde ele escrever.'));
-      if (!d.canTemplate) return holder;
-      ctx.call('GET', '/partner/wa/templates').then(({ templates }) => {
-        const ok = templates.filter((t) => t.status === 'aprovado');
-        if (!ok.length) { holder.append(el('p', { class: 'note note-amber' }, 'Nenhum modelo aprovado. Crie e aprove em Modelos.')); return; }
-        const sel = select('wa-tpl', ok.map((t) => [t.id, t.name]), ok[0].id);
-        const preview = el('p', { class: 'pt-tpl-preview' });
-        const vars = input('wa-vars', { placeholder: 'Variáveis separadas por |', value: ok[0].slots ? d.name.split(' ')[0] : '' });
-        const refresh = () => { const t = ok.find((x) => x.id === sel.value); preview.textContent = t.body; vars.hidden = t.slots === 0; };
-        sel.addEventListener('change', refresh);
-        refresh();
-        const send = el('button', { class: 'btn btn-primary', type: 'button' }, 'Enviar modelo');
-        send.addEventListener('click', async () => {
-          send.disabled = true;
-          try { await ctx.call('POST', `/partner/wa/threads/${d.id}/messages`, { templateId: sel.value, vars: vars.value.split('|').map((v) => v.trim()).filter(Boolean) }); toast('Modelo enviado.'); open(d.id); paintList(); } catch (err) { send.disabled = false; toast(err.message); }
-        });
-        holder.append(sel, preview, vars, send);
-      }).catch((err) => holder.append(el('p', { class: 'note note-amber' }, err.message)));
-      return holder;
-    }
-
-    await paintList();
-    // Atalhos das fichas: abrir (ou criar) a conversa de um contato da base ou do Fôlego.
     const o = ctx.opts ?? {};
-    if (o.startContact || o.startDelivery) {
-      try {
-        const r = await ctx.call('POST', '/partner/wa/start', o.startContact ? { contactId: o.startContact } : { deliveryId: o.startDelivery });
-        await paintList();
-        await open(r.threadId);
-      } catch (err) { toast(err.message); }
-    } else if (o.thread) await open(o.thread);
-    // Atualiza a lista a cada 20 s enquanto a aba está aberta.
-    // (só recarrega a conversa aberta se chegou mensagem nova, para não apagar o que a pessoa está digitando)
-    timer = window.setInterval(async () => {
-      if (!root.isConnected) return stop();
-      try {
-        const r = await paintList();
-        if (current && r.items.some((t) => t.id === current && t.unread > 0)) await open(current);
-      } catch { /* sem rede agora: tenta de novo no próximo ciclo */ }
-    }, 20_000);
-    return wrap;
+    const inbox = waInbox({ host, start: { contact: o.startContact, delivery: o.startDelivery, thread: o.thread }, features: { agent: Boolean(acc.agentAvailable && acc.agent?.enabled) } });
+    stopInbox = inbox.stop;
+    return inbox.node;
   }
 
   root.append(el('header', { class: 'pt-head' }, el('div', {}, el('h1', {}, 'WhatsApp'), el('p', {}, 'Converse, dispare e venda pelo WhatsApp oficial: tudo no mesmo lugar do cliente, do contrato e da comissão.'))), bar, body);

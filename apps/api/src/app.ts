@@ -29,6 +29,7 @@ import * as planChange from './plan-change.ts';
 import * as accountData from './account-data.ts';
 import * as referrals from './referrals.ts';
 import { handleBirdEvent, verifyBirdSignature } from './bird.ts';
+import { loadMedia, mediaHeaders, validMediaSig } from './wa-media.ts';
 import { referralWhatsappSchema } from './schemas.ts';
 import * as insights from './insights.ts';
 import { verifyTurnstile, turnstileEnabled } from './turnstile.ts';
@@ -97,6 +98,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // O Gmail/Outlook mandam o descadastro de um clique como formulário (List-Unsubscribe=One-Click): só lemos como texto; a rota usa o token da URL.
   // Upload do eBook (backoffice): o PDF chega cru, até 15 MB. O limite global de 64 KB continua valendo para todo o resto.
   app.addContentTypeParser('application/pdf', { parseAs: 'buffer', bodyLimit: 16 * 1024 * 1024 }, (_req, body, done) => done(null, body));
+  // Arquivos do WhatsApp (foto, áudio, documento): chegam crus como octet-stream, até 16 MB; o tipo real vai no cabeçalho x-mime e é conferido no servidor.
+  app.addContentTypeParser('application/octet-stream', { parseAs: 'buffer', bodyLimit: 16 * 1024 * 1024 }, (_req, body, done) => done(null, body));
   app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_req, body, done) => done(null, {}));
   await app.register(cookie);
   // PageView para a Meta (IP e navegador do visitante): só com o ACEITE do aviso de cookies (cookie folego_ads=1). Sem aceite, nada sai.
@@ -446,6 +449,18 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     app.post('/api/partner/wa/broadcasts/preview', async (req) => wa.previewBroadcast(ctx, pid(req), wa.broadcastSchema.parse(req.body)));
     app.post('/api/partner/wa/broadcasts', { config: { rateLimit: { max: 10 * scale, timeWindow: '1 minute' } } }, async (req, reply) => reply.status(201).send(await wa.createBroadcast(ctx, pid(req), wa.broadcastSchema.parse(req.body))));
     app.post('/api/partner/wa/broadcasts/:id/cancel', async (req) => wa.cancelBroadcast(ctx, pid(req), pidParam(req)));
+    // Caixa de entrada completa: arquivos, encaminhar, número novo, perfil do contato e perfil da empresa.
+    app.post('/api/partner/wa/media', { bodyLimit: 17 * 1024 * 1024, config: { rateLimit: { max: 60 * scale, timeWindow: '1 minute' } } }, async (req, reply) => reply.status(201).send(await wa.uploadMedia(ctx, pid(req), wa.readUpload(req))));
+    app.get('/api/partner/wa/media/:id', async (req, reply) => {
+      const f = await wa.mediaFile(ctx, pid(req), pidParam(req));
+      return reply.headers(mediaHeaders(f)).send(f.bytes);
+    });
+    app.post('/api/partner/wa/threads/new', { config: { rateLimit: { max: 60 * scale, timeWindow: '1 minute' } } }, async (req) => wa.newThread(ctx, pid(req), wa.newThreadSchema.parse(req.body)));
+    app.post('/api/partner/wa/threads/:id/forward', { config: { rateLimit: { max: 30 * scale, timeWindow: '1 minute' } } }, async (req) => wa.forwardMessages(ctx, pid(req), pidParam(req), wa.forwardSchema.parse(req.body)));
+    app.patch('/api/partner/wa/threads/:id/profile', async (req) => wa.patchProfile(ctx, pid(req), pidParam(req), wa.profileSchema.parse(req.body)));
+    app.get('/api/partner/wa/business-profile', async (req) => wa.getBusinessProfile(ctx, pid(req)));
+    app.put('/api/partner/wa/business-profile', { config: { rateLimit: { max: 20 * scale, timeWindow: '1 minute' } } }, async (req) => wa.saveBusinessProfile(ctx, pid(req), wa.businessProfileSchema.parse(req.body)));
+    app.put('/api/partner/wa/business-profile/photo', { config: { rateLimit: { max: 10 * scale, timeWindow: '1 minute' } } }, async (req) => wa.saveBusinessPhoto(ctx, pid(req), z.object({ mediaId: z.string().uuid() }).parse(req.body).mediaId));
     app.patch('/api/partner/deals/:id', async (req) => pp.patchDeal(ctx, pid(req), idParam((req.params as { id: string }).id), pp.dealPatchSchema.parse(req.body)));
   }
 
@@ -833,6 +848,15 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       }
       return { ok: true };
     });
+  });
+
+  // Arquivo que enviamos ao WhatsApp pela Bird: endereço público, assinado e de curta duração (a Bird só aceita mídia por URL https).
+  app.get('/wa-media/:id', { config: { rateLimit: { max: 240 * scale, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const id = idParam((req.params as { id: string }).id);
+    const q = req.query as { e?: string; s?: string };
+    if (!validMediaSig(ctx, id, q.e, q.s)) return reply.status(404).send({ error: 'not_found' });
+    const f = await loadMedia(ctx, id);
+    return reply.headers(mediaHeaders(f, true)).send(f.bytes);
   });
 
   // Só desenvolvimento: faz o papel do banco confirmando o Pix, passando pelo MESMO caminho do webhook real.

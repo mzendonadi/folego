@@ -17,6 +17,9 @@ import * as access from './access.ts';
 import * as demo from '../demo.ts';
 import * as dispatch from './dispatch.ts';
 import * as chatbot from '../chatbot.ts';
+import * as waPortal from '../wa-portal.ts';
+import { HOUSE_PARTNER_ID, ensureHouseAccount } from '../wa-bird.ts';
+import { mediaHeaders } from '../wa-media.ts';
 import { computeAlerts, markAlertsSeen } from './alerts.ts';
 import * as customers from './customers.ts';
 import * as manage from './manage.ts';
@@ -567,4 +570,68 @@ export function registerGestao(app: FastifyInstance, deps: AdminRouteDeps): void
     const b = z.strictObject({ text: z.string().trim().min(2).max(1000) }).parse(req.body);
     return chatbot.teamNote(ctx, a.id, idParam((req.params as { id: string }).id), b.text);
   });
+
+  // ---------- WhatsApp do Fôlego (Bird, +55 11 91379-2370): caixa de entrada completa, no mesmo motor do portal do parceiro ----------
+  // O Fôlego é um "parceiro interno" (partners.internal). Tudo abaixo vale só para ele: nenhuma rota recebe o id de um parceiro.
+  const WA = `${P}/wa`;
+  const house = async (req: FastifyRequest) => {
+    const a = await admin(req, 'whatsapp');
+    const acc = await ensureHouseAccount(ctx);
+    if (!acc) throw new AppError(409, 'wa_not_configured', 'O WhatsApp do Fôlego ainda não está ligado: falta a chave da Bird no servidor (BIRD_API_KEY).');
+    return a;
+  };
+  const tid = (req: FastifyRequest) => idParam((req.params as { id: string }).id);
+  app.get(`${WA}/account`, async (req) => {
+    await admin(req, 'whatsapp');
+    const acc = await ensureHouseAccount(ctx);
+    if (!acc) return { connected: false, configured: false, note: 'Falta a chave da Bird no servidor (BIRD_API_KEY). Veja deploy/BIRD-WHATSAPP.md.' };
+    const v = (await waPortal.accountView(ctx, HOUSE_PARTNER_ID)) as Record<string, unknown>;
+    delete v.verifyToken;
+    return { ...v, configured: true, internal: true, webhookUrl: `${ctx.config.publicUrl}/webhooks/bird`, agentAvailable: false };
+  });
+  app.put(`${WA}/account`, { config: { rateLimit: { max: 20 * scale, timeWindow: '1 minute' } } }, async (req) => {
+    const a = await house(req);
+    const body = waPortal.accountSchema.pick({ status: true, dailyCap: true, quietStart: true, quietEnd: true }).parse(req.body);
+    await waPortal.saveAccount(ctx, HOUSE_PARTNER_ID, body);
+    await audit(ctx.db, `admin:${a.id}`, 'wa_house_account_saved', 'partner', HOUSE_PARTNER_ID, { fields: Object.keys(body) });
+    return { ok: true };
+  });
+  app.post(`${WA}/account/test`, { config: { rateLimit: { max: 10 * scale, timeWindow: '1 minute' } } }, async (req) => {
+    await house(req);
+    return waPortal.testAccount(ctx, HOUSE_PARTNER_ID);
+  });
+  app.get(`${WA}/templates`, async (req) => { await house(req); return waPortal.listTemplates(ctx, HOUSE_PARTNER_ID); });
+  app.post(`${WA}/templates`, async (req, reply) => { await house(req); return reply.status(201).send(await waPortal.createTemplate(ctx, HOUSE_PARTNER_ID, waPortal.templateSchema.parse(req.body))); });
+  app.patch(`${WA}/templates/:id`, async (req) => { await house(req); return waPortal.setTemplateStatus(ctx, HOUSE_PARTNER_ID, tid(req), waPortal.templatePatchSchema.parse(req.body).status); });
+  app.delete(`${WA}/templates/:id`, async (req) => { await house(req); return waPortal.deleteTemplate(ctx, HOUSE_PARTNER_ID, tid(req)); });
+  app.get(`${WA}/threads`, async (req) => {
+    await house(req);
+    const q = req.query as Record<string, string | undefined>;
+    return waPortal.listThreads(ctx, HOUSE_PARTNER_ID, { filtro: q.filtro, q: q.q, page: Number(q.pagina) || 0 });
+  });
+  app.post(`${WA}/threads/new`, { config: { rateLimit: { max: 60 * scale, timeWindow: '1 minute' } } }, async (req) => {
+    const a = await house(req);
+    return waPortal.newThread(ctx, HOUSE_PARTNER_ID, waPortal.newThreadSchema.parse(req.body), a.email);
+  });
+  app.get(`${WA}/threads/:id`, async (req) => { await house(req); return waPortal.threadDetail(ctx, HOUSE_PARTNER_ID, tid(req)); });
+  app.post(`${WA}/threads/:id/messages`, { config: { rateLimit: { max: 120 * scale, timeWindow: '1 minute' } } }, async (req) => {
+    const a = await house(req);
+    return waPortal.sendInThread(ctx, HOUSE_PARTNER_ID, tid(req), waPortal.sendSchema.parse(req.body), a.email);
+  });
+  app.post(`${WA}/threads/:id/forward`, { config: { rateLimit: { max: 30 * scale, timeWindow: '1 minute' } } }, async (req) => {
+    const a = await house(req);
+    return waPortal.forwardMessages(ctx, HOUSE_PARTNER_ID, tid(req), waPortal.forwardSchema.parse(req.body), a.email);
+  });
+  app.patch(`${WA}/threads/:id`, async (req) => { await house(req); return waPortal.patchThread(ctx, HOUSE_PARTNER_ID, tid(req), waPortal.threadPatchSchema.parse(req.body)); });
+  app.patch(`${WA}/threads/:id/profile`, async (req) => { await house(req); return waPortal.patchProfile(ctx, HOUSE_PARTNER_ID, tid(req), waPortal.profileSchema.parse(req.body)); });
+  app.post(`${WA}/media`, { bodyLimit: 17 * 1024 * 1024, config: { rateLimit: { max: 60 * scale, timeWindow: '1 minute' } } }, async (req, reply) => {
+    await house(req);
+    return reply.status(201).send(await waPortal.uploadMedia(ctx, HOUSE_PARTNER_ID, waPortal.readUpload(req)));
+  });
+  app.get(`${WA}/media/:id`, async (req, reply) => {
+    await house(req);
+    const f = await waPortal.mediaFile(ctx, HOUSE_PARTNER_ID, tid(req));
+    return reply.headers(mediaHeaders(f)).send(f.bytes);
+  });
+  app.get(`${WA}/business-profile`, async (req) => { await house(req); return waPortal.getBusinessProfile(ctx, HOUSE_PARTNER_ID); });
 }

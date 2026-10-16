@@ -6,10 +6,11 @@ import { AppError, notFound } from './errors.ts';
 import type { Ctx } from './services.ts';
 import { audit, num, todaySaoPaulo } from './services.ts';
 import {
-  DEFAULT_AGENT, agentConfigOf, ensureThread, loadAccount, mayReceiveTemplates, processWhatsAppQueue, queueMessage, renderTemplate, templateSlots, transportOf, waPhone, windowEndsAt, windowOpen, notConnected,
+  DEFAULT_AGENT, WaError, agentConfigOf, credOf, ensureThread, loadAccount, mayReceiveTemplates, need, processWhatsAppQueue, queueMessage, renderTemplate, templateSlots, transportOf, waPhone, windowEndsAt, windowOpen, notConnected,
 } from './whatsapp.ts';
 import type { ThreadRow, WaAccount } from './whatsapp.ts';
 import { THREAD_COLS } from './whatsapp.ts';
+import { classifyOutgoing, loadMedia, previewOf, storeMedia } from './wa-media.ts';
 
 const iso = (d: unknown): string => new Date(d as string).toISOString();
 const PAGE = 30;
@@ -28,6 +29,7 @@ export const accountSchema = z.strictObject({
   displayPhone: z.string().trim().max(40).nullable().optional(),
   token: z.string().trim().min(20).max(1000).optional(),
   appSecret: z.string().trim().min(16).max(200).optional(),
+  appId: z.string().trim().regex(/^\d{5,25}$/, 'O ID do app tem só dígitos.').nullable().optional(),
   dailyCap: z.number().int().min(1).max(5000).optional(),
   quietStart: z.number().int().min(0).max(23).optional(),
   quietEnd: z.number().int().min(0).max(23).optional(),
@@ -41,7 +43,7 @@ export async function accountView(ctx: Ctx, partnerId: string) {
   const day = `${todaySaoPaulo()}T00:00:00-03:00`;
   const used = await ctx.db.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.wa_messages WHERE partner_id = $1 AND direction = 'out' AND kind = 'template' AND sent_at >= $2::timestamptz`, [partnerId, day]);
   return {
-    connected: true, phoneNumberId: a.phoneNumberId, wabaId: a.wabaId, displayPhone: a.displayPhone, status: a.status, dailyCap: a.dailyCap, quietStart: a.quietStart, quietEnd: a.quietEnd,
+    connected: true, provider: a.provider, appId: a.appId, phoneNumberId: a.phoneNumberId, wabaId: a.wabaId, displayPhone: a.displayPhone, status: a.status, dailyCap: a.dailyCap, quietStart: a.quietStart, quietEnd: a.quietEnd,
     usedToday: num(used.rows[0]?.n ?? 0), webhookUrl: base, verifyToken: a.verifyToken, agent: a.agent, agentAvailable: Boolean(ctx.salesAgent), tokenSet: true, appSecretSet: true,
   };
 }
@@ -65,6 +67,7 @@ export async function saveAccount(ctx: Ctx, partnerId: string, input: z.infer<ty
       };
       if (input.phoneNumberId) add('phone_number_id', input.phoneNumberId);
       if (input.wabaId !== undefined) add('waba_id', input.wabaId);
+      if (input.appId !== undefined) add('app_id', input.appId);
       if (input.displayPhone !== undefined) add('display_phone', input.displayPhone);
       if (input.token) add('token_enc', encryptText(secret, input.token));
       if (input.appSecret) add('app_secret_enc', encryptText(secret, input.appSecret));
@@ -87,7 +90,7 @@ export async function testAccount(ctx: Ctx, partnerId: string) {
   const a = await loadAccount(ctx, partnerId);
   if (!a) throw notConnected();
   try {
-    const p = await transportOf(ctx).profile({ phoneNumberId: a.phoneNumberId, token: a.token });
+    const p = await transportOf(ctx, a.provider).profile(credOf(a));
     if (p.displayPhone) await ctx.db.query(`UPDATE app.wa_accounts SET display_phone = $2 WHERE partner_id = $1`, [partnerId, p.displayPhone]);
     return { ok: true, displayPhone: p.displayPhone, verifiedName: p.verifiedName };
   } catch (e) {
@@ -125,21 +128,23 @@ async function requireActive(ctx: Ctx, partnerId: string): Promise<WaAccount> {
 // Modelos
 // ---------------------------------------------------------------------------------------------------------------------
 export const templateSchema = z.strictObject({
-  name: z.string().trim().regex(/^[a-z0-9_]{3,60}$/, 'Use letras minúsculas, números e _ (3 a 60).'),
+  name: z.string().trim().regex(/^[a-z0-9_-]{3,60}$/, 'Use letras minúsculas, números, _ e - (3 a 60).'),
   language: z.string().trim().regex(/^[a-z]{2}(_[A-Z]{2})?$/).default('pt_BR'),
   category: z.enum(['MARKETING', 'UTILITY']),
   body: z.string().trim().min(5).max(1024),
+  /** Só para modelos com variáveis nomeadas (Bird): o nome de cada {{n}}, na ordem. */
+  paramNames: z.array(z.string().trim().regex(/^[a-z0-9_]{2,40}$/)).max(10).optional(),
 });
 export const templatePatchSchema = z.strictObject({ status: z.enum(['rascunho', 'em_analise', 'aprovado', 'rejeitado']) });
 
 export async function listTemplates(ctx: Ctx, partnerId: string) {
-  const r = await ctx.db.query<{ id: string; name: string; language: string; category: string; body: string; status: string; created_at: Date }>(`SELECT id, name, language, category, body, status, created_at FROM app.wa_templates WHERE partner_id = $1 ORDER BY created_at DESC`, [partnerId]);
-  return { templates: r.rows.map((t) => ({ id: t.id, name: t.name, language: t.language, category: t.category, body: t.body, status: t.status, slots: templateSlots(t.body), createdAt: iso(t.created_at) })) };
+  const r = await ctx.db.query<{ id: string; name: string; language: string; category: string; body: string; status: string; created_at: Date; param_names: string[] | null }>(`SELECT id, name, language, category, body, status, created_at, param_names FROM app.wa_templates WHERE partner_id = $1 ORDER BY created_at DESC`, [partnerId]);
+  return { templates: r.rows.map((t) => ({ id: t.id, name: t.name, language: t.language, category: t.category, body: t.body, status: t.status, slots: templateSlots(t.body), paramNames: t.param_names, createdAt: iso(t.created_at) })) };
 }
 
 export async function createTemplate(ctx: Ctx, partnerId: string, input: z.infer<typeof templateSchema>) {
   try {
-    const r = await ctx.db.query<{ id: string }>(`INSERT INTO app.wa_templates(partner_id, name, language, category, body) VALUES ($1,$2,$3,$4,$5) RETURNING id`, [partnerId, input.name, input.language, input.category, input.body]);
+    const r = await ctx.db.query<{ id: string }>(`INSERT INTO app.wa_templates(partner_id, name, language, category, body, param_names) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`, [partnerId, input.name, input.language, input.category, input.body, input.paramNames ?? null]);
     return { id: r.rows[0]!.id };
   } catch (e) {
     if (e instanceof Error && /duplicate key/i.test(e.message)) throw new AppError(409, 'duplicate', 'Já existe um modelo com este nome.');
@@ -189,10 +194,11 @@ export async function listThreads(ctx: Ctx, partnerId: string, o: { filtro?: str
     where.push(`lower(coalesce(t.display_name, c.name, '')) LIKE $${params.length}`);
   }
   const page = Math.max(0, Math.floor(o.page ?? 0));
-  const rows = await ctx.db.query<ThreadRow & { cname: string | null; preview: Buffer | null; pdir: string | null }>(
-    `SELECT t.id, t.partner_id, t.contact_id, t.delivery_id, t.phone_enc, t.display_name, t.state, t.mode, t.last_inbound_at, t.last_message_at, t.unread_n, t.opted_out, t.ai_replies_hour, t.ai_hour_start, c.name AS cname,
+  const rows = await ctx.db.query<ThreadRow & { cname: string | null; preview: Buffer | null; pdir: string | null; pkind: string | null }>(
+    `SELECT t.id, t.partner_id, t.contact_id, t.delivery_id, t.phone_enc, t.display_name, t.state, t.mode, t.last_inbound_at, t.last_message_at, t.unread_n, t.opted_out, t.ai_replies_hour, t.ai_hour_start, t.avatar_media_id, c.name AS cname,
             (SELECT m.body_enc FROM app.wa_messages m WHERE m.thread_id = t.id ORDER BY m.created_at DESC LIMIT 1) AS preview,
-            (SELECT m.direction FROM app.wa_messages m WHERE m.thread_id = t.id ORDER BY m.created_at DESC LIMIT 1) AS pdir
+            (SELECT m.direction FROM app.wa_messages m WHERE m.thread_id = t.id ORDER BY m.created_at DESC LIMIT 1) AS pdir,
+            (SELECT m.kind FROM app.wa_messages m WHERE m.thread_id = t.id ORDER BY m.created_at DESC LIMIT 1) AS pkind
        FROM app.wa_threads t LEFT JOIN app.partner_contacts c ON c.id = t.contact_id
       WHERE ${where.join(' AND ')} ORDER BY t.last_message_at DESC NULLS LAST LIMIT ${PAGE} OFFSET ${page * PAGE}`,
     params,
@@ -205,7 +211,7 @@ export async function listThreads(ctx: Ctx, partnerId: string, o: { filtro?: str
       return {
         id: t.id, name: t.display_name ?? t.cname ?? maskPhone(phone), phone: maskPhone(phone), unread: t.unread_n, optedOut: t.opted_out, mode: t.mode, state: t.state,
         origin: t.delivery_id ? 'folego' : t.contact_id ? 'base' : 'inbound', lastAt: t.last_message_at ? iso(t.last_message_at) : null, windowOpen: windowOpen(t.last_inbound_at),
-        preview: t.preview ? decryptText(ctx.config.secret, t.preview).slice(0, 90) : '', previewOut: t.pdir === 'out',
+        preview: t.preview ? previewOf(t.pkind ?? 'text', decryptText(ctx.config.secret, t.preview)).slice(0, 90) : '', previewOut: t.pdir === 'out', previewKind: t.pkind ?? 'text', avatarMediaId: t.avatar_media_id ?? null,
       };
     }),
   };
@@ -220,8 +226,9 @@ async function ownThread(ctx: Ctx, partnerId: string, id: string): Promise<Threa
 export async function threadDetail(ctx: Ctx, partnerId: string, id: string) {
   const t = await ownThread(ctx, partnerId, id);
   await ctx.db.query(`UPDATE app.wa_threads SET unread_n = 0 WHERE id = $1`, [id]);
-  const msgs = await ctx.db.query<{ id: string; direction: string; author: string; kind: string; body_enc: Buffer; status: string; error: string | null; created_at: Date }>(
-    `SELECT id, direction, author, kind, body_enc, status, error, created_at FROM app.wa_messages WHERE thread_id = $1 ORDER BY created_at DESC LIMIT 200`,
+  const msgs = await ctx.db.query<{ id: string; direction: string; author: string; kind: string; body_enc: Buffer; status: string; error: string | null; created_at: Date; media_id: string | null; voice: boolean; forwarded: boolean; mime: string | null; filename: string | null; size_bytes: number | null }>(
+    `SELECT m.id, m.direction, m.author, m.kind, m.body_enc, m.status, m.error, m.created_at, m.media_id, m.voice, m.forwarded, w.mime, w.filename, w.size_bytes
+       FROM app.wa_messages m LEFT JOIN app.wa_media w ON w.id = m.media_id WHERE m.thread_id = $1 ORDER BY m.created_at DESC LIMIT 200`,
     [id],
   );
   const contact = t.contact_id ? await ctx.db.query<{ name: string; wa_optin: string; stage: string }>(`SELECT name, wa_optin, stage FROM app.partner_contacts WHERE id = $1`, [t.contact_id]) : { rows: [] };
@@ -230,28 +237,39 @@ export async function threadDetail(ctx: Ctx, partnerId: string, id: string) {
     id: t.id, name: t.display_name ?? contact.rows[0]?.name ?? maskPhone(phone), phone, optedOut: t.opted_out, mode: t.mode, state: t.state, contactId: t.contact_id, deliveryId: t.delivery_id,
     contactStage: contact.rows[0]?.stage ?? null, waOptin: contact.rows[0]?.wa_optin ?? (t.delivery_id ? 'sim' : t.last_inbound_at ? 'sim' : 'desconhecido'),
     windowOpen: windowOpen(t.last_inbound_at), windowEndsAt: windowEndsAt(t.last_inbound_at), canTemplate: await mayReceiveTemplates(ctx, t),
-    messages: msgs.rows.reverse().map((m) => ({ id: m.id, direction: m.direction, author: m.author, kind: m.kind, text: decryptText(ctx.config.secret, m.body_enc), status: m.status, error: m.error, at: iso(m.created_at) })),
+    avatarMediaId: t.avatar_media_id ?? null, notes: t.notes_enc ? decryptText(ctx.config.secret, t.notes_enc) : '', optin: t.optin === true,
+    messages: msgs.rows.reverse().map((m) => ({
+      id: m.id, direction: m.direction, author: m.author, kind: m.kind, text: decryptText(ctx.config.secret, m.body_enc), status: m.status, error: m.error, at: iso(m.created_at),
+      forwarded: m.forwarded, voice: m.voice, media: m.media_id ? { id: m.media_id, mime: m.mime, filename: m.filename, size: m.size_bytes } : null,
+    })),
   };
 }
 
 export const sendSchema = z.union([
   z.strictObject({ text: z.string().trim().min(1).max(1000) }),
+  z.strictObject({ mediaId: z.string().uuid(), caption: z.string().trim().max(1000).default(''), voice: z.boolean().default(false) }),
   z.strictObject({ templateId: z.string().uuid(), vars: z.array(z.string().trim().max(200)).max(10).default([]) }),
 ]);
 
-export async function sendInThread(ctx: Ctx, partnerId: string, threadId: string, input: z.infer<typeof sendSchema>) {
+export async function sendInThread(ctx: Ctx, partnerId: string, threadId: string, input: z.infer<typeof sendSchema>, by?: string) {
   await requireActive(ctx, partnerId);
   const t = await ownThread(ctx, partnerId, threadId);
   if (t.opted_out) throw new AppError(409, 'opted_out', 'Este contato pediu para não receber mensagens.');
   let id: string;
   if ('text' in input) {
     if (!windowOpen(t.last_inbound_at)) throw new AppError(409, 'window_closed', 'A janela de 24 h está fechada: o contato não escreveu nas últimas 24 horas. Envie um modelo aprovado.');
-    id = await queueMessage(ctx, { partnerId, threadId, author: 'humano', kind: 'text', text: input.text });
+    id = await queueMessage(ctx, { partnerId, threadId, author: 'humano', kind: 'text', text: input.text, ...(by ? { sentBy: by } : {}) });
+  } else if ('mediaId' in input) {
+    if (!windowOpen(t.last_inbound_at)) throw new AppError(409, 'window_closed', 'A janela de 24 h está fechada: o contato não escreveu nas últimas 24 horas. Envie um modelo aprovado antes de mandar arquivos.');
+    const file = await ctx.db.query<{ mime: string }>(`SELECT mime FROM app.wa_media WHERE id = $1 AND partner_id = $2 AND origin = 'out'`, [input.mediaId, partnerId]);
+    if (!file.rows[0]) throw notFound();
+    const kind = classifyOutgoing(file.rows[0].mime);
+    id = await queueMessage(ctx, { partnerId, threadId, author: 'humano', kind, text: kind === 'audio' ? '' : input.caption, mediaId: input.mediaId, voice: kind === 'audio' && input.voice, ...(by ? { sentBy: by } : {}) });
   } else {
     const tpl = await approvedTemplate(ctx, partnerId, input.templateId);
     if (!(await mayReceiveTemplates(ctx, t))) throw new AppError(409, 'no_optin', 'Este contato ainda não deu permissão de WhatsApp. Marque a permissão na ficha dele (só se você realmente a tem) ou espere ele escrever.');
     if (input.vars.length < templateSlots(tpl.body)) throw new AppError(422, 'missing_vars', `O modelo tem ${templateSlots(tpl.body)} variável(is). Preencha todas.`);
-    id = await queueMessage(ctx, { partnerId, threadId, author: 'humano', kind: 'template', text: renderTemplate(tpl.body, input.vars), templateId: tpl.id, vars: input.vars });
+    id = await queueMessage(ctx, { partnerId, threadId, author: 'humano', kind: 'template', text: renderTemplate(tpl.body, input.vars), templateId: tpl.id, vars: input.vars, ...(by ? { sentBy: by } : {}) });
   }
   await ctx.db.query(`UPDATE app.wa_threads SET mode = 'humano' WHERE id = $1`, [threadId]); // quando uma pessoa responde, a IA sai da conversa
   await processWhatsAppQueue(ctx).catch(() => 0); // tenta já; se falhar, o worker repete
@@ -270,6 +288,158 @@ export async function patchThread(ctx: Ctx, partnerId: string, id: string, p: z.
   await ctx.db.query(`UPDATE app.wa_threads SET state = coalesce($2, state), mode = coalesce($3, mode), opted_out = opted_out OR $4 WHERE id = $1`, [id, p.state ?? null, p.mode ?? null, p.optedOut === true]);
   if (p.optedOut && t.contact_id) await ctx.db.query(`UPDATE app.partner_contacts SET wa_optin = 'nao' WHERE id = $1 AND partner_id = $2`, [t.contact_id, partnerId]);
   return { ok: true };
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Arquivos, encaminhar, número novo e perfis
+// ---------------------------------------------------------------------------------------------------------------------
+/** Lê o envio de arquivo: corpo cru (application/octet-stream) e, nos cabeçalhos, o tipo (x-mime), o nome (x-filename) e a finalidade (x-purpose: avatar). */
+export function readUpload(req: { body: unknown; headers: Record<string, string | string[] | undefined> }): { bytes: Buffer; mime: string; filename: string | null; avatar: boolean } {
+  if (!Buffer.isBuffer(req.body)) throw new AppError(415, 'upload_format', 'Envie o arquivo como corpo da requisição (application/octet-stream).');
+  const h = (k: string): string => { const v = req.headers[k]; return typeof v === 'string' ? v : ''; };
+  let filename: string | null = null;
+  try { filename = decodeURIComponent(h('x-filename')) || null; } catch { filename = null; }
+  return { bytes: req.body, mime: h('x-mime'), filename, avatar: h('x-purpose') === 'avatar' };
+}
+
+const waFail = (e: unknown): unknown => (e instanceof WaError ? new AppError(422, 'wa_failed', e.message) : e);
+
+/** Guarda um arquivo para enviar depois (foto, áudio, documento, vídeo) ou uma foto de perfil (`avatar`). */
+export async function uploadMedia(ctx: Ctx, partnerId: string, a: { bytes: Buffer; mime: string; filename: string | null; avatar?: boolean }) {
+  const s = await storeMedia(ctx, partnerId, { mime: a.mime, filename: a.filename, bytes: a.bytes, origin: a.avatar ? 'avatar' : 'out' });
+  return { id: s.id, kind: s.kind, mime: s.mime, filename: s.filename, size: s.size };
+}
+
+/** Arquivo de uma conversa (só do próprio parceiro). */
+export const mediaFile = (ctx: Ctx, partnerId: string, id: string) => loadMedia(ctx, id, partnerId);
+
+export const forwardSchema = z.strictObject({ messageIds: z.array(z.string().uuid()).min(1).max(20), threadIds: z.array(z.string().uuid()).min(1).max(5) });
+
+/** Encaminha mensagens (texto e arquivos) para outras conversas, respeitando a janela de 24 h e quem pediu para não receber. */
+export async function forwardMessages(ctx: Ctx, partnerId: string, fromThreadId: string, input: z.infer<typeof forwardSchema>, by?: string) {
+  await requireActive(ctx, partnerId);
+  await ownThread(ctx, partnerId, fromThreadId);
+  const msgs = await ctx.db.query<{ id: string; kind: string; body_enc: Buffer; media_id: string | null; mime: string | null }>(
+    `SELECT m.id, m.kind, m.body_enc, m.media_id, w.mime FROM app.wa_messages m LEFT JOIN app.wa_media w ON w.id = m.media_id
+      WHERE m.thread_id = $1 AND m.id = ANY($2::uuid[]) AND m.status <> 'falhou' ORDER BY m.created_at`,
+    [fromThreadId, input.messageIds],
+  );
+  if (msgs.rows.length === 0) throw notFound();
+  const results: { threadId: string; name: string; sent: number; skipped: string | null }[] = [];
+  for (const tid of [...new Set(input.threadIds)]) {
+    const t = await ownThread(ctx, partnerId, tid);
+    const name = t.display_name ?? maskPhone(decryptText(ctx.config.secret, t.phone_enc));
+    if (t.opted_out) { results.push({ threadId: tid, name, sent: 0, skipped: 'Pediu para não receber mensagens.' }); continue; }
+    if (!windowOpen(t.last_inbound_at)) { results.push({ threadId: tid, name, sent: 0, skipped: 'A janela de 24 h está fechada: com este contato só dá para enviar um modelo.' }); continue; }
+    let sent = 0;
+    for (const m of msgs.rows) {
+      const text = decryptText(ctx.config.secret, m.body_enc);
+      if (m.kind === 'text' || m.kind === 'template') {
+        if (!text) continue;
+        await queueMessage(ctx, { partnerId, threadId: tid, author: 'humano', kind: 'text', text, forwarded: true, ...(by ? { sentBy: by } : {}) });
+        sent += 1;
+        continue;
+      }
+      if (!m.media_id || !m.mime) continue;
+      let kind: 'image' | 'audio' | 'document' | 'video';
+      try { kind = classifyOutgoing(m.mime); } catch { continue; } // figurinha ou formato que o WhatsApp não reenvia
+      await queueMessage(ctx, { partnerId, threadId: tid, author: 'humano', kind, text: kind === 'audio' ? '' : text, mediaId: m.media_id, forwarded: true, ...(by ? { sentBy: by } : {}) });
+      sent += 1;
+    }
+    results.push({ threadId: tid, name, sent, skipped: sent ? null : 'Nada nesta seleção pode ser encaminhado.' });
+  }
+  await processWhatsAppQueue(ctx).catch(() => 0);
+  return { results };
+}
+
+/** Adiciona um número novo (com ou sem primeiro modelo). `optin` = quem atende declara que a pessoa autorizou receber mensagens. */
+export const newThreadSchema = z.strictObject({
+  phone: z.string().trim().min(8).max(24),
+  name: z.string().trim().max(60).optional(),
+  optin: z.boolean().default(false),
+  templateId: z.string().uuid().optional(),
+  vars: z.array(z.string().trim().max(200)).max(10).default([]),
+});
+
+export async function newThread(ctx: Ctx, partnerId: string, input: z.infer<typeof newThreadSchema>, by?: string) {
+  await requireActive(ctx, partnerId);
+  const phone = waPhone(input.phone);
+  if (!phone) throw new AppError(422, 'invalid_phone', 'Digite o telefone com DDD, por exemplo (41) 99999-0000.');
+  const thread = await ensureThread(ctx, partnerId, phone, { name: input.name?.trim() || null });
+  if (input.optin) await ctx.db.query(`UPDATE app.wa_threads SET optin = true WHERE id = $1`, [thread.id]);
+  if (input.templateId) await sendInThread(ctx, partnerId, thread.id, { templateId: input.templateId, vars: input.vars }, by);
+  await audit(ctx.db, by ? `user:${by}` : `partner:${partnerId}`, 'wa_new_thread', 'wa_thread', thread.id, { optin: input.optin, template: Boolean(input.templateId) });
+  return { threadId: thread.id, windowOpen: windowOpen(thread.last_inbound_at) };
+}
+
+/** Perfil do contato: nome, observações, foto e permissão. A foto e as observações só aparecem para quem atende. */
+export const profileSchema = z.strictObject({
+  name: z.string().trim().min(1).max(60).optional(),
+  notes: z.string().trim().max(2000).optional(),
+  avatarMediaId: z.string().uuid().nullable().optional(),
+  optin: z.boolean().optional(),
+});
+
+export async function patchProfile(ctx: Ctx, partnerId: string, id: string, p: z.infer<typeof profileSchema>) {
+  const t = await ownThread(ctx, partnerId, id);
+  if (p.avatarMediaId) {
+    const ok = await ctx.db.query(`SELECT 1 FROM app.wa_media WHERE id = $1 AND partner_id = $2 AND origin = 'avatar'`, [p.avatarMediaId, partnerId]);
+    if (!ok.rows[0]) throw notFound();
+  }
+  const notesSet = p.notes !== undefined;
+  const avatarSet = p.avatarMediaId !== undefined;
+  await ctx.db.query(
+    `UPDATE app.wa_threads SET display_name = coalesce($2, display_name),
+            notes_enc = CASE WHEN $3::boolean THEN $4::bytea ELSE notes_enc END,
+            avatar_media_id = CASE WHEN $5::boolean THEN $6::uuid ELSE avatar_media_id END,
+            optin = coalesce($7::boolean, optin) WHERE id = $1`,
+    [id, p.name ?? null, notesSet, notesSet && p.notes ? encryptText(ctx.config.secret, p.notes) : null, avatarSet, p.avatarMediaId ?? null, p.optin ?? null],
+  );
+  if (avatarSet && t.avatar_media_id && t.avatar_media_id !== p.avatarMediaId) await ctx.db.query(`DELETE FROM app.wa_media WHERE id = $1 AND partner_id = $2 AND origin = 'avatar'`, [t.avatar_media_id, partnerId]);
+  return { ok: true };
+}
+
+// Perfil da empresa (o que o cliente vê do número): descrição, e-mail, site, endereço e foto. Na Meta é editável aqui; na Bird, no painel da Bird.
+export const businessProfileSchema = z.strictObject({
+  about: z.string().trim().max(139).optional(),
+  description: z.string().trim().max(512).optional(),
+  email: z.union([z.string().trim().email().max(128), z.literal('')]).optional(),
+  websites: z.array(z.string().trim().url().max(256)).max(2).optional(),
+  address: z.string().trim().max(256).optional(),
+  vertical: z.string().trim().max(40).optional(),
+});
+
+export async function getBusinessProfile(ctx: Ctx, partnerId: string) {
+  const a = await loadAccount(ctx, partnerId);
+  if (!a) throw notConnected();
+  if (a.provider === 'bird') return { editable: false, photoEditable: false, provider: a.provider, displayPhone: a.displayPhone, note: 'O perfil deste número (foto, descrição, site) é editado no painel da Bird.' };
+  const t = transportOf(ctx, a.provider);
+  try {
+    const p = await need(t.getBusinessProfile?.bind(t), 'ver o perfil da empresa')(credOf(a));
+    return { editable: true, photoEditable: Boolean(a.appId), provider: a.provider, displayPhone: a.displayPhone, ...p };
+  } catch (e) { throw waFail(e); }
+}
+
+export async function saveBusinessProfile(ctx: Ctx, partnerId: string, input: z.infer<typeof businessProfileSchema>) {
+  const a = await loadAccount(ctx, partnerId);
+  if (!a) throw notConnected();
+  if (a.provider === 'bird') throw new AppError(409, 'wa_profile_bird', 'O perfil deste número é editado no painel da Bird.');
+  const t = transportOf(ctx, a.provider);
+  try { await need(t.updateBusinessProfile?.bind(t), 'editar o perfil da empresa')(credOf(a), input); } catch (e) { throw waFail(e); }
+  await audit(ctx.db, `partner:${partnerId}`, 'wa_business_profile_saved', 'partner', partnerId, { fields: Object.keys(input) });
+  return getBusinessProfile(ctx, partnerId);
+}
+
+export async function saveBusinessPhoto(ctx: Ctx, partnerId: string, mediaId: string) {
+  const a = await loadAccount(ctx, partnerId);
+  if (!a) throw notConnected();
+  if (a.provider === 'bird') throw new AppError(409, 'wa_profile_bird', 'A foto deste número é trocada no painel da Bird.');
+  const f = await loadMedia(ctx, mediaId, partnerId);
+  const t = transportOf(ctx, a.provider);
+  try { await need(t.setBusinessPhoto?.bind(t), 'trocar a foto do perfil')(credOf(a), f.bytes, f.mime); } catch (e) { throw waFail(e); }
+  await ctx.db.query(`DELETE FROM app.wa_media WHERE id = $1 AND partner_id = $2 AND origin = 'avatar'`, [mediaId, partnerId]);
+  await audit(ctx.db, `partner:${partnerId}`, 'wa_business_photo_saved', 'partner', partnerId);
+  return getBusinessProfile(ctx, partnerId);
 }
 
 /** Começa uma conversa a partir de um contato da base ou do Fôlego, com modelo aprovado (a primeira mensagem sempre é modelo). */

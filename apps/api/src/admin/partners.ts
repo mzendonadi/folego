@@ -38,7 +38,7 @@ export async function listPartners(ctx: Ctx) {
             (SELECT u.email::text FROM app.partner_users u WHERE u.partner_id = p.id ORDER BY u.created_at LIMIT 1) AS email,
             (SELECT count(*) FROM app.lead_deliveries d WHERE d.partner_id = p.id)::text AS sent,
             (SELECT count(*) FROM app.lead_deliveries d WHERE d.partner_id = p.id AND d.status IN ('contacted','converted'))::text AS contacts
-       FROM app.partners p ORDER BY p.legal_name`,
+       FROM app.partners p WHERE NOT p.internal ORDER BY p.legal_name`,
   );
   const c = await ctx.db.query<{ id: string; partner_id: string; name: string; status: string; consent_category: string; employment_types: string[]; ufs: string[]; min_income_cents: string | null; max_income_cents: string | null; price_per_lead_cents: string; commission_bps: number; daily_cap: number; monthly_budget_cents: string | null; webhook_url: string | null; sent: string }>(
     `SELECT c.id, c.partner_id, c.name, c.status, c.consent_category, c.employment_types, c.ufs::text[] AS ufs, c.min_income_cents, c.max_income_cents, c.price_per_lead_cents, c.commission_bps, c.daily_cap, c.monthly_budget_cents, c.webhook_url,

@@ -9,6 +9,7 @@ import { decryptText, encryptText } from './crypto.ts';
 import { AppError } from './errors.ts';
 import type { Ctx } from './services.ts';
 import { inQuietHours, isOptOut, phoneKey, waPhone } from './whatsapp.ts';
+import { applyBirdStatus, ingestBirdInbound } from './wa-bird.ts';
 
 const MAX_ATTEMPTS = 5;
 const COMPANY = 'fl'; // "locatário" da chave de telefone: o próprio Fôlego (os parceiros usam o id deles em whatsapp.ts)
@@ -229,6 +230,8 @@ export async function handleBirdEvent(ctx: Ctx, event: unknown, opts: { log?: (e
   const type = str(ev.type) ?? '';
   const data = obj(ev.data);
   if (type === 'whatsapp.received') {
+    // Caixa de entrada do WhatsApp do Fôlego (backoffice): a mensagem vira conversa; falha aqui não impede o tratamento de SAIR abaixo.
+    await ingestBirdInbound(ctx, data, opts).catch((e) => opts.log?.({ evento: 'bird_entrada_falhou', erro: e instanceof Error ? e.message.slice(0, 100) : 'erro' }));
     const from = obj(data.from);
     const digits = waPhone(str(from.phone_number) ?? '');
     if (!digits) return { handled: false }; // sem telefone (só identificador do WhatsApp): não há como cruzar com a nossa lista
@@ -255,7 +258,7 @@ export async function handleBirdEvent(ctx: Ctx, event: unknown, opts: { log?: (e
     [ref ?? '', provider],
   );
   const m = row.rows[0];
-  if (!m) return { handled: false };
+  if (!m) return { handled: await applyBirdStatus(ctx, type, data, str(obj(data.error).message) ?? str(data.error) ?? str(data.reason) ?? str(data.failure_reason) ?? type) }; // não é convite: pode ser mensagem da caixa de entrada
   if (next === 'falhou') {
     if ((RANK[m.status] ?? 0) >= RANK.entregue!) return { handled: true }; // já entregue: um "falhou" atrasado não desfaz
     const why = str(obj(data.error).message) ?? str(data.error) ?? str(data.reason) ?? str(data.failure_reason) ?? type;

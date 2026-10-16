@@ -1,6 +1,6 @@
 // Seções do backoffice e o que cada papel enxerga por padrão. O dono (owner) sempre tem tudo; para os demais,
 // vale a lista de permissões gravada no usuário (o papel só sugere o conjunto inicial ao criar).
-export const SECTIONS = ['dashboard', 'clientes', 'clientes_pii', 'assinaturas', 'jornada', 'parcerias', 'chatbot', 'precos', 'marketing', 'marketing_envio', 'dados_exportar', 'config_site', 'config_usuarios', 'auditoria'] as const;
+export const SECTIONS = ['dashboard', 'clientes', 'clientes_pii', 'assinaturas', 'jornada', 'parcerias', 'chatbot', 'whatsapp', 'precos', 'marketing', 'marketing_envio', 'dados_exportar', 'config_site', 'config_usuarios', 'auditoria'] as const;
 export type Section = (typeof SECTIONS)[number];
 
 export const SECTION_LABEL: Record<Section, string> = {
@@ -11,6 +11,7 @@ export const SECTION_LABEL: Record<Section, string> = {
   jornada: 'Jornada e funil',
   parcerias: 'Parcerias e leads',
   chatbot: 'Chatbot (conversas, leads e retomada de contato)',
+  whatsapp: 'WhatsApp do Fôlego (conversas, arquivos, áudios e perfis)',
   precos: 'Produtos e preços',
   marketing: 'Marketing e relacionamento (insights, planejamento, rascunho de e-mails)',
   marketing_envio: 'Enviar e-mails de campanha (aprovar o envio)',
@@ -27,10 +28,10 @@ export const ROLE_LABEL: Record<Role, string> = { owner: 'Dono', gestor: 'Gestor
 
 export const ROLE_PRESETS: Record<Role, Section[]> = {
   owner: [...SECTIONS],
-  gestor: ['dashboard', 'clientes', 'assinaturas', 'jornada', 'parcerias', 'chatbot', 'precos', 'marketing', 'config_site', 'auditoria'],
+  gestor: ['dashboard', 'clientes', 'assinaturas', 'jornada', 'parcerias', 'chatbot', 'whatsapp', 'precos', 'marketing', 'config_site', 'auditoria'],
   financeiro: ['dashboard', 'clientes', 'assinaturas', 'precos', 'auditoria'],
-  marketing: ['dashboard', 'jornada', 'parcerias', 'chatbot', 'marketing'],
-  suporte: ['clientes', 'assinaturas', 'jornada', 'chatbot'],
+  marketing: ['dashboard', 'jornada', 'parcerias', 'chatbot', 'whatsapp', 'marketing'],
+  suporte: ['clientes', 'assinaturas', 'jornada', 'chatbot', 'whatsapp'],
 };
 
 export const isSection = (v: unknown): v is Section => typeof v === 'string' && (SECTIONS as readonly string[]).includes(v);
