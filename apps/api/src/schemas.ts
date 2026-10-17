@@ -55,6 +55,7 @@ export const orderContactSchema = z.strictObject({
   phone: z.string().trim().transform((v) => v.replace(/\D/g, '')).refine((d) => /^\d{10,11}$/.test(d), 'Celular inválido'),
   adsConsent: z.boolean().default(true), // o aceite vem dos termos aceitos no diagnóstico; o campo não aparece mais na tela
   fbc: z.string().regex(/^fb\.1\.\d{10,14}\.[A-Za-z0-9_-]{6,200}$/).optional(),
+  fbp: z.string().regex(/^fb\.1\.\d{10,14}\.\d{5,20}$/).optional(),
 });
 
 export const createOrderSchema = z.object({

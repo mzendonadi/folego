@@ -4,6 +4,7 @@ import { el, icon, announce, toast, copyText } from './dom.js';
 import { brl, mmss } from './format.js';
 import { qrSvg } from '../vendor/qr.js';
 import { DEV } from '../config.js';
+import { track } from './meta-pixel.js';
 import { CATALOG, BUNDLE, daysOf } from './catalog.js';
 
 /**
@@ -151,6 +152,9 @@ export function renderCheckout(root, ctx) {
         toast(included ? 'Pronto: o Mapa está no seu plano.' : 'Conta de teste: liberado sem cobrança.');
         return ctx.onPaid(order.orderId);
       }
+      // Pix gerado com e-mail e celular: Lead e InitiateCheckout. O servidor manda os mesmos eventos com estes ids (lead-<caso>, ic-<pedido>).
+      track('Lead', {}, `lead-${ctx.caseId}`);
+      track('InitiateCheckout', { currency: 'BRL', value: order.totalCents / 100, content_name: 'Mapa da Virada' }, `ic-${order.orderId}`);
       drawSummary(true);
       drawPix(order);
     } catch (error) {
