@@ -265,6 +265,24 @@ test('adaptador da Bird: pedidos de texto, modelo nomeado e mídia; baixa a míd
   await assert.rejects(() => new BirdWaTransport(null, f).sendText(cred, '55', 'x'), /não está configurado/);
 });
 
+test('modelos salvos: editar texto e variáveis nomeadas, limpar variáveis e recusar nome repetido', async () => {
+  const mk = (name: string) => call('POST', '/api/partner/wa/templates', { headers: P.auth, body: { name, category: 'MARKETING', body: `Olá {{1}}, modelo ${name}.` } });
+  const a = await mk('folego-modelo-a');
+  await mk('folego-modelo-b');
+  assert.equal(a.status, 201, a.text);
+  const up = await call('PUT', `/api/partner/wa/templates/${a.json.id}`, { headers: P.auth, body: { body: 'Olá {{1}}, seu código é {{2}}.', paramNames: ['nome_do_cliente', 'codigo'], category: 'UTILITY' } });
+  assert.equal(up.status, 200, up.text);
+  const row = (await call('GET', '/api/partner/wa/templates', { headers: P.auth })).json.templates.find((t: any) => t.id === a.json.id);
+  assert.deepEqual([row.body, row.paramNames, row.category, row.slots, row.name], ['Olá {{1}}, seu código é {{2}}.', ['nome_do_cliente', 'codigo'], 'UTILITY', 2, 'folego-modelo-a']);
+  assert.equal((await call('PUT', `/api/partner/wa/templates/${a.json.id}`, { headers: P.auth, body: { paramNames: [] } })).status, 200);
+  const cleared = (await call('GET', '/api/partner/wa/templates', { headers: P.auth })).json.templates.find((t: any) => t.id === a.json.id);
+  assert.equal(cleared.paramNames, null, 'lista vazia limpa as variáveis nomeadas');
+  assert.equal(cleared.body, 'Olá {{1}}, seu código é {{2}}.', 'campos não enviados ficam como estavam');
+  assert.equal((await call('PUT', `/api/partner/wa/templates/${a.json.id}`, { headers: P.auth, body: { name: 'folego-modelo-b' } })).json.error, 'duplicate');
+  assert.equal((await call('PUT', `/api/partner/wa/templates/${a.json.id}`, { headers: P.auth, body: { name: 'Nome Inválido!' } })).status, 400);
+  assert.equal((await call('PUT', `/api/partner/wa/templates/${NOBODY}`, { headers: P.auth, body: { body: 'Olá {{1}}, tudo bem?' } })).status, 404);
+});
+
 // ------------------------------------------------------------------------------------------------ backoffice (Bird)
 const birdHook = async (event: unknown, secret = BIRD_RAW) => {
   const body = JSON.stringify(event);

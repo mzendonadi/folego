@@ -48,6 +48,10 @@
 .bo-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s3); }
 .bo-toolbar p { margin: 0; }
 .bo-actions { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--s3); }
+/* WhatsApp > Modelos: visualização do modelo como a pessoa vê e texto cadastrado */
+.bo-tpl-bubble { max-width: 420px; padding: 10px 14px; border-radius: 14px; background: var(--mint); color: var(--mint-ink); white-space: pre-wrap; overflow-wrap: anywhere; }
+.bo-pre { margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+.bo-sub { margin: var(--s4) 0 var(--s2); font-size: 0.95rem; }
 .bo-inline { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; }
 .bo-inline .input { width: 96px; }
 .bo-grid { display: grid; gap: var(--s4); grid-template-columns: minmax(0, 1fr); }

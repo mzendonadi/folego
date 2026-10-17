@@ -602,6 +602,7 @@ export function registerGestao(app: FastifyInstance, deps: AdminRouteDeps): void
   });
   app.get(`${WA}/templates`, async (req) => { await house(req); return waPortal.listTemplates(ctx, HOUSE_PARTNER_ID); });
   app.post(`${WA}/templates`, async (req, reply) => { await house(req); return reply.status(201).send(await waPortal.createTemplate(ctx, HOUSE_PARTNER_ID, waPortal.templateSchema.parse(req.body))); });
+  app.put(`${WA}/templates/:id`, async (req) => { await house(req); return waPortal.updateTemplate(ctx, HOUSE_PARTNER_ID, tid(req), waPortal.templateUpdateSchema.parse(req.body)); });
   app.patch(`${WA}/templates/:id`, async (req) => { await house(req); return waPortal.setTemplateStatus(ctx, HOUSE_PARTNER_ID, tid(req), waPortal.templatePatchSchema.parse(req.body).status); });
   app.delete(`${WA}/templates/:id`, async (req) => { await house(req); return waPortal.deleteTemplate(ctx, HOUSE_PARTNER_ID, tid(req)); });
   app.get(`${WA}/threads`, async (req) => {

@@ -435,6 +435,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     app.put('/api/partner/wa/agent', async (req) => wa.saveAgent(ctx, pid(req), wa.agentSchema.parse(req.body)));
     app.get('/api/partner/wa/templates', async (req) => wa.listTemplates(ctx, pid(req)));
     app.post('/api/partner/wa/templates', async (req, reply) => reply.status(201).send(await wa.createTemplate(ctx, pid(req), wa.templateSchema.parse(req.body))));
+    app.put('/api/partner/wa/templates/:id', async (req) => wa.updateTemplate(ctx, pid(req), pidParam(req), wa.templateUpdateSchema.parse(req.body)));
     app.patch('/api/partner/wa/templates/:id', async (req) => wa.setTemplateStatus(ctx, pid(req), pidParam(req), wa.templatePatchSchema.parse(req.body).status));
     app.delete('/api/partner/wa/templates/:id', async (req) => wa.deleteTemplate(ctx, pid(req), pidParam(req)));
     app.get('/api/partner/wa/threads', async (req) => {

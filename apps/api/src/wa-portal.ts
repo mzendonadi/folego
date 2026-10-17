@@ -152,6 +152,26 @@ export async function createTemplate(ctx: Ctx, partnerId: string, input: z.infer
   }
 }
 
+/** Edição de um modelo salvo (qualquer campo). `paramNames: []` limpa as variáveis nomeadas. A situação (aprovado etc.) continua a que está: quem edita decide se precisa reaprovar. */
+export const templateUpdateSchema = templateSchema.partial();
+
+export async function updateTemplate(ctx: Ctx, partnerId: string, id: string, input: z.infer<typeof templateUpdateSchema>) {
+  const names = input.paramNames === undefined ? null : input.paramNames.length ? input.paramNames : null;
+  try {
+    const r = await ctx.db.query(
+      `UPDATE app.wa_templates SET name = coalesce($3, name), language = coalesce($4, language), category = coalesce($5, category), body = coalesce($6, body),
+              param_names = CASE WHEN $7::boolean THEN $8::text[] ELSE param_names END WHERE id = $1 AND partner_id = $2`,
+      [id, partnerId, input.name ?? null, input.language ?? null, input.category ?? null, input.body ?? null, input.paramNames !== undefined, names],
+    );
+    if (!r.rowCount) throw notFound();
+  } catch (e) {
+    if (e instanceof Error && /duplicate key/i.test(e.message)) throw new AppError(409, 'duplicate', 'Já existe um modelo com este nome.');
+    throw e;
+  }
+  await audit(ctx.db, `partner:${partnerId}`, 'wa_template_updated', 'partner', partnerId, { template: id, fields: Object.keys(input) });
+  return { ok: true };
+}
+
 export async function setTemplateStatus(ctx: Ctx, partnerId: string, id: string, status: z.infer<typeof templatePatchSchema>['status']) {
   const r = await ctx.db.query(`UPDATE app.wa_templates SET status = $3 WHERE id = $1 AND partner_id = $2`, [id, partnerId, status]);
   if (!r.rowCount) throw notFound();

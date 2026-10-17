@@ -2,10 +2,10 @@
 // Mesmo componente do portal do parceiro (wa-inbox.js); aqui o servidor é o do Fôlego e as regras da Meta/Bird valem igual.
 import { api } from '../api.js';
 import { waInbox } from '../../wa-inbox.js';
-import { el, icon, toast, card, cardOpts, tabs, table, field, int } from '../ui.js';
+import { el, icon, toast, card, cardOpts, tabs, table, field, int, drawer, dl, badge, dt } from '../ui.js';
 import { confirmDialog } from '../../confirm.js';
 
-const TPL_STATUS = { rascunho: 'Rascunho', em_analise: 'Em análise', aprovado: 'Aprovado', rejeitado: 'Rejeitado' };
+const TPL_STATUS = { rascunho: ['Rascunho', 'muted'], em_analise: ['Em análise', 'warn'], aprovado: ['Aprovado', 'ok'], rejeitado: ['Rejeitado', 'bad'] };
 
 export async function whatsappScreen() {
   const host = el('div', { class: 'bo-stack' });
@@ -37,50 +37,98 @@ export async function whatsappScreen() {
   }
 
   // ------------------------------------------------------------------------------------------ Modelos
-  async function modelos() {
-    const { templates } = await api.wa.call('GET', '/templates');
-    const name = el('input', { class: 'input', id: 'wt-name', type: 'text', maxlength: '60', placeholder: 'ex.: folego-boas-vindas' });
+  // Lista dos modelos salvos (o que já foi aprovado na Bird) com ver, editar, excluir, situação, busca e filtro.
+  const tplFilter = { q: '', status: '' };
+  const preview = (t, filled = null) => t.body.replace(/\{\{(\d+)\}\}/g, (_, n) => (filled ? filled[Number(n) - 1] || `[${t.paramNames?.[Number(n) - 1] ?? `variável ${n}`}]` : `[${t.paramNames?.[Number(n) - 1] ?? `variável ${n}`}]`));
+
+  function templateEditor(t, done) {
+    const d = drawer(t ? `Editar modelo: ${t.name}` : 'Novo modelo');
+    const name = el('input', { class: 'input', id: 'wt-name', type: 'text', maxlength: '60', placeholder: 'ex.: folego-boas-vindas', value: t?.name ?? '' });
     const cat = el('select', { class: 'input', id: 'wt-cat' }, el('option', { value: 'MARKETING' }, 'Marketing (cobrado pela Meta)'), el('option', { value: 'UTILITY' }, 'Utilidade (aviso sobre algo que o cliente pediu)'));
-    const lang = el('input', { class: 'input', id: 'wt-lang', type: 'text', value: 'pt_BR', maxlength: '5' });
-    const body = el('textarea', { class: 'input', id: 'wt-body', rows: '4', maxlength: '1024', placeholder: 'Olá {{1}}, aqui é a equipe do Fôlego…' });
-    const names = el('input', { class: 'input', id: 'wt-names', type: 'text', placeholder: 'nome_do_cliente, codigo' });
-    const add = el('button', { class: 'btn btn-primary', type: 'submit' }, 'Salvar modelo');
+    cat.value = t?.category ?? 'MARKETING';
+    const lang = el('input', { class: 'input', id: 'wt-lang', type: 'text', value: t?.language ?? 'pt_BR', maxlength: '5' });
+    const body = el('textarea', { class: 'input', id: 'wt-body', rows: '9', maxlength: '1024', placeholder: 'Olá {{1}}, aqui é a equipe do Fôlego…' }, t?.body ?? '');
+    const names = el('input', { class: 'input', id: 'wt-names', type: 'text', placeholder: 'nome_do_cliente, codigo', value: t?.paramNames?.join(', ') ?? '' });
+    const save = el('button', { class: 'btn btn-primary', type: 'submit' }, t ? 'Salvar alterações' : 'Salvar modelo');
     const form = el('form', { class: 'tool-form' },
       field('Identificador do modelo na Bird (slug)', name, 'Igual ao que aparece na Bird: minúsculas, números, _ e -.'),
       field('Categoria', cat), field('Idioma', lang),
       field('Texto', body, 'Use {{1}}, {{2}} para as partes que mudam. Copie o texto exatamente como foi aprovado.'),
       field('Nome das variáveis (só se o modelo da Bird usa variáveis nomeadas)', names, 'Separe por vírgula, na ordem de {{1}}, {{2}}…'),
-      add);
+      t ? el('p', { class: 'note note-amber' }, icon('info'), el('span', {}, 'Ao editar, a situação (Aprovado etc.) continua a mesma. Só mude o texto se ele também foi alterado na Bird.')) : null,
+      save);
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      add.disabled = true;
+      save.disabled = true;
       try {
         const paramNames = names.value.split(',').map((s) => s.trim()).filter(Boolean);
-        await api.wa.call('POST', '/templates', { name: name.value.trim(), category: cat.value, language: lang.value.trim() || 'pt_BR', body: body.value.trim(), ...(paramNames.length ? { paramNames } : {}) });
-        toast('Modelo salvo. Marque como aprovado quando a Bird confirmar.');
-        draw();
-      } catch (err) { add.disabled = false; toast(err.message); }
+        const payload = { name: name.value.trim(), category: cat.value, language: lang.value.trim() || 'pt_BR', body: body.value.trim(), paramNames };
+        if (t) await api.wa.call('PUT', `/templates/${t.id}`, payload);
+        else await api.wa.call('POST', '/templates', paramNames.length ? payload : { ...payload, paramNames: undefined });
+        toast(t ? 'Modelo atualizado.' : 'Modelo salvo. Marque como aprovado quando a Bird confirmar.');
+        d.close();
+        done();
+      } catch (err) { save.disabled = false; toast(err.message); }
     });
-    const list = table([
-      { label: 'Modelo', render: (t) => el('span', {}, el('strong', {}, t.name), el('span', { class: 'muted' }, ` · ${t.language}${t.paramNames ? ` · variáveis: ${t.paramNames.join(', ')}` : ''}`), el('br'), el('small', { class: 'muted' }, t.body)) },
-      { label: 'Situação', render: (t) => {
-        const sel = el('select', { class: 'input input-sm', 'aria-label': `Situação de ${t.name}` }, ...Object.entries(TPL_STATUS).map(([v, l]) => el('option', { value: v }, l)));
-        sel.value = t.status;
-        sel.addEventListener('change', async () => { try { await api.wa.call('PATCH', `/templates/${t.id}`, { status: sel.value }); toast('Situação atualizada.'); } catch (err) { toast(err.message); } });
-        return sel;
-      } },
-      { label: '', render: (t) => {
-        const del = el('button', { class: 'btn btn-quiet btn-sm', type: 'button', 'aria-label': `Apagar ${t.name}` }, icon('trash'));
-        del.addEventListener('click', async () => {
-          if (!(await confirmDialog({ title: `Apagar o modelo ${t.name}?`, text: 'Só dá para apagar modelos que ainda não foram usados.', confirmLabel: 'Apagar', danger: true }))) return;
-          try { await api.wa.call('DELETE', `/templates/${t.id}`); draw(); } catch (err) { toast(err.message); }
-        });
-        return del;
-      } },
-    ], templates, { emptyText: 'Nenhum modelo ainda. Cadastre abaixo os que você aprovou na Bird.' });
+    d.body.append(form);
+  }
+
+  function templateView(t) {
+    const d = drawer(t.name);
+    const bubble = el('div', { class: 'bo-tpl-bubble' }, preview(t));
+    const copy = el('button', { class: 'btn btn-secondary btn-sm', type: 'button' }, icon('copy'), 'Copiar texto');
+    copy.addEventListener('click', async () => { try { await navigator.clipboard.writeText(t.body); toast('Texto copiado.'); } catch { toast('Não consegui copiar. Selecione e copie.'); } });
+    const [label, tone] = TPL_STATUS[t.status] ?? [t.status, 'muted'];
+    d.body.append(
+      dl([['Situação', badge(label, tone)], ['Categoria', t.category === 'MARKETING' ? 'Marketing' : 'Utilidade'], ['Idioma', t.language], ['Variáveis', t.slots ? (t.paramNames?.length ? t.paramNames.map((n, i) => `{{${i + 1}}} = ${n}`).join(' · ') : `${t.slots} (posicionais)`) : 'nenhuma'], ['Criado em', dt(t.createdAt)]]),
+      el('h3', { class: 'bo-sub' }, 'Como a pessoa vê (variáveis entre colchetes)'), bubble,
+      el('h3', { class: 'bo-sub' }, 'Texto cadastrado'), el('pre', { class: 'bo-pre' }, t.body),
+      el('div', { class: 'bo-actions' }, copy));
+  }
+
+  async function modelos() {
+    const { templates } = await api.wa.call('GET', '/templates');
+    const count = (s) => templates.filter((t) => t.status === s).length;
+    const q = el('input', { class: 'input input-sm', type: 'search', placeholder: 'Buscar por nome ou texto', 'aria-label': 'Buscar modelo', value: tplFilter.q });
+    q.addEventListener('input', () => { tplFilter.q = q.value; paint(); });
+    const st = el('select', { class: 'input input-sm', 'aria-label': 'Filtrar por situação' }, el('option', { value: '' }, 'Todas as situações'), ...Object.entries(TPL_STATUS).map(([v, [l]]) => el('option', { value: v }, l)));
+    st.value = tplFilter.status;
+    st.addEventListener('change', () => { tplFilter.status = st.value; paint(); });
+    const add = el('button', { class: 'btn btn-primary btn-sm', type: 'button' }, icon('plus'), 'Novo modelo');
+    add.addEventListener('click', () => templateEditor(null, draw));
+    const holder = el('div', {});
+    const paint = () => {
+      const f = templates.filter((t) => (!tplFilter.status || t.status === tplFilter.status) && (!tplFilter.q || `${t.name} ${t.body}`.toLowerCase().includes(tplFilter.q.toLowerCase())));
+      holder.replaceChildren(table([
+        { label: 'Modelo', render: (t) => el('span', {}, el('strong', {}, t.name), el('br'), el('small', { class: 'muted' }, t.body.length > 110 ? `${t.body.slice(0, 110)}…` : t.body)) },
+        { label: 'Categoria', render: (t) => (t.category === 'MARKETING' ? 'Marketing' : 'Utilidade') },
+        { label: 'Variáveis', render: (t) => (t.slots ? (t.paramNames?.length ? t.paramNames.join(', ') : `${t.slots}`) : '—') },
+        { label: 'Situação', render: (t) => {
+          const sel = el('select', { class: 'input input-sm', 'aria-label': `Situação de ${t.name}` }, ...Object.entries(TPL_STATUS).map(([v, [l]]) => el('option', { value: v }, l)));
+          sel.value = t.status;
+          sel.addEventListener('change', async () => { try { await api.wa.call('PATCH', `/templates/${t.id}`, { status: sel.value }); t.status = sel.value; toast('Situação atualizada.'); draw(); } catch (err) { toast(err.message); } });
+          return sel;
+        } },
+        { label: 'Ações', render: (t) => {
+          const view = el('button', { class: 'btn btn-quiet btn-sm', type: 'button', 'aria-label': `Ver ${t.name}` }, 'Ver');
+          view.addEventListener('click', () => templateView(t));
+          const edit = el('button', { class: 'btn btn-quiet btn-sm', type: 'button', 'aria-label': `Editar ${t.name}` }, 'Editar');
+          edit.addEventListener('click', () => templateEditor(t, draw));
+          const del = el('button', { class: 'btn btn-quiet btn-sm', type: 'button', 'aria-label': `Excluir ${t.name}` }, icon('trash'));
+          del.addEventListener('click', async () => {
+            if (!(await confirmDialog({ title: `Excluir o modelo ${t.name}?`, text: 'Só dá para excluir modelos que ainda não foram usados em mensagens. Se já foi usado, marque como Rejeitado.', confirmLabel: 'Excluir', danger: true }))) return;
+            try { await api.wa.call('DELETE', `/templates/${t.id}`); toast('Modelo excluído.'); draw(); } catch (err) { toast(err.message); }
+          });
+          return el('span', { class: 'bo-actions' }, view, edit, del);
+        } },
+      ], f, { emptyText: templates.length ? 'Nenhum modelo com esse filtro.' : 'Nenhum modelo ainda. Clique em "Novo modelo" e cadastre os que você aprovou na Bird.' }));
+    };
+    paint();
     return el('div', { class: 'bo-stack' },
-      card('Modelos aprovados', list, cardOpts({ sub: 'Para começar uma conversa (ou falar depois de 24 h sem resposta) o WhatsApp exige um modelo aprovado. Crie e aprove na Bird; depois cadastre aqui com o mesmo identificador e marque "Aprovado".' })),
-      card('Novo modelo', form));
+      card(`Modelos salvos (${templates.length})`,
+        el('p', { class: 'muted' }, `${count('aprovado')} aprovado(s) · ${count('em_analise')} em análise · ${count('rascunho')} rascunho(s) · ${count('rejeitado')} rejeitado(s)`),
+        el('div', { class: 'bo-toolbar' }, q, st, add), holder,
+        cardOpts({ sub: 'Para começar uma conversa (ou falar depois de 24 h sem resposta) o WhatsApp exige um modelo aprovado. Crie e aprove na Bird; depois cadastre aqui com o mesmo identificador e marque "Aprovado".' })));
   }
 
   // ------------------------------------------------------------------------------------------ Conexão
