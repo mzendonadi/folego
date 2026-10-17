@@ -51,7 +51,7 @@ export async function whatsappScreen() {
     const names = el('input', { class: 'input', id: 'wt-names', type: 'text', placeholder: 'nome_do_cliente, codigo', value: t?.paramNames?.join(', ') ?? '' });
     const save = el('button', { class: 'btn btn-primary', type: 'submit' }, t ? 'Salvar alterações' : 'Salvar modelo');
     const form = el('form', { class: 'tool-form' },
-      field('Identificador do modelo na Bird (slug)', name, 'Igual ao que aparece na Bird: minúsculas, números, _ e -.'),
+      field('Identificador do modelo na Bird (slug)', name, 'Pode digitar como na Bird (ex.: Fôlego Indicação Prumo): vira folego-indicacao-prumo ao salvar.'),
       field('Categoria', cat), field('Idioma', lang),
       field('Texto', body, 'Use {{1}}, {{2}} para as partes que mudam. Copie o texto exatamente como foi aprovado.'),
       field('Nome das variáveis (só se o modelo da Bird usa variáveis nomeadas)', names, 'Separe por vírgula, na ordem de {{1}}, {{2}}…'),
@@ -62,7 +62,9 @@ export async function whatsappScreen() {
       save.disabled = true;
       try {
         const paramNames = names.value.split(',').map((s) => s.trim()).filter(Boolean);
-        const payload = { name: name.value.trim(), category: cat.value, language: lang.value.trim() || 'pt_BR', body: body.value.trim(), paramNames };
+        const slug = name.value.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
+        name.value = slug;
+        const payload = { name: slug, category: cat.value, language: lang.value.trim() || 'pt_BR', body: body.value.trim(), paramNames };
         if (t) await api.wa.call('PUT', `/templates/${t.id}`, payload);
         else await api.wa.call('POST', '/templates', paramNames.length ? payload : { ...payload, paramNames: undefined });
         toast(t ? 'Modelo atualizado.' : 'Modelo salvo. Marque como aprovado quando a Bird confirmar.');
