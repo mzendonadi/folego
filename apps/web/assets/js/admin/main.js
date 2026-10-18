@@ -202,6 +202,13 @@ async function renderScreen(route, content) {
       renderScreen(route, content);
     },
     reload: () => renderScreen(route, content),
+    // Troca de tela sem recarregar; dados sensíveis (ex.: celular do contato) vão em state, nunca no endereço.
+    goto: (id) => {
+      if (!allowedMenu().some((m) => m.id === id)) return false;
+      history.pushState(null, '', `/gestao/${id}`);
+      onRouteChange();
+      return true;
+    },
   };
   try {
     const screen = await route.load();

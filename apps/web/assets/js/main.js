@@ -14,7 +14,6 @@ import { renderUnsubscribe } from './unsubscribe.js';
 import { renderResumeBanner } from './banner.js';
 import { initChat } from './chat.js';
 import { initConsent } from './consent.js';
-import { track as pixelTrack } from './meta-pixel.js';
 import * as api from './api.js';
 import { loadCatalog, applyCachedCatalog } from './prices.js';
 import { track } from './track.js';
@@ -106,7 +105,6 @@ function viewFromPath(path) {
 }
 
 function show(view, { focus = true, scroll = true } = {}) {
-  if (view === 'preview' && current !== 'preview') pixelTrack('ViewContent', { content_name: 'Resultado do diagnóstico', content_category: 'diagnostico' }); // diagnóstico concluído: sinal do meio do funil
   current = view;
   const section = view === 'addon' ? 'checkout' : view; // o complemento usa a mesma tela de pagamento
   $$('[data-view]').forEach((node) => {

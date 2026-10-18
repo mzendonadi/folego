@@ -7,13 +7,18 @@ import { confirmDialog } from '../../confirm.js';
 
 const TPL_STATUS = { rascunho: ['Rascunho', 'muted'], em_analise: ['Em análise', 'warn'], aprovado: ['Aprovado', 'ok'], rejeitado: ['Rejeitado', 'bad'] };
 
-export async function whatsappScreen() {
+export async function whatsappScreen(ctx = {}) {
+  // Vindo do Chatbot: abre "Nova conversa" já com o celular e o nome do contato (uma vez só).
+  const prefill = ctx.state?.waStart ?? null;
+  if (ctx.state) ctx.state.waStart = null;
   const host = el('div', { class: 'bo-stack' });
   const st = { tab: 'conversas' };
   let inbox = null;
   const stopInbox = () => { inbox?.stop(); inbox = null; };
   let acc = await api.wa.call('GET', '/account');
   if (!acc.configured) st.tab = 'conexao';
+  let pending = acc.configured ? prefill : null;
+  if (prefill && !acc.configured) toast('Conecte o número do WhatsApp para falar com o contato.');
 
   const bar = () => tabs([['conversas', 'Conversas'], ['modelos', 'Modelos'], ['conexao', 'Conexão']], st.tab, (t) => { st.tab = t; draw(); });
 
@@ -32,7 +37,9 @@ export async function whatsappScreen() {
 
   // ------------------------------------------------------------------------------------------ Conversas
   function conversas() {
-    inbox = waInbox({ host: api.wa, features: { agent: false } });
+    const start = pending ? { prefill: { phone: pending.phone, name: pending.name, templateHint: 'chatbot', onOpened: pending.onOpened } } : {};
+    pending = null;
+    inbox = waInbox({ host: api.wa, start, features: { agent: false } });
     return el('div', { class: 'bo-wa' }, inbox.node);
   }
 

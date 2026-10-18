@@ -42,8 +42,6 @@ export async function createCase(input) {
   return request('POST', '/cases', { body: { profile: input.profile, debts, acceptTerms: true }, headers: await guard() });
 }
 
-import { getFbp } from './meta-pixel.js';
-
 /** fbc do clique no anúncio (se houve), para a Meta atribuir a conversão. */
 const storedFbc = () => {
   try {
@@ -54,7 +52,7 @@ const storedFbc = () => {
 };
 
 export async function createOrder({ caseId, products, contact }) {
-  return request('POST', '/orders', { body: { caseId, products, ...(contact ? { contact: { ...contact, ...(storedFbc() ? { fbc: storedFbc() } : {}), ...(getFbp() ? { fbp: getFbp() } : {}) } } : {}) }, headers: { 'idempotency-key': crypto.randomUUID() } });
+  return request('POST', '/orders', { body: { caseId, products, ...(contact ? { contact: { ...contact, ...(storedFbc() ? { fbc: storedFbc() } : {}) } } : {}) }, headers: { 'idempotency-key': crypto.randomUUID() } });
 }
 
 /** Já pagou neste navegador? O cookie de sessão diz; assim o Mapa reabre sem cadastro. */

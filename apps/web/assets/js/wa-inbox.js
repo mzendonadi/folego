@@ -447,7 +447,7 @@ export function waInbox({ host, start = {}, features = {} }) {
     });
   }
 
-  async function newConversation() {
+  async function newConversation(pre = {}) {
     const phone = el('input', { class: 'input', type: 'tel', inputmode: 'tel', autocomplete: 'off', placeholder: '(41) 99999-0000', id: 'wi-new-phone' });
     const name = el('input', { class: 'input', type: 'text', maxlength: '60', autocomplete: 'off', placeholder: 'Nome (opcional)', id: 'wi-new-name' });
     const optin = el('input', { type: 'checkbox', id: 'wi-new-optin' });
@@ -460,7 +460,11 @@ export function waInbox({ host, start = {}, features = {} }) {
     host.call('GET', '/templates').then((r) => {
       templates = r.templates.filter((t) => t.status === 'aprovado');
       for (const t of templates) tplSel.append(el('option', { value: t.id }, t.name));
+      const hint = pre.templateHint && templates.find((t) => t.name.includes(pre.templateHint));
+      if (hint) { tplSel.value = hint.id; tplSel.dispatchEvent(new Event('change')); }
     }).catch(() => {});
+    if (pre.phone) phone.value = pre.phone;
+    if (pre.name) name.value = pre.name;
     tplSel.addEventListener('change', () => { const t = templates.find((x) => x.id === tplSel.value); vars.hidden = !t || t.slots === 0; if (t && !vars.value) vars.value = name.value.trim().split(' ')[0] ?? ''; });
     const m = modal({
       title: 'Nova conversa',
@@ -482,6 +486,7 @@ export function waInbox({ host, start = {}, features = {} }) {
         m.close();
         await paintList();
         await openThread(r.threadId);
+        pre.onOpened?.(r);
       } catch (err) { go.disabled = false; toast(err.message); }
     });
     phone.focus();
@@ -550,6 +555,7 @@ export function waInbox({ host, start = {}, features = {} }) {
         await paintList();
         await openThread(r.threadId);
       } else if (start.thread) await openThread(start.thread);
+      else if (start.prefill) newConversation(start.prefill);
     } catch (e) { if (!e.silent) toast(e.message); }
   })();
 

@@ -87,7 +87,20 @@ export async function chatbotScreen(ctx) {
     const render = (data) => {
       const l = data.lead;
       const phone = digits(l.phone);
+      // Se a equipe tem acesso à tela WhatsApp, abre lá a conversa com os dados do contato; senão, cai no WhatsApp Web.
       const wa = `https://wa.me/${phone}?text=${encodeURIComponent(followUp(l))}`;
+      const waBtn = el('a', { class: 'btn btn-primary btn-sm', href: wa, target: '_blank', rel: 'noopener noreferrer' }, icon('chat'), 'WhatsApp');
+      waBtn.addEventListener('click', (e) => {
+        if (!ctx.can?.('whatsapp') || !ctx.goto) return;
+        e.preventDefault();
+        ctx.state.waStart = {
+          phone: l.phone,
+          name: l.name ?? '',
+          onOpened: () => { if (l.status === 'novo') api.chatAtualizar(l.id, { status: 'em_contato' }).catch(() => {}); },
+        };
+        d.close?.();
+        ctx.goto('whatsapp');
+      });
       const notes = el('textarea', { class: 'input', rows: '3', maxlength: '2000', 'aria-label': 'Anotações internas' });
       notes.value = l.notes ?? '';
       const note = el('input', { class: 'input', type: 'text', maxlength: '1000', placeholder: 'Ex.: liguei, vai decidir sexta', 'aria-label': 'Registrar contato feito' });
@@ -116,11 +129,11 @@ export async function chatbotScreen(ctx) {
         el('p', { class: 'fine muted' }, `Chamou em ${dt(l.createdAt)} · ${int(l.messages)} mensagens${l.contactedAt ? ` · contatado em ${dt(l.contactedAt)}` : ''}${l.convertedAt ? ` · convertido em ${dt(l.convertedAt)}` : ''}`),
         el('section', {}, el('h4', {}, 'Retomar o contato'),
           el('div', { class: 'bo-actions' },
-            el('a', { class: 'btn btn-primary btn-sm', href: wa, target: '_blank', rel: 'noopener noreferrer' }, icon('chat'), 'WhatsApp'),
+            waBtn,
             el('a', { class: 'btn btn-secondary btn-sm', href: `tel:+${phone}` }, icon('phone'), l.phone),
             el('a', { class: 'btn btn-secondary btn-sm', href: `mailto:${l.email}?subject=${encodeURIComponent('Fôlego: posso te ajudar?')}&body=${encodeURIComponent(followUp(l))}` }, icon('mail'), 'E-mail'),
             copy),
-          el('p', { class: 'fine muted' }, 'O WhatsApp abre com uma mensagem pronta para você ajustar. Depois de falar, registre abaixo.')),
+          el('p', { class: 'fine muted' }, 'O botão WhatsApp abre a tela WhatsApp do backoffice com o celular e o nome já preenchidos; o contato passa para "Em contato" ao abrir a conversa. Depois de falar, registre abaixo.')),
         el('section', {}, el('h4', {}, 'Situação'), el('div', { class: 'bo-actions' }, ...statusBtns)),
         el('section', {}, el('h4', {}, 'Conversa'),
           data.messages.length
