@@ -175,6 +175,8 @@ export async function updateTemplate(ctx: Ctx, partnerId: string, id: string, in
 export async function setTemplateStatus(ctx: Ctx, partnerId: string, id: string, status: z.infer<typeof templatePatchSchema>['status']) {
   const r = await ctx.db.query(`UPDATE app.wa_templates SET status = $3 WHERE id = $1 AND partner_id = $2`, [id, partnerId, status]);
   if (!r.rowCount) throw notFound();
+  // Aprovou: libera na hora o que estava esperando este modelo (o worker não espera os 15 min).
+  if (status === 'aprovado') await ctx.db.query(`UPDATE app.wa_messages SET next_attempt_at = now() WHERE template_id = $1 AND status = 'fila' AND direction = 'out'`, [id]);
   return { ok: true };
 }
 

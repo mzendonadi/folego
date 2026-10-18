@@ -401,6 +401,12 @@ export async function queueMessage(ctx: Ctx, a: QueueArgs): Promise<string> {
   return r.rows[0]!.id;
 }
 
+/** A recusa vem de o modelo ainda não estar aprovado/publicado na Meta (Meta 132001/132015/132016; Bird 4xx falando de modelo). */
+export function awaitsApproval(err: WaError): boolean {
+  if (err.code !== null && [132001, 132015, 132016].includes(err.code)) return true;
+  return [400, 404, 422].includes(err.status) && /templ|modelo|approv|aprov|pending|not found|inexist/i.test(err.message);
+}
+
 interface QueuedRow { id: string; thread_id: string; kind: QueueArgs['kind']; body_enc: Buffer; vars_enc: Buffer | null; template_id: string | null; attempts: number; media_id: string | null; voice: boolean }
 const FREE_KINDS = ['text', 'image', 'audio', 'document', 'video'];
 
@@ -464,6 +470,17 @@ async function sendOne(ctx: Ctx, acc: WaAccount, m: QueuedRow, opts: { log?: (e:
     return true;
   } catch (e) {
     const err = e instanceof WaError ? e : new WaError(e instanceof Error ? e.message : 'erro', 0, null);
+    // Modelo ainda sem aprovação na Meta: a mensagem espera na fila (até 24 h) e tenta de novo a cada 15 min, sem gastar tentativas.
+    // Ao marcar o modelo como Aprovado no backoffice, ela é liberada na hora (setTemplateStatus).
+    if (m.kind === 'template' && awaitsApproval(err)) {
+      const held = await ctx.db.query(
+        `UPDATE app.wa_messages SET status = 'fila', attempts = 0, next_attempt_at = now() + interval '15 minutes', error = 'Aguardando a Meta aprovar o modelo'
+          WHERE id = $1 AND created_at > now() - interval '24 hours' RETURNING id`,
+        [m.id],
+      );
+      if (held.rows.length) { opts.log?.({ evento: 'whatsapp_aguarda_aprovacao', mensagem: m.id, motivo: err.message.slice(0, 100) }); return false; }
+      return fail(`${err.message} (o modelo não foi aprovado em 24 h)`);
+    }
     if (err.permanent || m.attempts >= MAX_ATTEMPTS) return fail(err.message);
     opts.log?.({ evento: 'whatsapp_tentara_de_novo', mensagem: m.id, motivo: err.message.slice(0, 100) });
     return false;

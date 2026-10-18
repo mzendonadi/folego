@@ -20,6 +20,7 @@ const config = { ...loadConfig({ NODE_ENV: 'test' }), webhookSecret: 'segredo-de
 
 const sent: { kind: string; to: string; text?: string; name?: string; params?: string[] }[] = [];
 let failNext: WaError | null = null;
+let failTemplateNext: WaError | null = null; // só o próximo envio de modelo falha (ex.: modelo ainda sem aprovação)
 let counter = 0;
 const fake: WaTransport = {
   async sendText(_c, to, text) {
@@ -28,6 +29,7 @@ const fake: WaTransport = {
     return { id: `wamid.${(counter += 1)}` };
   },
   async sendTemplate(_c, to, tpl) {
+    if (failTemplateNext) { const e = failTemplateNext; failTemplateNext = null; throw e; }
     sent.push({ kind: 'template', to, name: tpl.name, params: tpl.params });
     return { id: `wamid.${(counter += 1)}` };
   },
@@ -244,6 +246,38 @@ test('disparo: só quem tem permissão, respeita o teto diário, não insiste e 
   const last = await call(app, 'GET', `/api/partner/wa/threads/${t.id}`, { headers: P.auth });
   assert.equal(last.json.messages.at(-1).status, 'falhou');
   assert.match(last.json.messages.at(-1).error, /sem WhatsApp/);
+});
+
+test('modelo ainda não aprovado na Meta: espera na fila, não falha, e sai sozinho quando é aprovado', async () => {
+  await db.query(`UPDATE app.wa_accounts SET daily_cap = 50`);
+  const tpl = (await call(app, 'GET', '/api/partner/wa/templates', { headers: P.auth })).json.templates[0];
+  const t = (await call(app, 'GET', '/api/partner/wa/threads?q=cliente', { headers: P.auth })).json.items[0];
+  sent.length = 0;
+  failTemplateNext = new WaError('Bird 404: template not found or not approved', 404, null);
+  const send = await call(app, 'POST', `/api/partner/wa/threads/${t.id}/messages`, { headers: P.auth, body: { templateId: tpl.id, vars: ['Cliente'] } });
+  assert.equal(send.status, 200, send.text);
+  const lastOf = async () => (await call(app, 'GET', `/api/partner/wa/threads/${t.id}`, { headers: P.auth })).json.messages.at(-1);
+  let m = await lastOf();
+  assert.equal(m.status, 'fila', 'recusa por modelo não aprovado não vira falha');
+  assert.match(m.error, /Aguardando a Meta/);
+  assert.equal(sent.length, 0);
+  assert.equal(await work(), 0, 'antes dos 15 min a fila não insiste');
+  // o dono marca como aprovado: libera na hora
+  assert.equal((await call(app, 'PATCH', `/api/partner/wa/templates/${tpl.id}`, { headers: P.auth, body: { status: 'aprovado' } })).status, 200);
+  assert.equal(await work(), 1);
+  m = await lastOf();
+  assert.equal(m.status, 'enviada');
+  assert.equal(sent.length, 1);
+  // passou de 24 h esperando: desiste e avisa
+  failTemplateNext = new WaError('Bird 404: template not found or not approved', 404, null);
+  await call(app, 'POST', `/api/partner/wa/threads/${t.id}/messages`, { headers: P.auth, body: { templateId: tpl.id, vars: ['Cliente'] } });
+  await db.query(`UPDATE app.wa_messages SET created_at = now() - interval '25 hours' WHERE id = (SELECT id FROM app.wa_messages WHERE thread_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1)`, [t.id]);
+  await db.query(`UPDATE app.wa_messages SET next_attempt_at = now() WHERE thread_id = $1 AND status = 'fila'`, [t.id]);
+  failTemplateNext = new WaError('Bird 404: template not found or not approved', 404, null);
+  await work();
+  const all = (await call(app, 'GET', `/api/partner/wa/threads/${t.id}`, { headers: P.auth })).json.messages;
+  const gaveUp = all.find((x: any) => x.status === 'falhou' && /24 h/.test(x.error ?? ''));
+  assert.ok(gaveUp, 'depois de 24 h sem aprovação a mensagem vira "não enviada" com o motivo');
 });
 
 test('começar conversa: pelo contato da base, com modelo, só com permissão', async () => {
