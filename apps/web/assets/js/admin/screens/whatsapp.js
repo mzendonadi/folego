@@ -2,7 +2,7 @@
 // Mesmo componente do portal do parceiro (wa-inbox.js); aqui o servidor é o do Fôlego e as regras da Meta/Bird valem igual.
 import { api } from '../api.js';
 import { waInbox } from '../../wa-inbox.js';
-import { el, icon, toast, card, cardOpts, tabs, table, field, int, drawer, dl, badge, dt } from '../ui.js';
+import { el, icon, toast, card, cardOpts, tabs, table, field, int, drawer, dl, badge, dt, kpi, kpis } from '../ui.js';
 import { confirmDialog } from '../../confirm.js';
 
 const TPL_STATUS = { rascunho: ['Rascunho', 'muted'], em_analise: ['Em análise', 'warn'], aprovado: ['Aprovado', 'ok'], rejeitado: ['Rejeitado', 'bad'] };
@@ -20,7 +20,7 @@ export async function whatsappScreen(ctx = {}) {
   let pending = acc.configured ? prefill : null;
   if (prefill && !acc.configured) toast('Conecte o número do WhatsApp para falar com o contato.');
 
-  const bar = () => tabs([['conversas', 'Conversas'], ['modelos', 'Modelos'], ['conexao', 'Conexão']], st.tab, (t) => { st.tab = t; draw(); });
+  const bar = () => tabs([['conversas', 'Conversas'], ['oportunidades', 'Oportunidades'], ['modelos', 'Modelos'], ['conexao', 'Conexão']], st.tab, (t) => { st.tab = t; draw(); });
 
   async function draw() {
     stopInbox();
@@ -28,7 +28,7 @@ export async function whatsappScreen(ctx = {}) {
     try {
       acc = await api.wa.call('GET', '/account');
       if (!acc.configured && st.tab !== 'conexao') st.tab = 'conexao';
-      const body = st.tab === 'conversas' ? conversas() : st.tab === 'modelos' ? await modelos() : conexao();
+      const body = st.tab === 'conversas' ? conversas() : st.tab === 'oportunidades' ? await oportunidades() : st.tab === 'modelos' ? await modelos() : conexao();
       host.replaceChildren(bar(), body);
     } catch (e) {
       host.replaceChildren(bar(), el('p', { class: 'note note-amber' }, icon('alert'), el('span', {}, e.message)));
@@ -37,10 +37,75 @@ export async function whatsappScreen(ctx = {}) {
 
   // ------------------------------------------------------------------------------------------ Conversas
   function conversas() {
-    const start = pending ? { prefill: { phone: pending.phone, name: pending.name, templateHint: 'chatbot', onOpened: pending.onOpened } } : {};
+    const start = pending ? { prefill: { phone: pending.phone, name: pending.name, templateHint: pending.templateHint ?? 'chatbot', onOpened: pending.onOpened } } : {};
     pending = null;
     inbox = waInbox({ host: api.wa, start, features: { agent: false } });
     return el('div', { class: 'bo-wa' }, inbox.node);
+  }
+
+  // ------------------------------------------------------------------------------------------ Oportunidades
+  // Quem fez o diagnóstico e deixou celular: perfil com mais chance de consignado e Mapa não comprado. Cada linha abre a conversa já preenchida.
+  const SEG = { prioritario: ['Perfil consignado', 'ok'], mapa_pendente: ['Mapa não comprado', 'warn'], parceiro_sem_mapa: ['Pediu parceiro, sem Mapa', 'muted'] };
+  const EMP = { clt: 'CLT', inss_retiree: 'Aposentado/pensionista', public_servant: 'Servidor público', self_employed: 'Autônomo/MEI', other: 'Outra situação' };
+  const reais = (c) => (c === null || c === undefined ? '—' : (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
+  const fone = (d) => (d.length >= 10 ? `(${d.slice(0, 2)}) ${d.slice(2, d.length - 4)}-${d.slice(-4)}` : d);
+  let segFilter = '';
+
+  async function oportunidades() {
+    const d = await api.wa.call('GET', '/oportunidades');
+    const c = d.counts;
+    const box = el('div', { class: 'bo-stack' });
+    const sel = el('select', { class: 'input input-sm', 'aria-label': 'Filtrar a lista' }, el('option', { value: '' }, 'Todos'), ...Object.entries(SEG).map(([k, [l]]) => el('option', { value: k }, l)));
+    sel.value = segFilter;
+    const filtered = () => d.items.filter((x) => !segFilter || x.segments.includes(segFilter));
+    const csv = el('button', { class: 'btn btn-secondary btn-sm', type: 'button' }, icon('copy'), 'Baixar lista (CSV)');
+    csv.addEventListener('click', () => {
+      const rows = [['Nome', 'Telefone', 'Situação', 'Vínculo', 'Faixa de idade', 'Renda', 'Dívidas', 'Origem do contato']]
+        .concat(filtered().map((x) => [x.name ?? '', `+55${x.phone}`, x.segments.map((s) => SEG[s][0]).join(' / '), EMP[x.employment] ?? '', x.ageBand ?? '', reais(x.netIncomeCents), reais(x.debtTotalCents), x.source === 'pix' ? 'Pix do diagnóstico' : 'Pedido de parceiro']));
+      const text = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(';')).join('\r\n');
+      const a = el('a', { href: URL.createObjectURL(new Blob([`﻿${text}`], { type: 'text/csv;charset=utf-8' })), download: `oportunidades-${new Date().toISOString().slice(0, 10)}.csv` });
+      document.body.append(a);
+      a.click();
+      a.remove();
+    });
+    const paint = () => {
+      const items = filtered();
+      box.replaceChildren(table(
+        [
+          { label: 'Contato', render: (x) => el('span', { class: 'bo-stack-sm' }, el('strong', {}, x.name ?? 'Sem nome'), el('span', { class: 'fine muted' }, fone(x.phone))) },
+          { label: 'Situação', render: (x) => el('span', { class: 'bo-actions' }, ...x.segments.map((s) => badge(...SEG[s]))) },
+          { label: 'Perfil', render: (x) => el('span', { class: 'bo-stack-sm' }, el('span', {}, `${EMP[x.employment] ?? '—'} · ${x.ageBand ?? '—'}`), el('span', { class: 'fine muted' }, `renda ${reais(x.netIncomeCents)} · dívidas ${reais(x.debtTotalCents)}`)) },
+          { label: '', render: (x) => {
+            const b = el('button', { class: 'btn btn-primary btn-sm', type: 'button' }, icon('chat'), 'WhatsApp');
+            b.addEventListener('click', () => {
+              pending = { phone: x.phone, name: x.name ?? '', templateHint: x.segments.includes('prioritario') ? 'parceiro' : 'mapa' };
+              st.tab = 'conversas';
+              draw();
+            });
+            return b;
+          } },
+        ],
+        items,
+        { emptyText: 'Ninguém nesta lista agora.' },
+      ));
+    };
+    sel.addEventListener('change', () => { segFilter = sel.value; paint(); });
+    paint();
+    return el('div', { class: 'bo-stack' },
+      kpis(
+        kpi('Diagnósticos', int(c.diagnosticos), `${int(c.comCelular)} com celular`),
+        kpi('Perfil consignado', int(c.prioritarios), `${int(c.prioritariosComCelular)} com celular`, c.prioritarios ? 'good' : ''),
+        kpi('Mapa não comprado', int(c.semMapa), `${int(c.semMapaComCelular)} com celular`, c.semMapa ? 'warn' : ''),
+        kpi('Pediram parceiro, sem Mapa', int(c.parceiroSemMapa)),
+      ),
+      card(
+        'Lista para o WhatsApp',
+        el('div', { class: 'bo-filters' }, sel, csv),
+        box,
+        cardOpts({ sub: 'Perfil consignado: renda a partir de R$ 2.500, 18 a 74 anos e CLT por prazo indeterminado, aposentado/pensionista ou servidor. Só aparece quem deixou celular e ainda não foi apagado. Ao abrir a conversa, confirme que a pessoa autorizou receber mensagens. Cada pessoa aparece uma vez.' }),
+      ),
+      d.truncated ? el('p', { class: 'fine muted' }, 'A lista mostra as 500 mais recentes.') : null,
+    );
   }
 
   // ------------------------------------------------------------------------------------------ Modelos

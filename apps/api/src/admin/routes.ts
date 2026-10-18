@@ -25,6 +25,7 @@ import * as customers from './customers.ts';
 import * as manage from './manage.ts';
 import * as marketing from './marketing.ts';
 import * as metrics from './metrics.ts';
+import { opportunities } from './oportunidades.ts';
 import * as partners from './partners.ts';
 import { ROLE_LABEL, ROLE_PRESETS, ROLES, SECTIONS, SECTION_LABEL } from './permissions.ts';
 import type { Section } from './permissions.ts';
@@ -599,6 +600,12 @@ export function registerGestao(app: FastifyInstance, deps: AdminRouteDeps): void
   app.post(`${WA}/account/test`, { config: { rateLimit: { max: 10 * scale, timeWindow: '1 minute' } } }, async (req) => {
     await house(req);
     return waPortal.testAccount(ctx, HOUSE_PARTNER_ID);
+  });
+  // Lista de oportunidades vindas dos diagnósticos (perfil com mais chance de consignado e Mapa não comprado); mostra celulares, então só quem tem a permissão de WhatsApp.
+  app.get(`${WA}/oportunidades`, async (req) => {
+    const a = await admin(req, 'whatsapp');
+    await audit(ctx.db, `admin:${a.id}`, 'wa_opportunities_viewed', 'partner', HOUSE_PARTNER_ID, {});
+    return opportunities(ctx);
   });
   app.get(`${WA}/templates`, async (req) => { await house(req); return waPortal.listTemplates(ctx, HOUSE_PARTNER_ID); });
   app.post(`${WA}/templates`, async (req, reply) => { await house(req); return reply.status(201).send(await waPortal.createTemplate(ctx, HOUSE_PARTNER_ID, waPortal.templateSchema.parse(req.body))); });

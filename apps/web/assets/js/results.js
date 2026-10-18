@@ -58,16 +58,22 @@ function tickList(items) {
 const buyText = (offer) => (offer?.mode === 'free' ? 'Abrir meu Mapa · incluso no seu plano' : `Liberar meu Mapa · ${offer ? brl(offer.priceCents) : priceLabel('recovery_map')} no Pix`);
 
 /** Por que o preço compensa: preço por dia, pagamento único e o custo de não agir. Só afirma o que é verdade para qualquer pessoa. */
-function worthIt(offer) {
+function worthIt(offer, preview) {
   if (offer?.mode === 'free') return null;
   const price = offer ? offer.priceCents : CATALOG.recovery_map.cents;
   const days = offer?.days ?? daysOf('recovery_map');
   const perDay = Math.ceil(price / days);
+  const owed = preview?.totalBalanceCents ?? 0;
+  // O preço ao lado da dívida da própria pessoa: é a comparação que torna o valor concreto.
+  const against = owed > price * 20
+    ? `Suas ${preview.debtCount} ${plural(preview.debtCount, 'dívida soma', 'dívidas somam')} ${brl(owed)}. O Mapa custa ${new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 }).format((price / owed) * 100)}% disso`
+    : null;
   return el(
     'div',
     { class: 'worth' },
     el('h3', { class: 'worth-t' }, `${brl(price)} para sair do escuro`),
     el('ul', { class: 'worth-list' },
+      against ? el('li', {}, icon('check'), against) : null,
       el('li', {}, icon('check'), `Menos de ${brl(perDay)} por dia nos ${days} dias de acesso`),
       el('li', {}, icon('check'), 'Pagamento único no Pix, sem mensalidade e sem renovar sozinho'),
       el('li', {}, icon('check'), 'Dívida em atraso cresce todo mês: o Mapa mostra por onde começar para parar de perder dinheiro'),
@@ -92,7 +98,7 @@ function discoveryCard(preview, offer = null) {
     el('h2', { id: 'discover-title' }, 'E tem mais no seu diagnóstico'),
     el('p', { class: 'muted' }, 'Você viu só por onde começar. O Mapa completo mostra o resto do caminho:'),
     el('ul', { class: 'discover-list' }, ...found.map((t) => el('li', {}, icon('lock', 'icon icon-lock'), t))),
-    worthIt(offer),
+    worthIt(offer, preview),
     el('button', { class: 'btn btn-primary btn-lg btn-block', type: 'button', 'data-buy': '' }, buyText(offer), icon('arrow-right')),
     el('p', { class: 'fine center' }, offer?.mode === 'free' ? 'O Mapa faz parte do seu plano Desbravador. Sem cobrança.' : 'Você só paga porque já viu o que tem aqui. Não gostou? É só fechar a página.'),
   );

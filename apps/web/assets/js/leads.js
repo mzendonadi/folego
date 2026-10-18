@@ -89,7 +89,6 @@ export function leadsSection(state, { onSubmit, onBuy }) {
     state.categories.includes('consignado') && state.estimatedSavingsCents > 0
       ? el('p', { class: 'note' }, icon('info'), el('span', {}, `Estimativa: trocar dívidas caras por crédito consignado poderia reduzir cerca de ${brl(state.estimatedSavingsCents)} em juros. É uma simulação com taxas de referência, não uma oferta: a condição real depende de cada instituição.`))
       : null,
-    el('p', { class: 'note note-amber' }, icon('alert'), el('span', {}, 'Crédito novo: só faz sentido se reduz o que você paga no total.')),
     open,
     form,
   );
