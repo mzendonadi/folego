@@ -51,6 +51,17 @@ export interface LeadState {
   categories: LeadCategory[];
   estimatedSavingsCents: number;
   active: { categories: string[]; since: number } | null;
+  /** Perfil com mais chance de aprovar crédito consignado: renda ≥ R$ 2.500, 18 a 74 anos e CLT por prazo indeterminado, aposentado/pensionista ou servidor. Só muda a conversa da tela, não o que é oferecido. */
+  priority?: boolean;
+}
+
+const PRIORITY_MIN_INCOME_CENTS = 250_000;
+const PRIORITY_AGE_BANDS = new Set(['18-24', '25-34', '35-44', '45-54', '55-64', '65-74']); // '75+' fica de fora: a faixa não separa 75 de mais velhos
+/** Regra do dono (18/10/2026). CLT só conta com contrato por prazo indeterminado; autônomo/MEI, outra situação e CLT temporário ficam de fora. */
+export function fitsPartnerProfile(p: { employmentType: string; netIncomeCents: number; ageBand: string; cltContract?: string | null }): boolean {
+  if (p.netIncomeCents < PRIORITY_MIN_INCOME_CENTS || !PRIORITY_AGE_BANDS.has(p.ageBand)) return false;
+  if (p.employmentType === 'inss_retiree' || p.employmentType === 'public_servant') return true;
+  return p.employmentType === 'clt' && p.cltContract === 'permanent';
 }
 
 export async function leadState(ctx: Ctx, caseId: string, diagnosis: Diagnosis, debts: DebtInput[]): Promise<LeadState> {
@@ -62,7 +73,13 @@ export async function leadState(ctx: Ctx, caseId: string, diagnosis: Diagnosis, 
   );
   const c = cur.rows[0];
   const active = c && c.action === 'grant' ? { categories: c.scope.categories ?? [], since: new Date(c.created_at).getTime() } : null;
-  return { enabled: true, available: categories.length > 0, categories, estimatedSavingsCents: diagnosis.refinance.suitabilityOk ? diagnosis.refinance.estimatedSavingsCents : 0, active };
+  const pf = await ctx.db.query<{ employment_type: string; net_income_cents: string; age_band: string; clt: string | null }>(
+    `SELECT employment_type, net_income_cents, age_band, inputs->>'cltContract' AS clt FROM app.cases WHERE id = $1`,
+    [caseId],
+  );
+  const p = pf.rows[0];
+  const priority = p ? fitsPartnerProfile({ employmentType: p.employment_type, netIncomeCents: Number(p.net_income_cents), ageBand: p.age_band, cltContract: p.clt }) : false;
+  return { enabled: true, available: categories.length > 0, categories, estimatedSavingsCents: diagnosis.refinance.suitabilityOk ? diagnosis.refinance.estimatedSavingsCents : 0, active, priority };
 }
 
 /** Estado do formulário de parceiro para um diagnóstico (pago ou não): a prévia grátis usa isto para mostrar o convite. */

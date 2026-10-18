@@ -600,6 +600,11 @@ ul, ol { margin: 0; padding: 0; }
 .discover-list { list-style: none; display: grid; gap: 10px; margin: var(--s2) 0; }
 .discover-list li { display: flex; gap: 10px; align-items: flex-start; color: var(--ink); background: color-mix(in srgb, var(--surface) 70%, transparent); border-radius: var(--radius-sm); padding: 10px 12px; }
 .discover-list .icon-lock { color: var(--primary); margin-top: 3px; }
+.worth { margin: var(--s3) 0; padding: var(--s3) var(--s4); border-left: 3px solid var(--primary); background: color-mix(in srgb, var(--primary) 7%, var(--surface)); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+.worth-t { margin: 0 0 var(--s2); font-size: 1.05rem; }
+.worth-list { list-style: none; display: grid; gap: 8px; margin: 0; padding: 0; }
+.worth-list li { display: flex; gap: 10px; align-items: flex-start; }
+.worth-list .icon { color: var(--primary); margin-top: 3px; flex: none; }
 .discover .fine { color: var(--mint-ink); }
 
 /* ---------- formulário das cartas ---------- */

@@ -9,6 +9,13 @@ const CAT = {
   renegotiation: { label: 'Renegociação e orientação', hint: 'Negociar as dívidas e buscar recursos com consciência', short: 'renegociação e orientação' },
 };
 const POINTS = ['Empresas parceiras selecionadas pelo Fôlego', 'Propostas sem compromisso', 'Crédito rápido e seguro'];
+// Para quem tem vínculo e renda que costumam abrir o consignado (renda, idade e vínculo vêm do diagnóstico): argumentos concretos e honestos, sem prometer aprovação.
+const PRIORITY_POINTS = [
+  'O consignado costuma ter juros bem menores que cartão de crédito e cheque especial',
+  'Uma parcela só, descontada direto da folha ou do benefício: menos risco de atrasar',
+  'Você compara as propostas e só fecha se o total que você paga diminuir',
+  'Empresas parceiras selecionadas pelo Fôlego, com atendimento por WhatsApp',
+];
 
 /**
  * @param state { enabled, available, categories, estimatedSavingsCents, active }
@@ -67,15 +74,18 @@ export function leadsSection(state, { onSubmit, onBuy }) {
       toast(error?.status === 409 ? 'Você já autorizou. Atualize a página.' : 'Não consegui registrar agora. Confira os dados e tente de novo.');
     }
   });
-  const open = el('button', { class: 'btn btn-primary btn-lg no-print', type: 'button' }, 'Quero falar com um parceiro Fôlego', icon('arrow-right'));
+  const priority = state.priority === true;
+  const open = el('button', { class: 'btn btn-primary btn-lg no-print', type: 'button' }, priority ? 'Quero propostas para o meu perfil' : 'Quero falar com um parceiro Fôlego', icon('arrow-right'));
   open.addEventListener('click', () => {
     form.hidden = false;
     open.hidden = true;
     name.focus();
   });
   return shell(
-    head('Quer ter ainda mais tranquilidade financeira?', 'Fale com um parceiro e tenha ainda mais Fôlego.'),
-    el('ul', { class: 'partner-points' }, ...POINTS.map((t) => el('li', {}, icon('check'), t))),
+    priority
+      ? head('Seu perfil costuma ter as melhores condições de crédito', 'Pelo que você informou, um parceiro pode avaliar trocar dívidas caras por uma parcela menor. Sem compromisso e sem custo para você.')
+      : head('Quer ter ainda mais tranquilidade financeira?', 'Fale com um parceiro e tenha ainda mais Fôlego.'),
+    el('ul', { class: 'partner-points' }, ...(priority ? PRIORITY_POINTS : POINTS).map((t) => el('li', {}, icon('check'), t))),
     state.categories.includes('consignado') && state.estimatedSavingsCents > 0
       ? el('p', { class: 'note' }, icon('info'), el('span', {}, `Estimativa: trocar dívidas caras por crédito consignado poderia reduzir cerca de ${brl(state.estimatedSavingsCents)} em juros. É uma simulação com taxas de referência, não uma oferta: a condição real depende de cada instituição.`))
       : null,
