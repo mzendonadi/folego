@@ -1738,7 +1738,7 @@ body[data-route="partner"] #view-partner .tools-layout { display: block; max-wid
 .wi-menu-item:hover, .wi-menu-item:focus-visible { background: var(--paper); }
 .wi-menu-item.is-danger { color: var(--danger-ink); }
 
-.wi-log { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 4px; padding: var(--s3) var(--s4); overflow-y: auto; }
+.wi-log { flex: 1; min-height: 140px; display: flex; flex-direction: column; gap: 4px; padding: var(--s3) var(--s4); overflow-y: auto; }
 .wi-day { align-self: center; margin: 8px 0; padding: 3px 12px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); color: var(--muted); font-size: 0.74rem; }
 .wi-row { display: flex; align-items: flex-start; gap: 8px; }
 .wi-row.out { justify-content: flex-end; }
@@ -1771,7 +1771,7 @@ body[data-route="partner"] #view-partner .tools-layout { display: block; max-wid
 .wi-selbar { display: flex; align-items: center; justify-content: flex-end; gap: var(--s2); padding: 8px var(--s3); border-top: 1px solid var(--line); background: var(--surface); }
 .wi-selbar[hidden] { display: none; }
 .wi-bar-n { flex: 1; font-weight: 600; }
-.wi-foot { border-top: 1px solid var(--line); background: var(--surface); }
+.wi-foot { border-top: 1px solid var(--line); background: var(--surface); flex: none; max-height: 48%; overflow-y: auto; overscroll-behavior: contain; }
 .wi-composer { display: flex; align-items: flex-end; gap: 6px; padding: 8px var(--s3); }
 .wi-input { flex: 1; box-sizing: border-box; height: 42px; min-height: 42px; max-height: 140px; overflow-y: auto; padding: 9px 14px; border: 1px solid var(--line); border-radius: 20px; background: var(--paper); color: var(--ink); font: inherit; line-height: 1.35; resize: none; }
 .wi-input:focus { outline: 2px solid var(--focus); outline-offset: 1px; }
@@ -1789,8 +1789,12 @@ body[data-route="partner"] #view-partner .tools-layout { display: block; max-wid
 @media (prefers-reduced-motion: reduce) { .wi-rec-dot { animation: none; } }
 .wi-note { margin: 0; padding: var(--s3) var(--s4); color: var(--muted); }
 .wi-note.warn { color: var(--danger-ink); }
+/* Modelo aprovado (janela fechada): rodapé compacto — a prévia rola dentro de si e o botão fica sempre à vista, para a conversa não ser espremida. */
 .wi-tpl { display: grid; gap: var(--s2); padding: var(--s3); }
-.wi-tpl-prev { margin: 0; padding: 8px 12px; border-radius: 10px; background: var(--paper); color: var(--ink-2); white-space: pre-wrap; }
+.wi-tpl .wi-note { padding: 0; font-size: 0.9rem; }
+.wi-tpl-prev { margin: 0; padding: 8px 12px; border-radius: 10px; background: var(--paper); color: var(--ink-2); white-space: pre-wrap; font-size: 0.88rem; line-height: 1.4; max-height: 7.5em; overflow-y: auto; overscroll-behavior: contain; }
+.wi-tpl .btn-primary { position: sticky; bottom: 0; }
+.wi-tpl .input { min-height: 40px; }
 
 .wi-dlg .dialog-body { display: grid; gap: var(--s3); max-height: 70vh; overflow-y: auto; }
 .wi-dlg-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); }
@@ -1807,7 +1811,7 @@ body[data-route="partner"] #view-partner .tools-layout { display: block; max-wid
 .bo-wa { min-width: 0; }
 
 @media (max-width: 900px) {
-  .wi { grid-template-columns: minmax(0, 1fr); height: clamp(480px, calc(100vh - 150px), 900px); }
+  .wi { grid-template-columns: minmax(0, 1fr); height: clamp(480px, calc(100vh - 150px), 900px); height: clamp(480px, calc(100dvh - 150px), 900px); }
   .wi-chat { display: none; }
   .wi.is-chat .wi-list { display: none; }
   .wi.is-chat .wi-chat { display: flex; }
