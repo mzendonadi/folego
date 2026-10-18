@@ -419,7 +419,9 @@ export async function processWhatsAppQueue(ctx: Ctx, opts: { log?: (e: Record<st
     if (!acc || acc.status !== 'ativa') continue;
     const dayStart = `${todaySaoPaulo()}T00:00:00-03:00`;
     const used = await ctx.db.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.wa_messages WHERE partner_id = $1 AND direction = 'out' AND kind = 'template' AND sent_at >= $2::timestamptz`, [partner_id, dayStart]);
-    const quiet = inQuietHours(brHour(), acc.quietStart, acc.quietEnd);
+    // "Liberar fila": enquanto quiet_override_until estiver no futuro, o horário de silêncio não vale (decisão do dono, com prazo).
+    const open = await ctx.db.query<{ on: boolean }>(`SELECT coalesce(quiet_override_until > now(), false) AS "on" FROM app.wa_accounts WHERE partner_id = $1`, [partner_id]);
+    const quiet = !open.rows[0]?.on && inQuietHours(brHour(), acc.quietStart, acc.quietEnd);
     const budget = quiet ? 0 : Math.max(0, acc.dailyCap - num(used.rows[0]?.n ?? 0));
     for (const [kinds, limit] of [[FREE_KINDS, 30], [['template'], Math.min(30, budget)]] as const) {
       if (limit <= 0) continue;
