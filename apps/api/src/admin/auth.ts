@@ -54,9 +54,9 @@ async function findAllowed(ctx: Ctx, email: string): Promise<AdminRow | null> {
 
 const PW_MIN = 12;
 const MAX_FAILS = 5;
-const LOCK_MINUTES = 15;
+const LOCK_MINUTES = 5;
 const COMMON = ['123456789012', 'senha1234567', 'password1234', 'qwertyuiop12', 'folego123456', 'administrador1'];
-const GENERIC_LOGIN_ERROR = 'E-mail ou senha incorretos, ou acesso bloqueado por tentativas. Se errou várias vezes, espere 15 minutos.';
+const GENERIC_LOGIN_ERROR = 'E-mail ou senha incorretos, ou acesso bloqueado por tentativas. Se errou várias vezes, espere 5 minutos.';
 // Para o tempo de resposta não revelar se o e-mail existe: sempre se gasta uma verificação de senha.
 const DUMMY_HASH = hashPassword('senha-falsa-para-igualar-o-tempo');
 

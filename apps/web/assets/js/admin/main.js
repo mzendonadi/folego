@@ -3,6 +3,7 @@ import { el, icon, toast } from '../dom.js';
 import { api, ApiError } from './api.js';
 import { loading, errorBox, drawer } from './ui.js';
 import { createBell } from './bell.js';
+import { withEye } from '../pw-eye.js';
 
 const MENU = [
   { id: 'painel', label: 'Painel', icon: 'chart', perm: ['dashboard'], load: () => import('./screens/dashboard.js').then((m) => m.dashboardScreen) },
@@ -46,7 +47,7 @@ function drawLogin(message = '') {
   first.addEventListener('click', () => drawSetup(email.value.trim().toLowerCase()));
   const form = el('form', { class: 'tool-form' },
     el('div', { class: 'field' }, el('label', { class: 'label', for: 'bo-email' }, 'E-mail'), email),
-    el('div', { class: 'field' }, el('label', { class: 'label', for: 'bo-password' }, 'Senha'), password),
+    el('div', { class: 'field' }, el('label', { class: 'label', for: 'bo-password' }, 'Senha'), withEye(password)),
     send, el('p', { class: 'fine' }, first));
   form.addEventListener('submit', async (e) => {
     e.preventDefault();

@@ -94,7 +94,7 @@ export function registerGestao(app: FastifyInstance, deps: AdminRouteDeps): void
 
   // ---------- entrada ----------
   // Etapa 1: e-mail + senha (o código só é enviado se a senha estiver certa). Etapa 2: o código, em /login.
-  app.post(`${P}/login-password`, { config: { rateLimit: { max: 8 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => {
+  app.post(`${P}/login-password`, { config: { rateLimit: { max: 8 * scale, timeWindow: '5 minutes' } } }, async (req, reply) => {
     const { email, password } = passwordLoginSchema.parse(req.body);
     const sessionId = await createSession(req, reply);
     return { user: await passwordLogin(ctx, sessionId, email, password) };

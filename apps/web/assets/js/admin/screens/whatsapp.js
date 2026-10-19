@@ -44,70 +44,50 @@ export async function whatsappScreen(ctx = {}) {
   }
 
   // ------------------------------------------------------------------------------------------ Oportunidades
-  // Quem fez o diagnóstico e deixou celular: perfil com mais chance de consignado e Mapa não comprado. Cada linha abre a conversa já preenchida.
-  const SEG = { prioritario: ['Perfil consignado', 'ok'], mapa_pendente: ['Mapa não comprado', 'warn'], parceiro_sem_mapa: ['Pediu parceiro, sem Mapa', 'muted'] };
+  // O que foi enviado aos parceiros: o envio é automático (webhook assinado, feito pelo worker); aqui só se acompanha o andamento de cada um.
+  const STATE = { pendente: ['Pendente', 'warn'], tentando: ['Tentando de novo', 'warn'], enviado: ['Enviado', 'ok'], falhou: ['Falhou', 'bad'], contatado: ['Parceiro já falou', 'ok'], contratado: ['Contratado', 'ok'], recusado: ['Recusado', 'muted'], sem_parceiro: ['Sem parceiro compatível', 'muted'] };
   const EMP = { clt: 'CLT', inss_retiree: 'Aposentado/pensionista', public_servant: 'Servidor público', self_employed: 'Autônomo/MEI', other: 'Outra situação' };
-  const reais = (c) => (c === null || c === undefined ? '—' : (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
-  const fone = (d) => (d.length >= 10 ? `(${d.slice(0, 2)}) ${d.slice(2, d.length - 4)}-${d.slice(-4)}` : d);
-  let segFilter = '';
+  let stateFilter = '';
 
   async function oportunidades() {
     const d = await api.wa.call('GET', '/oportunidades');
     const c = d.counts;
     const box = el('div', { class: 'bo-stack' });
-    const sel = el('select', { class: 'input input-sm', 'aria-label': 'Filtrar a lista' }, el('option', { value: '' }, 'Todos'), ...Object.entries(SEG).map(([k, [l]]) => el('option', { value: k }, l)));
-    sel.value = segFilter;
-    const filtered = () => d.items.filter((x) => !segFilter || x.segments.includes(segFilter));
-    const csv = el('button', { class: 'btn btn-secondary btn-sm', type: 'button' }, icon('copy'), 'Baixar lista (CSV)');
-    csv.addEventListener('click', () => {
-      const rows = [['Nome', 'Telefone', 'Situação', 'Vínculo', 'Faixa de idade', 'Renda', 'Dívidas', 'Origem do contato']]
-        .concat(filtered().map((x) => [x.name ?? '', `+55${x.phone}`, x.segments.map((s) => SEG[s][0]).join(' / '), EMP[x.employment] ?? '', x.ageBand ?? '', reais(x.netIncomeCents), reais(x.debtTotalCents), x.source === 'pix' ? 'Pix do diagnóstico' : 'Pedido de parceiro']));
-      const text = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(';')).join('\r\n');
-      const a = el('a', { href: URL.createObjectURL(new Blob([`﻿${text}`], { type: 'text/csv;charset=utf-8' })), download: `oportunidades-${new Date().toISOString().slice(0, 10)}.csv` });
-      document.body.append(a);
-      a.click();
-      a.remove();
-    });
+    const sel = el('select', { class: 'input input-sm', 'aria-label': 'Filtrar por situação do envio' }, el('option', { value: '' }, 'Todos'), ...Object.entries(STATE).map(([k, [l]]) => el('option', { value: k }, `${l} (${int(c[k] ?? 0)})`)));
+    sel.value = stateFilter;
     const paint = () => {
-      const items = filtered();
+      const items = d.items.filter((x) => !stateFilter || x.state === stateFilter);
       box.replaceChildren(table(
         [
-          { label: 'Contato', render: (x) => el('span', { class: 'bo-stack-sm' }, el('strong', {}, x.name ?? 'Sem nome'), el('span', { class: 'fine muted' }, fone(x.phone))) },
-          { label: 'Situação', render: (x) => el('span', { class: 'bo-actions' }, ...x.segments.map((s) => badge(...SEG[s]))) },
-          { label: 'Perfil', render: (x) => el('span', { class: 'bo-stack-sm' }, el('span', {}, `${EMP[x.employment] ?? '—'} · ${x.ageBand ?? '—'}`), el('span', { class: 'fine muted' }, `renda ${reais(x.netIncomeCents)} · dívidas ${reais(x.debtTotalCents)}`)) },
-          { label: '', render: (x) => {
-            const b = el('button', { class: 'btn btn-primary btn-sm', type: 'button' }, icon('chat'), 'WhatsApp');
-            b.addEventListener('click', () => {
-              pending = { phone: x.phone, name: x.name ?? '', templateHint: x.segments.includes('prioritario') ? 'parceiro' : 'mapa' };
-              st.tab = 'conversas';
-              draw();
-            });
-            return b;
-          } },
+          { label: 'Contato', render: (x) => el('span', { class: 'bo-stack-sm' }, el('strong', {}, x.name ?? 'Sem nome'), el('span', { class: 'fine muted' }, x.phone ?? '—')) },
+          { label: 'Parceiro', render: (x) => (x.partner ? el('span', { class: 'bo-stack-sm' }, el('span', {}, x.partner), el('span', { class: 'fine muted' }, x.campaign ?? '')) : el('span', { class: 'muted' }, '—')) },
+          { label: 'Situação', render: (x) => el('span', { class: 'bo-stack-sm' }, badge(...STATE[x.state]), el('span', { class: 'fine muted' }, x.state === 'enviado' && x.deliveredAt ? dt(x.deliveredAt) : x.attempts ? `${x.attempts} ${x.attempts === 1 ? 'tentativa' : 'tentativas'}${x.httpCode ? ` · resposta ${x.httpCode}` : ''}` : '')) },
+          { label: 'Perfil', render: (x) => el('span', { class: 'bo-stack-sm' }, el('span', {}, `${EMP[x.employment] ?? '—'} · ${x.ageBand ?? '—'} · ${x.uf ?? '—'}`), el('span', { class: 'fine muted' }, `renda ${x.incomeBand ?? '—'} · dívidas ${x.debtBand ?? '—'}`)) },
+          { label: 'Autorizou em', render: (x) => dt(x.createdAt) },
         ],
         items,
-        { emptyText: 'Ninguém nesta lista agora.' },
+        { emptyText: 'Nada por aqui ainda. Quem pedir para falar com um parceiro aparece nesta lista.' },
       ));
     };
-    sel.addEventListener('change', () => { segFilter = sel.value; paint(); });
+    sel.addEventListener('change', () => { stateFilter = sel.value; paint(); });
     paint();
     return el('div', { class: 'bo-stack' },
       kpis(
-        kpi('Diagnósticos', int(c.diagnosticos), `${int(c.comCelular)} com celular`),
-        kpi('Perfil consignado', int(c.prioritarios), `${int(c.prioritariosComCelular)} com celular`, c.prioritarios ? 'good' : ''),
-        kpi('Mapa não comprado', int(c.semMapa), `${int(c.semMapaComCelular)} com celular`, c.semMapa ? 'warn' : ''),
-        kpi('Pediram parceiro, sem Mapa', int(c.parceiroSemMapa)),
+        kpi('Autorizaram', int(c.total), 'pediram para falar com um parceiro'),
+        kpi('Enviados', int(c.enviado + c.contatado + c.contratado), 'chegaram ao parceiro', c.enviado + c.contatado + c.contratado ? 'good' : ''),
+        kpi('Pendentes', int(c.pendente + c.tentando), 'o envio tenta sozinho', c.pendente + c.tentando ? 'warn' : ''),
+        kpi('Falharam', int(c.falhou), 'esgotaram as tentativas', c.falhou ? 'bad' : ''),
+        kpi('Sem parceiro', int(c.sem_parceiro), 'nenhuma campanha serviu'),
       ),
       card(
-        'Lista para o WhatsApp',
-        el('div', { class: 'bo-filters' }, sel, csv),
+        'Envio aos parceiros',
+        el('div', { class: 'bo-filters' }, sel),
         box,
-        cardOpts({ sub: 'Perfil consignado: renda a partir de R$ 2.500, 18 a 74 anos e CLT por prazo indeterminado, aposentado/pensionista ou servidor. Só aparece quem deixou celular e ainda não foi apagado. Ao abrir a conversa, confirme que a pessoa autorizou receber mensagens. Cada pessoa aparece uma vez.' }),
+        cardOpts({ sub: 'Automático: ao autorizar, o contato vai ao parceiro pelo webhook (ou fica no portal dele) e o retorno do parceiro (já falou, contratou) volta para esta lista. Telefones aparecem mascarados.' }),
       ),
-      d.truncated ? el('p', { class: 'fine muted' }, 'A lista mostra as 500 mais recentes.') : null,
+      d.truncated ? el('p', { class: 'fine muted' }, 'A lista mostra os 500 envios mais recentes.') : null,
     );
   }
-
   // ------------------------------------------------------------------------------------------ Modelos
   // Lista dos modelos salvos (o que já foi aprovado na Bird) com ver, editar, excluir, situação, busca e filtro.
   const tplFilter = { q: '', status: '' };

@@ -418,7 +418,7 @@ test('login só com senha: senha errada não entra e nenhum e-mail sai; código 
   assert.equal((await c('GET', '/api/gestao/me')).status, 401);
 });
 
-test('5 senhas erradas bloqueiam por 15 minutos, até a senha certa fica recusada, e o desbloqueio libera', async () => {
+test('5 senhas erradas bloqueiam por 5 minutos, até a senha certa fica recusada, e o desbloqueio libera', async () => {
   const owner = await ownerClient();
   const created = await owner('POST', '/api/gestao/usuarios', { body: { email: 'bloqueio@exemplo.com', role: 'suporte' } });
   const email = 'bloqueio@exemplo.com';
@@ -428,6 +428,8 @@ test('5 senhas erradas bloqueiam por 15 minutos, até a senha certa fica recusad
   mailbox.sent.length = 0;
   assert.equal((await c('POST', '/api/gestao/login-password', { body: { email, password: PW } })).status, 401, 'bloqueado mesmo com a senha certa');
   assert.equal(mailbox.sent.length, 0);
+  const lock = await db.query<{ mins: number }>(`SELECT extract(epoch FROM (locked_until - now())) / 60 AS mins FROM app.admin_users WHERE id = $1`, [created.json.id]);
+  assert.ok(Number(lock.rows[0]!.mins) > 3.5 && Number(lock.rows[0]!.mins) <= 5, `o bloqueio dura 5 minutos (deu ${lock.rows[0]!.mins})`);
   await db.query(`UPDATE app.admin_users SET locked_until = now() - interval '1 minute' WHERE id = $1`, [created.json.id]);
   assert.equal((await c('POST', '/api/gestao/login-password', { body: { email, password: PW } })).status, 200);
 });

@@ -187,7 +187,7 @@ export function renderPreview(root, preview, { onBuy, onWipe, offer = null }) {
     ? 'Sem cobrança: o Mapa faz parte do Desbravador enquanto a assinatura valer.'
     : offer
       ? `Pagamento uma vez só. Preço normal ${brl(offer.regularCents)}: você economiza ${brl(offer.discountCents)} por assinar o Ousado.`
-      : 'Pagamento uma vez só. Você só paga porque viu o que está acima.';
+      : '';
   const accessText = offer?.mode === 'free' ? 'acesso enquanto a assinatura valer' : `${offer?.days ?? daysOf('recovery_map')} dias de acesso`;
 
   const decision = el(
@@ -195,7 +195,7 @@ export function renderPreview(root, preview, { onBuy, onWipe, offer = null }) {
     { class: 'card decision', 'aria-labelledby': 'decision-title' },
     el('h2', { id: 'decision-title' }, 'Mapa da Virada'),
     priceBlock,
-    el('p', { class: 'muted' }, priceNote),
+    priceNote ? el('p', { class: 'muted' }, priceNote) : null,
     el('p', { class: 'decision-lead' }, 'Você terá acesso completo:'),
     tickList([
       'As cartas prontas, com cláusulas e direitos seus, para você só copiar, colar e enviar aos credores',

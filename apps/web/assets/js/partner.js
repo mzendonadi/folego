@@ -4,6 +4,7 @@ import { el, icon, toast } from './dom.js';
 import { viewPainel, viewFolego, viewBase, viewContratos } from './partner-views.js';
 import { viewImportar } from './partner-import.js';
 import { viewWhatsapp } from './partner-wa.js';
+import { withEye } from './pw-eye.js';
 
 const TABS = [
   ['painel', 'Painel', 'chart'],
@@ -58,7 +59,7 @@ export function renderPartner(root) {
     const form = el(
       'form', { class: 'pt-login-form' },
       el('div', { class: 'field' }, el('label', { class: 'label', for: 'pt-email' }, 'E-mail'), email),
-      el('div', { class: 'field' }, el('label', { class: 'label', for: 'pt-pass' }, 'Senha'), pass),
+      el('div', { class: 'field' }, el('label', { class: 'label', for: 'pt-pass' }, 'Senha'), withEye(pass)),
       go,
     );
     form.addEventListener('submit', async (e) => {

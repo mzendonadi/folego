@@ -600,6 +600,11 @@ ul, ol { margin: 0; padding: 0; }
 .discover-list { list-style: none; display: grid; gap: 10px; margin: var(--s2) 0; }
 .discover-list li { display: flex; gap: 10px; align-items: flex-start; color: var(--ink); background: color-mix(in srgb, var(--surface) 70%, transparent); border-radius: var(--radius-sm); padding: 10px 12px; }
 .discover-list .icon-lock { color: var(--primary); margin-top: 3px; }
+.pw-wrap { position: relative; display: block; }
+.pw-wrap .input { padding-right: 48px; }
+.pw-eye { position: absolute; top: 50%; right: 6px; transform: translateY(-50%); display: grid; place-items: center; width: 40px; height: 40px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; }
+.pw-eye:hover { color: var(--ink); }
+.pw-eye:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
 .price-pix { margin-left: 10px; font-size: 1rem; font-weight: 600; color: var(--muted); letter-spacing: 0; }
 .decision-lead { margin: var(--s3) 0 var(--s2); padding: 8px 12px; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--primary) 12%, var(--surface)); color: var(--primary); font-weight: 700; }
 .worth { margin: var(--s3) 0; padding: var(--s3) var(--s4); border-left: 3px solid var(--primary); background: color-mix(in srgb, var(--primary) 7%, var(--surface)); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
