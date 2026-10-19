@@ -460,16 +460,6 @@ async function sendOne(ctx: Ctx, acc: WaAccount, m: QueuedRow, opts: { log?: (e:
   if (!thread) return fail('Conversa apagada.');
   if (thread.opted_out && m.kind === 'template') return fail('O contato pediu para não receber mensagens.');
   if (m.kind !== 'template' && !windowOpen(thread.last_inbound_at)) return fail('A janela de 24 h fechou. Envie um modelo aprovado.'); // pode ter fechado enquanto esperava na fila
-  if (m.kind === 'template') {
-    // O mesmo modelo já saiu numa mensagem mais nova desta conversa (ex.: reenviada à mão enquanto esta esperava): esta não sai de novo.
-    const dup = await ctx.db.query(
-      `SELECT 1 FROM app.wa_messages n JOIN app.wa_messages me ON me.id = $1
-        WHERE n.thread_id = me.thread_id AND n.direction = 'out' AND n.kind = 'template' AND n.template_id IS NOT DISTINCT FROM me.template_id
-          AND n.status IN ('enviada','entregue','lida') AND n.created_at > me.created_at LIMIT 1`,
-      [m.id],
-    );
-    if (dup.rows.length) return fail('Repetida: uma mensagem mais recente já foi enviada.');
-  }
   const to = decryptText(ctx.config.secret, thread.phone_enc);
   const cred = { ...credOf(acc), ref: m.id };
   const transport = transportOf(ctx, acc.provider);
