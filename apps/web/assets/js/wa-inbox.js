@@ -377,6 +377,20 @@ export function waInbox({ host, start = {}, features = {} }) {
   }
 
   function templateSender(d) {
+    // Modelo já enviado e a pessoa ainda não respondeu: a Meta só libera texto livre, anexos e áudio depois da resposta.
+    // Em vez de manter o painel grande do modelo, mostra um aviso curto e o campo de mensagem travado, como no WhatsApp.
+    const lastTpl = (d.messages ?? []).filter((m) => m.direction === 'out' && m.kind === 'template' && m.status !== 'falhou').at(-1);
+    if (d.canTemplate && lastTpl && st.fullTpl !== d.id) {
+      const lock = el('div', { class: 'wi-composer is-locked' },
+        el('button', { class: 'wi-round', type: 'button', disabled: true, 'aria-label': 'Anexar (libera quando a pessoa responder)' }, ico('clip', 22)),
+        el('textarea', { class: 'wi-input', rows: '1', disabled: true, placeholder: 'Escreva uma mensagem (libera quando a pessoa responder)', 'aria-label': 'Mensagem (bloqueada até a pessoa responder)' }),
+        el('button', { class: 'wi-round primary', type: 'button', disabled: true, 'aria-label': 'Gravar áudio (libera quando a pessoa responder)' }, ico('mic', 20)));
+      const again = el('button', { class: 'btn btn-quiet btn-sm', type: 'button' }, 'Enviar outro modelo');
+      again.addEventListener('click', () => { st.fullTpl = d.id; paintFoot(d); });
+      return el('div', { class: 'wi-wait' },
+        el('p', { class: 'wi-note' }, `Modelo enviado às ${hm(lastTpl.at)}. Quando ${d.name.split(' ')[0]} responder, o texto livre, os anexos e o áudio são liberados aqui.`, ' ', again),
+        lock);
+    }
     const holder = el('div', { class: 'wi-tpl' }, el('p', { class: 'wi-note' }, d.canTemplate ? 'A janela de 24 h está fechada. Para falar com este contato, envie um modelo aprovado:' : 'Sem permissão de WhatsApp para este contato. Marque a permissão no perfil dele (só se você a tem) ou aguarde ele escrever.'));
     if (!d.canTemplate) {
       const b = el('button', { class: 'btn btn-secondary btn-sm', type: 'button' }, 'Abrir o perfil');
@@ -396,7 +410,7 @@ export function waInbox({ host, start = {}, features = {} }) {
       const send = el('button', { class: 'btn btn-primary', type: 'button' }, 'Enviar modelo');
       send.addEventListener('click', async () => {
         send.disabled = true;
-        try { await host.call('POST', `/threads/${d.id}/messages`, { templateId: sel.value, vars: vars.value.split('|').map((v) => v.trim()).filter(Boolean) }); toast('Modelo enviado.'); await openThread(d.id); paintList(); } catch (err) { send.disabled = false; toast(err.message); }
+        try { await host.call('POST', `/threads/${d.id}/messages`, { templateId: sel.value, vars: vars.value.split('|').map((v) => v.trim()).filter(Boolean) }); toast('Modelo enviado.'); st.fullTpl = null; await openThread(d.id); paintFoot(st.detail ?? d); paintList(); } catch (err) { send.disabled = false; toast(err.message); }
       });
       holder.append(sel, prev, vars, send);
     }).catch((err) => holder.append(el('p', { class: 'wi-note warn' }, err.message)));
