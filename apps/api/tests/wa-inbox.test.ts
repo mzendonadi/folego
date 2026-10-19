@@ -1,7 +1,8 @@
 // Caixa de entrada completa de WhatsApp: arquivos (foto, áudio, documento), encaminhar, número novo, perfis e a caixa do número do Fôlego (Bird).
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { createHmac } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
+import { classicToEvent } from '../src/bird.ts';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app.ts';
 import { loadConfig } from '../src/config.ts';
@@ -339,6 +340,34 @@ const birdHook = async (event: unknown, secret = BIRD_RAW) => {
   const res = await app.inject({ method: 'POST', url: '/webhooks/bird', headers: { 'content-type': 'application/json', 'webhook-id': id, 'webhook-timestamp': ts, 'webhook-signature': `v1,${sig}` }, payload: body });
   return res.statusCode;
 };
+
+const classicHook = async (event: unknown, key: string, opts: { badSignature?: boolean } = {}) => {
+  const body = JSON.stringify(event);
+  const ts = String(Math.floor(Date.now() / 1000));
+  const url = `${config.publicUrl}/webhooks/bird`;
+  const sig = createHmac('sha256', key).update(Buffer.concat([Buffer.from(`${ts}\n${url}\n`), createHash('sha256').update(body).digest()])).digest('base64');
+  const res = await app.inject({ method: 'POST', url: '/webhooks/bird', headers: { 'content-type': 'application/json', 'messagebird-signature': opts.badSignature ? Buffer.from('x').toString('base64') : sig, 'messagebird-request-timestamp': ts }, payload: body });
+  return res.statusCode;
+};
+
+test('Bird clássica: webhook assinado (messagebird-signature) traz a resposta e o andamento da mensagem; assinatura errada é recusada', async () => {
+  const key = `whsec_${BIRD_RAW.toString('base64')}`; // o segredo é usado como texto puro nesse formato
+  const inbound = { service: 'channels', event: 'whatsapp.inbound', payload: { id: 'cls_in_1', channelId: 'c', sender: { contact: { id: 'x', identifierKey: 'phonenumber', identifierValue: '+5534998375296' } }, body: { type: 'text', text: { text: 'Quanto custa?' } }, direction: 'incoming', status: 'delivered' } };
+  assert.equal(await classicHook(inbound, key, { badSignature: true }), 401);
+  assert.equal(await classicHook(inbound, key), 200);
+  const got = await db.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.wa_messages m JOIN app.wa_threads t ON t.id = m.thread_id WHERE m.direction = 'in' AND m.wa_id = 'cls_in_1' AND t.partner_id = $1`, [HOUSE_PARTNER_ID]);
+  assert.equal(got.rows[0]!.n, '1', 'a resposta virou mensagem na conversa do número do Fôlego');
+  assert.equal(await classicHook(inbound, key), 200);
+  assert.equal((await db.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.wa_messages WHERE wa_id = 'cls_in_1'`)).rows[0]!.n, '1', 'a repetição do aviso não duplica');
+
+  assert.deepEqual(classicToEvent({ event: 'whatsapp.outbound', payload: { id: 'm1', reference: 'r1', status: 'delivered' } }), { type: 'whatsapp.delivered', data: { id: 'm1', metadata: { ref: 'r1' }, reason: null } });
+  assert.equal((classicToEvent({ event: 'whatsapp.outbound', payload: { id: 'm1', status: 'delivery_failed', reason: 'x' } }) as { type: string }).type, 'whatsapp.failed');
+  assert.equal((classicToEvent({ event: 'whatsapp.outbound', payload: { id: 'm1', status: 'processing' } }) as { type: string }).type, 'ignorado');
+
+  // limpa o que este teste criou, para não mudar a contagem dos testes seguintes
+  await db.query(`DELETE FROM app.wa_messages WHERE wa_id = 'cls_in_1'`);
+  await db.query(`DELETE FROM app.wa_threads WHERE partner_id = $1 AND id NOT IN (SELECT thread_id FROM app.wa_messages)`, [HOUSE_PARTNER_ID]);
+});
 
 test('backoffice: caixa do número do Fôlego (Bird) recebe texto e foto, responde, acompanha status e respeita SAIR', async () => {
   // entra como dono (código por e-mail, como nos demais testes do backoffice)

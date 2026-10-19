@@ -4,7 +4,7 @@
 // - Telefone nunca em texto puro: criptografado, e achado só pelo HMAC (phone_key).
 // - Quem responde SAIR (ou parecido) nunca mais recebe nada.
 // - O webhook da Bird segue o padrão Standard Webhooks (webhook-id, webhook-timestamp, webhook-signature).
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { decryptText, encryptText } from './crypto.ts';
 import { AppError } from './errors.ts';
 import type { Ctx } from './services.ts';
@@ -215,6 +215,47 @@ export function verifyBirdSignature(secret: string, headers: { id?: string; time
     if (got.length === expected.length && timingSafeEqual(got, expected)) return true;
   }
   return false;
+}
+
+// ---------------------------------------------------------------------------
+// Webhook da Bird clássica (app.bird.com): cabeçalhos messagebird-signature / messagebird-request-timestamp
+// ---------------------------------------------------------------------------
+/** HMAC-SHA256 de "timestamp \n URL \n SHA-256(corpo) (binário)" com a chave de assinatura (texto puro); a assinatura vem em base64. Aceita até 10 min de diferença. */
+export function verifyBirdClassicSignature(signingKey: string, headers: { signature?: string; timestamp?: string }, url: string, rawBody: string, now = Date.now()): boolean {
+  const { signature, timestamp } = headers;
+  if (!signature || !timestamp) return false;
+  const ts = Number(timestamp);
+  if (!Number.isFinite(ts) || Math.abs(now / 1000 - ts) > 600) return false;
+  const got = Buffer.from(signature, 'base64');
+  const bodyHash = createHash('sha256').update(rawBody).digest();
+  const expected = createHmac('sha256', signingKey).update(Buffer.concat([Buffer.from(`${timestamp}\n${url}\n`), bodyHash])).digest();
+  return got.length === expected.length && timingSafeEqual(got, expected);
+}
+
+const CLASSIC_STATUS: Record<string, string> = { accepted: 'whatsapp.accepted', sent: 'whatsapp.sent', delivered: 'whatsapp.delivered', read: 'whatsapp.read', sending_failed: 'whatsapp.failed', delivery_failed: 'whatsapp.failed' };
+
+/**
+ * Converte o aviso da Bird clássica ({service, event, payload}) no formato que o resto do código já entende:
+ * resposta recebida = whatsapp.received; andamento de envio = whatsapp.<situação>, com o nosso id em metadata.ref (é o `reference` que mandamos).
+ * Mídia recebida ainda não é baixada nesta versão: vira um aviso no texto.
+ */
+export function classicToEvent(body: unknown): unknown {
+  const b = obj(body);
+  const event = str(b.event) ?? '';
+  const p = obj(b.payload);
+  if (event === 'whatsapp.inbound') {
+    const contact = obj(obj(p.sender).contact);
+    const msg = obj(p.body);
+    const kind = str(msg.type) ?? 'text';
+    const text = kind === 'text' ? (str(obj(msg.text).text) ?? '') : `[${kind === 'image' ? 'imagem' : kind === 'file' ? 'arquivo' : kind} recebido(a): veja na Bird]`;
+    return { type: 'whatsapp.received', data: { id: str(p.id), from: { phone_number: str(contact.identifierValue) }, text: { body: text } } };
+  }
+  if (event === 'whatsapp.outbound') {
+    const type = CLASSIC_STATUS[str(p.status) ?? ''];
+    if (!type) return { type: 'ignorado', data: {} }; // processing, scheduled, skipped…: nada a atualizar
+    return { type, data: { id: str(p.id), metadata: { ref: str(p.reference) }, reason: str(p.reason) } };
+  }
+  return { type: 'ignorado', data: {} };
 }
 
 const RANK: Record<string, number> = { fila: 0, enviando: 1, aceita: 2, enviada: 3, entregue: 4, lida: 5 };

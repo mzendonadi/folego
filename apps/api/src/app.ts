@@ -28,7 +28,7 @@ import * as billing from './billing.ts';
 import * as planChange from './plan-change.ts';
 import * as accountData from './account-data.ts';
 import * as referrals from './referrals.ts';
-import { handleBirdEvent, verifyBirdSignature } from './bird.ts';
+import { classicToEvent, handleBirdEvent, verifyBirdClassicSignature, verifyBirdSignature } from './bird.ts';
 import { loadMedia, mediaHeaders, validMediaSig } from './wa-media.ts';
 import { referralWhatsappSchema } from './schemas.ts';
 import * as insights from './insights.ts';
@@ -835,13 +835,19 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       const raw = typeof req.body === 'string' ? req.body : '';
       const h = req.headers;
       const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
-      if (!verifyBirdSignature(secret, { id: one(h['webhook-id']), timestamp: one(h['webhook-timestamp']), signature: one(h['webhook-signature']) }, raw)) return reply.status(401).send({ error: 'invalid_signature' });
+      // Bird clássica (app.bird.com) assina com messagebird-signature; a plataforma nova usa Standard Webhooks (webhook-*).
+      const classic = one(h['messagebird-signature']) !== undefined;
+      const valid = classic
+        ? verifyBirdClassicSignature(secret, { signature: one(h['messagebird-signature']), timestamp: one(h['messagebird-request-timestamp']) }, `${config.publicUrl}/webhooks/bird`, raw)
+        : verifyBirdSignature(secret, { id: one(h['webhook-id']), timestamp: one(h['webhook-timestamp']), signature: one(h['webhook-signature']) }, raw);
+      if (!valid) return reply.status(401).send({ error: 'invalid_signature' });
       let parsed: unknown;
       try {
         parsed = JSON.parse(raw);
       } catch {
         return reply.status(400).send({ error: 'invalid_json' });
       }
+      if (classic) parsed = classicToEvent(parsed);
       try {
         await handleBirdEvent(ctx, parsed, { log: (e) => req.log.warn(e) });
       } catch (error) {
