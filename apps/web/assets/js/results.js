@@ -182,22 +182,28 @@ export function renderPreview(root, preview, { onBuy, onWipe, offer = null }) {
   const shown = offer ? offer.priceCents : CATALOG.recovery_map.cents;
   const priceBlock = offer?.mode === 'free'
     ? el('p', { class: 'price price-sm price-included' }, 'Incluso no seu plano')
-    : el('p', { class: 'price price-sm' }, el('span', { class: 'price-cur' }, 'R$'), ` ${Math.floor(shown / 100)}`, el('span', { class: 'price-cents' }, `,${String(shown % 100).padStart(2, '0')}`));
+    : el('p', { class: 'price price-sm' }, el('span', { class: 'price-cur' }, 'R$'), ` ${Math.floor(shown / 100)}`, el('span', { class: 'price-cents' }, `,${String(shown % 100).padStart(2, '0')}`), el('span', { class: 'price-pix' }, 'no Pix'));
   const priceNote = offer?.mode === 'free'
     ? 'Sem cobrança: o Mapa faz parte do Desbravador enquanto a assinatura valer.'
     : offer
-      ? `no Pix, uma vez só. Preço normal ${brl(offer.regularCents)}: você economiza ${brl(offer.discountCents)} por assinar o Ousado.`
-      : 'no Pix, uma vez só. Você só paga porque viu o que está acima.';
+      ? `Pagamento uma vez só. Preço normal ${brl(offer.regularCents)}: você economiza ${brl(offer.discountCents)} por assinar o Ousado.`
+      : 'Pagamento uma vez só. Você só paga porque viu o que está acima.';
   const accessText = offer?.mode === 'free' ? 'acesso enquanto a assinatura valer' : `${offer?.days ?? daysOf('recovery_map')} dias de acesso`;
 
   const decision = el(
     'aside',
     { class: 'card decision', 'aria-labelledby': 'decision-title' },
-    el('p', { class: 'card-eyebrow' }, 'Quer o Mapa completo?'),
     el('h2', { id: 'decision-title' }, 'Mapa da Virada'),
     priceBlock,
     el('p', { class: 'muted' }, priceNote),
-    tickList(['Ordem completa de pagamento', 'Orçamento do mês e linha do tempo', 'Roteiros de negociação por credor', `PDF para guardar · ${accessText} e direito de refazer com dados novos`]),
+    el('p', { class: 'decision-lead' }, 'Você terá acesso completo:'),
+    tickList([
+      'As cartas prontas, com cláusulas e direitos seus, para você só copiar, colar e enviar aos credores',
+      'Ordem completa de pagamento',
+      'Orçamento do mês e linha do tempo',
+      'Roteiros de negociação por credor para conseguir o máximo de descontos nas dívidas',
+      `PDF para guardar · ${accessText} e direito de refazer com dados novos`,
+    ]),
     buy(),
     el('p', { class: 'fine' }, offer?.mode === 'free' ? 'Quer só olhar? Pode voltar ao Prumo: nada é gasto.' : 'Não gostou? Sem problema: é só fechar a página. Nada é cobrado.'),
     el('button', { class: 'btn btn-quiet btn-sm', type: 'button', 'data-wipe': '' }, icon('trash'), 'Apagar meus dados agora'),
