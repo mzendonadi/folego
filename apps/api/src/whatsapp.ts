@@ -431,9 +431,21 @@ export async function processWhatsAppQueue(ctx: Ctx, opts: { log?: (e: Record<st
         RETURNING id, thread_id, kind, body_enc, vars_enc, template_id, attempts, media_id, voice`,
         [partner_id, kinds, limit],
       );
-      for (const m of claimed.rows) if (await sendOne(ctx, acc, m, opts)) sent += 1;
+      for (const m of claimed.rows) {
+        // Um erro inesperado numa mensagem não pode travar a fila nem deixá-la "na fila" para sempre: vira "não enviada" com o motivo.
+        try {
+          if (await sendOne(ctx, acc, m, opts)) sent += 1;
+        } catch (e) {
+          const why = e instanceof Error ? e.message : 'erro';
+          opts.log?.({ evento: 'whatsapp_erro_inesperado', mensagem: m.id, motivo: why.slice(0, 120) });
+          if (m.attempts >= MAX_ATTEMPTS) await ctx.db.query(`UPDATE app.wa_messages SET status = 'falhou', error = $2 WHERE id = $1`, [m.id, `Erro interno: ${why}`.slice(0, 300)]);
+          else await ctx.db.query(`UPDATE app.wa_messages SET error = $2 WHERE id = $1`, [m.id, `Tentativa ${m.attempts} de ${MAX_ATTEMPTS}: erro interno: ${why}`.slice(0, 300)]);
+        }
+      }
     }
   }
+  // Quem esgotou as tentativas sem resposta definitiva (ex.: erro interno) não fica esperando para sempre.
+  await ctx.db.query(`UPDATE app.wa_messages SET status = 'falhou', error = coalesce(error, 'Muitas tentativas sem sucesso.') WHERE status = 'fila' AND direction = 'out' AND attempts >= ${MAX_ATTEMPTS}`);
   return sent;
 }
 
@@ -476,14 +488,15 @@ async function sendOne(ctx: Ctx, acc: WaAccount, m: QueuedRow, opts: { log?: (e:
     // Ao marcar o modelo como Aprovado no backoffice, ela é liberada na hora (setTemplateStatus).
     if (m.kind === 'template' && awaitsApproval(err)) {
       const held = await ctx.db.query(
-        `UPDATE app.wa_messages SET status = 'fila', attempts = 0, next_attempt_at = now() + interval '15 minutes', error = 'Aguardando a Meta aprovar o modelo'
+        `UPDATE app.wa_messages SET status = 'fila', attempts = 0, next_attempt_at = now() + interval '15 minutes', error = $2
           WHERE id = $1 AND created_at > now() - interval '24 hours' RETURNING id`,
-        [m.id],
+        [m.id, `Aguardando o modelo ser aceito: ${err.message}`.slice(0, 300)], // o motivo real da recusa fica à vista (nada de erro escondido)
       );
       if (held.rows.length) { opts.log?.({ evento: 'whatsapp_aguarda_aprovacao', mensagem: m.id, motivo: err.message.slice(0, 100) }); return false; }
       return fail(`${err.message} (o modelo não foi aprovado em 24 h)`);
     }
     if (err.permanent || m.attempts >= MAX_ATTEMPTS) return fail(err.message);
+    await ctx.db.query(`UPDATE app.wa_messages SET error = $2 WHERE id = $1`, [m.id, `Tentativa ${m.attempts} de ${MAX_ATTEMPTS}: ${err.message}`.slice(0, 300)]);
     opts.log?.({ evento: 'whatsapp_tentara_de_novo', mensagem: m.id, motivo: err.message.slice(0, 100) });
     return false;
   }

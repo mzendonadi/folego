@@ -71,8 +71,15 @@ export async function computeAlerts(ctx: Ctx, a: AdminUser): Promise<BoAlert[]> 
   if (allowed('parcerias')) {
     const failed = await one(ctx, `SELECT count(*)::text AS n FROM app.lead_deliveries WHERE status = 'failed'`);
     if (failed) out.push({ key: 'parc:entregas', severity: 'critica', title: failed === 1 ? '1 envio a parceiro falhou' : `${failed} envios a parceiros falharam`, detail: 'O sistema tenta de novo sozinho; se persistir, confira o parceiro.', count: failed, route: 'parcerias' });
-    const waFail = await one(ctx, `SELECT count(*)::text AS n FROM app.wa_messages WHERE status = 'falhou' AND created_at >= now() - interval '24 hours'`);
+    // Mensagem "Repetida" foi descartada de propósito (só a última de cada conversa segue): não é falha de conexão.
+    const waFail = await one(ctx, `SELECT count(*)::text AS n FROM app.wa_messages m JOIN app.partners p ON p.id = m.partner_id WHERE m.status = 'falhou' AND m.created_at >= now() - interval '24 hours' AND coalesce(m.error, '') NOT LIKE 'Repetida:%' AND NOT p.internal`);
     if (waFail) out.push({ key: 'parc:whatsapp', severity: 'atencao', title: waFail === 1 ? '1 mensagem de WhatsApp de parceiro falhou' : `${waFail} mensagens de WhatsApp de parceiros falharam`, detail: 'Nas últimas 24 horas. Veja a conexão do parceiro com a Meta.', count: waFail, route: 'parcerias' });
+    // O número do próprio Fôlego (Bird) tem alerta separado, com o motivo mais recente, para não confundir com a conexão de parceiros.
+    const houseFail = await ctx.db.query<{ n: string; last: string | null }>(
+      `SELECT count(*)::text AS n, (SELECT m2.error FROM app.wa_messages m2 JOIN app.partners p2 ON p2.id = m2.partner_id WHERE p2.internal AND m2.status = 'falhou' AND coalesce(m2.error, '') NOT LIKE 'Repetida:%' ORDER BY m2.created_at DESC LIMIT 1) AS last
+         FROM app.wa_messages m JOIN app.partners p ON p.id = m.partner_id WHERE p.internal AND m.status = 'falhou' AND m.created_at >= now() - interval '24 hours' AND coalesce(m.error, '') NOT LIKE 'Repetida:%'`,
+    ).then((r) => ({ n: Number(r.rows[0]?.n ?? 0), last: r.rows[0]?.last ?? null })).catch(() => ({ n: 0, last: null }));
+    if (houseFail.n) out.push({ key: 'wa:folego', severity: 'atencao', title: houseFail.n === 1 ? '1 mensagem do WhatsApp do Fôlego não saiu' : `${houseFail.n} mensagens do WhatsApp do Fôlego não saíram`, detail: `Últimas 24 horas. Motivo mais recente: ${houseFail.last ?? 'sem detalhe'}`.slice(0, 300), count: houseFail.n, route: 'whatsapp' });
     const waQueue = await one(ctx, `SELECT count(*)::text AS n FROM app.wa_messages WHERE status = 'fila' AND created_at < now() - interval '30 minutes'`);
     if (waQueue) out.push({ key: 'parc:fila-whatsapp', severity: 'atencao', title: 'Fila de WhatsApp parada', detail: `${waQueue} mensagem(ns) esperando há mais de 30 minutos.`, count: waQueue, route: 'parcerias' });
   }

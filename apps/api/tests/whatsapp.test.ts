@@ -259,7 +259,7 @@ test('modelo ainda não aprovado na Meta: espera na fila, não falha, e sai sozi
   const lastOf = async () => (await call(app, 'GET', `/api/partner/wa/threads/${t.id}`, { headers: P.auth })).json.messages.at(-1);
   let m = await lastOf();
   assert.equal(m.status, 'fila', 'recusa por modelo não aprovado não vira falha');
-  assert.match(m.error, /Aguardando a Meta/);
+  assert.match(m.error, /Aguardando o modelo ser aceito: .*not approved/, 'o motivo real da recusa fica visível');
   assert.equal(sent.length, 0);
   assert.equal(await work(), 0, 'antes dos 15 min a fila não insiste');
   // o dono marca como aprovado: libera na hora

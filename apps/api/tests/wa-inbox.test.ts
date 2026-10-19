@@ -230,6 +230,31 @@ test('parceiro: perfil da empresa (descrição, e-mail, site) e foto do perfil p
   assert.deepEqual(photos[0], { size: JPG.length, mime: 'image/jpeg' });
 });
 
+test('adaptador da Bird: se o identificador ou as variáveis não batem (422), tenta sublinhado e variáveis numeradas antes de desistir', async () => {
+  const bodies: any[] = [];
+  const f = (async (_url: string, init: { body?: string }) => {
+    const b = JSON.parse(init.body ?? '{}');
+    bodies.push(b);
+    const okSlug = b.template.slug === 'folego_retorno_chatbot';
+    const named = Boolean(b.template.components?.[0]?.parameters?.[0]?.name);
+    if (okSlug && !named) return new Response(JSON.stringify({ id: 'wam_ok' }), { status: 202, headers: { 'content-type': 'application/json' } });
+    return new Response(JSON.stringify({ message: 'template slug or parameters do not match' }), { status: 422 });
+  }) as unknown as typeof fetch;
+  const t = new BirdWaTransport(config.bird, f);
+  const cred = { phoneNumberId: '+5511913792370', token: '', provider: 'bird' as const, ref: 'r' };
+  const r = await t.sendTemplate(cred, '5541999990009', { name: 'folego-retorno-chatbot', language: 'pt_BR', params: ['Fausto'], paramNames: ['nome_do_cliente'] });
+  assert.equal(r.id, 'wam_ok');
+  assert.ok(bodies.length >= 2 && bodies.length <= 4, `tentou ${bodies.length} formas`);
+  // nenhuma forma serve: devolve o primeiro erro, sem esconder
+  const ruim = new BirdWaTransport(config.bird, (async () => new Response('{"message":"slug not in catalogue"}', { status: 422 })) as unknown as typeof fetch);
+  await assert.rejects(() => ruim.sendTemplate(cred, '5541999990009', { name: 'x-y', language: 'pt_BR', params: [] }), /422.*catalogue/);
+  // erro que não é 422 (ex.: 402 sem saldo) não repete a tentativa
+  let n = 0;
+  const semSaldo = new BirdWaTransport(config.bird, (async () => { n += 1; return new Response('{"message":"no wallet balance"}', { status: 402 }); }) as unknown as typeof fetch);
+  await assert.rejects(() => semSaldo.sendTemplate(cred, '5541999990009', { name: 'x-y', language: 'pt_BR', params: [] }), /402/);
+  assert.equal(n, 1);
+});
+
 test('adaptador da Bird: pedidos de texto, modelo nomeado e mídia; baixa a mídia sem repassar a chave ao endereço assinado', async () => {
   const calls: { url: string; headers: Record<string, string>; body: any }[] = [];
   const f = (async (url: string, init: { headers?: Record<string, string>; body?: string; redirect?: string }) => {

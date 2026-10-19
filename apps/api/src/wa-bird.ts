@@ -54,12 +54,30 @@ export class BirdWaTransport implements WaTransport {
   }
 
   async sendTemplate(cred: WaCredentials, to: string, tpl: WaTemplateCall): Promise<{ id: string }> {
-    const names = tpl.paramNames ?? null;
-    const parameters = tpl.params.map((text, i) => (names?.[i] ? { type: 'text', name: names[i], text } : { type: 'text', text }));
-    return this.post({
-      from: cred.phoneNumberId, to: `+${to}`,
-      template: { slug: tpl.name, language: tpl.language.replace('_', '-'), ...(parameters.length ? { components: [{ type: 'body', parameters }] } : {}) },
-    }, cred.ref);
+    const names = tpl.paramNames?.some(Boolean) ? tpl.paramNames : null;
+    const build = (slug: string, named: boolean) => {
+      const parameters = tpl.params.map((text, i) => (named && names?.[i] ? { type: 'text', name: names[i], text } : { type: 'text', text }));
+      return {
+        from: cred.phoneNumberId, to: `+${to}`,
+        template: { slug, language: tpl.language.replace('_', '-'), ...(parameters.length ? { components: [{ type: 'body', parameters }] } : {}) },
+      };
+    };
+    // O identificador na Bird pode ser com hífen ou com sublinhado, e as variáveis nomeadas ou numeradas. Um 422 (modelo/variáveis não batem)
+    // é uma recusa sem envio, então é seguro tentar as outras formas; se nenhuma servir, devolve o erro da primeira tentativa.
+    const slugs = [...new Set([tpl.name, tpl.name.replace(/-/g, '_'), tpl.name.replace(/_/g, '-')])];
+    const styles = names ? [true, false] : [false];
+    let first: WaError | null = null;
+    for (const slug of slugs) {
+      for (const named of styles) {
+        try {
+          return await this.post(build(slug, named), cred.ref);
+        } catch (e) {
+          if (!(e instanceof WaError) || e.status !== 422) throw e;
+          first ??= e;
+        }
+      }
+    }
+    throw first ?? new WaError('A Bird recusou o modelo.', 422, null);
   }
 
   async sendMedia(cred: WaCredentials, to: string, m: MediaSend): Promise<{ id: string }> {
