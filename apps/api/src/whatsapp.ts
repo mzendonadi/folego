@@ -495,6 +495,17 @@ async function sendOne(ctx: Ctx, acc: WaAccount, m: QueuedRow, opts: { log?: (e:
       if (held.rows.length) { opts.log?.({ evento: 'whatsapp_aguarda_aprovacao', mensagem: m.id, motivo: err.message.slice(0, 100) }); return false; }
       return fail(`${err.message} (o modelo não foi aprovado em 24 h)`);
     }
+    // Chave/credencial recusada (401/403): não adianta insistir a cada minuto, mas também não deve descartar a mensagem.
+    // Ela espera (até 24 h, com o motivo à vista) e sai sozinha quando a chave for corrigida e o servidor atualizado.
+    if (err.status === 401 || err.status === 403) {
+      const held = await ctx.db.query(
+        `UPDATE app.wa_messages SET status = 'fila', attempts = 0, next_attempt_at = now() + interval '15 minutes', error = $2
+          WHERE id = $1 AND created_at > now() - interval '24 hours' RETURNING id`,
+        [m.id, `Aguardando corrigir a chave de acesso: ${err.message}`.slice(0, 300)],
+      );
+      if (held.rows.length) { opts.log?.({ evento: 'whatsapp_aguarda_chave', mensagem: m.id }); return false; }
+      return fail(err.message);
+    }
     if (err.permanent || m.attempts >= MAX_ATTEMPTS) return fail(err.message);
     await ctx.db.query(`UPDATE app.wa_messages SET error = $2 WHERE id = $1`, [m.id, `Tentativa ${m.attempts} de ${MAX_ATTEMPTS}: ${err.message}`.slice(0, 300)]);
     opts.log?.({ evento: 'whatsapp_tentara_de_novo', mensagem: m.id, motivo: err.message.slice(0, 100) });

@@ -280,6 +280,22 @@ test('modelo ainda não aprovado na Meta: espera na fila, não falha, e sai sozi
   assert.ok(gaveUp, 'depois de 24 h sem aprovação a mensagem vira "não enviada" com o motivo');
 });
 
+test('chave recusada (401): a mensagem espera com o motivo à vista e sai quando a chave for corrigida', async () => {
+  const t = (await call(app, 'GET', '/api/partner/wa/threads?q=cliente', { headers: P.auth })).json.items[0];
+  const tpl = (await call(app, 'GET', '/api/partner/wa/templates', { headers: P.auth })).json.templates[0];
+  sent.length = 0;
+  failTemplateNext = new WaError('Bird 401: Authentication failed', 401, null);
+  await call(app, 'POST', `/api/partner/wa/threads/${t.id}/messages`, { headers: P.auth, body: { templateId: tpl.id, vars: ['Cliente'] } });
+  const msgs = async () => (await call(app, 'GET', `/api/partner/wa/threads/${t.id}`, { headers: P.auth })).json.messages;
+  const held = (await msgs()).filter((x: any) => x.status === 'fila').at(-1);
+  assert.ok(held, 'continua na fila, não falha');
+  assert.match(held.error, /Aguardando corrigir a chave de acesso: .*401/);
+  assert.equal(sent.length, 0);
+  await db.query(`UPDATE app.wa_messages SET next_attempt_at = now() WHERE status = 'fila'`);
+  assert.ok((await work()) >= 1, 'com a chave certa a mensagem sai sozinha');
+  assert.equal((await msgs()).filter((x: any) => x.status === 'fila').length, 0);
+});
+
 test('começar conversa: pelo contato da base, com modelo, só com permissão', async () => {
   const sem = (await call(app, 'GET', '/api/partner/contacts?q=SEM%20PERMISSAO', { headers: P.auth })).json.items[0];
   const tpl = (await call(app, 'GET', '/api/partner/wa/templates', { headers: P.auth })).json.templates[0];
