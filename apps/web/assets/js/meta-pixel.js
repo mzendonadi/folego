@@ -21,10 +21,42 @@ function boot() {
   document.head.append(s);
 }
 
+const FBP_RE = /^fb\.1\.\d{10,14}\.\d{5,20}$/;
+const FBC_RE = /^fb\.1\.\d{10,14}\.[A-Za-z0-9_-]{6,200}$/;
+const readCookie = (n) => {
+  try {
+    const m = new RegExp(`(?:^|;\\s*)${n}=([^;]+)`).exec(document.cookie);
+    return m ? decodeURIComponent(m[1]) : undefined;
+  } catch {
+    return undefined;
+  }
+};
+function writeCookie(n, v) {
+  try {
+    document.cookie = `${n}=${encodeURIComponent(v)}; Max-Age=${90 * 24 * 3600}; Path=/; SameSite=Lax${location.protocol === 'https:' ? '; Secure' : ''}`;
+  } catch {
+    /* sem cookie: o pixel tenta criar o dele */
+  }
+}
+/** Cria _fbp (e _fbc, se veio de anúncio) JÁ, antes do pixel terminar de carregar: assim o primeiro PageView do servidor também leva os dois. O pixel reaproveita o que existir. */
+function ensureIds() {
+  if (!FBP_RE.test(readCookie('_fbp') || '')) writeCookie('_fbp', `fb.1.${Date.now()}.${Math.floor(1e9 + Math.random() * 9e9)}`);
+  if (!FBC_RE.test(readCookie('_fbc') || '')) {
+    let fbc;
+    try {
+      fbc = localStorage.getItem('folego_fbc') || undefined;
+    } catch {
+      /* sem armazenamento */
+    }
+    if (fbc && FBC_RE.test(fbc)) writeCookie('_fbc', fbc);
+  }
+}
+
 /** Liga o pixel (chamado só depois do aceite). */
 export function enablePixel() {
   if (on) return;
   on = true;
+  ensureIds();
   boot();
   window.fbq('set', 'autoConfig', false, PIXEL_ID); // sem eventos automáticos nem leitura de campos
   window.fbq('init', PIXEL_ID);
@@ -43,10 +75,12 @@ export function track(name, params, eventId) {
 
 /** Cookie _fbp (criado pelo pixel): vai junto com o pedido para o servidor repassar à Meta. */
 export function getFbp() {
-  try {
-    const m = /(?:^|;\s*)_fbp=(fb\.1\.\d{10,14}\.\d{5,20})(?:;|$)/.exec(document.cookie);
-    return on && m ? m[1] : undefined;
-  } catch {
-    return undefined;
-  }
+  const v = readCookie('_fbp');
+  return on && v && FBP_RE.test(v) ? v : undefined;
+}
+
+/** Cookie _fbc (clique no anúncio): só existe se a pessoa chegou por um anúncio da Meta. */
+export function getFbc() {
+  const v = readCookie('_fbc');
+  return on && v && FBC_RE.test(v) ? v : undefined;
 }

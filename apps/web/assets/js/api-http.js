@@ -42,14 +42,14 @@ export async function createCase(input) {
   return request('POST', '/cases', { body: { profile: input.profile, debts, acceptTerms: true }, headers: await guard() });
 }
 
-import { getFbp } from './meta-pixel.js';
+import { getFbp, getFbc } from './meta-pixel.js';
 
 /** fbc do clique no anúncio (se houve), para a Meta atribuir a conversão. */
 const storedFbc = () => {
   try {
-    return localStorage.getItem('folego_fbc') || undefined;
+    return localStorage.getItem('folego_fbc') || getFbc();
   } catch {
-    return undefined;
+    return getFbc();
   }
 };
 

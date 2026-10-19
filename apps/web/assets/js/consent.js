@@ -3,7 +3,7 @@
 // Sem aceite, o servidor não envia nada à Meta (o PageView só sai com o cookie folego_ads).
 import { API_BASE } from '../config.js';
 import { el } from './dom.js';
-import { enablePixel, track } from './meta-pixel.js';
+import { enablePixel, track, getFbp, getFbc } from './meta-pixel.js';
 
 const KEY = 'folego:cookies';
 const MAX_AGE_MS = 170 * 24 * 3600 * 1000; // o cookie de aceite vale 180 dias: perguntamos de novo antes de vencer
@@ -26,7 +26,7 @@ function write(v) {
 async function send(ads, eventId) {
   if (!API_BASE) return;
   try {
-    await fetch(`${API_BASE}/consent`, { method: 'POST', credentials: 'same-origin', headers: { 'x-folego': '1', 'content-type': 'application/json' }, body: JSON.stringify({ ads, ...(eventId ? { eventId } : {}) }) });
+    await fetch(`${API_BASE}/consent`, { method: 'POST', credentials: 'same-origin', headers: { 'x-folego': '1', 'content-type': 'application/json' }, body: JSON.stringify({ ads, ...(eventId ? { eventId } : {}), ...(ads && getFbp() ? { fbp: getFbp() } : {}), ...(ads && getFbc() ? { fbc: getFbc() } : {}) }) });
   } catch {
     /* sem rede: o servidor continua sem enviar nada */
   }
@@ -70,7 +70,7 @@ async function pageview() {
   track('PageView', {}, id);
   if (!API_BASE) return;
   try {
-    await fetch(`${API_BASE}/pageview`, { method: 'POST', credentials: 'same-origin', keepalive: true, headers: { 'x-folego': '1', 'content-type': 'application/json' }, body: JSON.stringify({ path: location.pathname || '/', eventId: id }) });
+    await fetch(`${API_BASE}/pageview`, { method: 'POST', credentials: 'same-origin', keepalive: true, headers: { 'x-folego': '1', 'content-type': 'application/json' }, body: JSON.stringify({ path: location.pathname || '/', eventId: id, ...(getFbp() ? { fbp: getFbp() } : {}), ...(getFbc() ? { fbc: getFbc() } : {}) }) });
   } catch {
     /* sem rede: sem PageView */
   }

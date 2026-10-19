@@ -76,6 +76,7 @@ test('com aceite de publicidade: Lead, InitiateCheckout e Purchase saem com e-ma
   assert.deepEqual(u.ph, [sha('5511912345678')]);
   assert.equal(u.client_user_agent, 'TesteAgent/1.0');
   assert.equal(u.fbp, 'fb.1.1760000000000.1234567890'); // fbp do pixel do navegador segue com Lead e InitiateCheckout
+  assert.deepEqual(u.country, [createHash('sha256').update('br').digest('hex')]); // país sempre vai em hash
   assert.equal(sent[1]!.body.data[0].custom_data.currency, 'BRL');
   assert.ok(!JSON.stringify(sent).toLowerCase().includes('maria@exemplo.com'), 'e-mail nunca em claro');
   assert.ok(!JSON.stringify(sent).includes('91234'), 'celular nunca em claro');

@@ -1,4 +1,4 @@
-// Meta Conversions API (servidor para servidor). Sem pixel no navegador (D-022).
+// Meta Conversions API (servidor para servidor), junto com o pixel no navegador após o aceite (D-120).
 // Os dados da pessoa (e-mail/celular em hash SHA-256, IP e navegador) seguem para a Meta, conforme informado nos termos.
 // O PageView anônimo fica desligado até META_CAPI_PAGEVIEW=1.
 // Falhas nunca derrubam o pedido: tudo aqui é "dispare e esqueça" e só registra no log do servidor.
@@ -44,6 +44,7 @@ export function buildPayload(input: CapiInput, testCode: string | null): Record<
   if (input.externalId) user.external_id = [sha(input.externalId)];
   if (input.ip) user.client_ip_address = input.ip;
   if (input.userAgent) user.client_user_agent = input.userAgent;
+  user.country = [sha('br')]; // o serviço é só para o Brasil: sinal extra de correspondência
   if (input.fbc) user.fbc = input.fbc;
   if (input.fbp) user.fbp = input.fbp;
   const custom: Record<string, unknown> = {};
