@@ -30,11 +30,21 @@ export class BirdWaTransport implements WaTransport {
   /** Plataforma clássica (app.bird.com): POST /workspaces/{ws}/channels/{canal}/messages, "Authorization: AccessKey". Destinatário em `receiver.contacts`. */
   private async postClassic(payload: Record<string, unknown>, to: string, ref?: string): Promise<{ id: string }> {
     const c = this.conf();
-    return this.send(
-      `${c.baseUrl}/workspaces/${c.workspaceId}/channels/${c.channelId}/messages`,
-      `AccessKey ${c.apiKey}`,
-      { receiver: { contacts: [{ identifierValue: `+${to}`, identifierKey: 'phonenumber' }] }, ...payload, ...(ref ? { reference: ref } : {}) },
-    );
+    try {
+      return await this.send(
+        `${c.baseUrl}/workspaces/${c.workspaceId}/channels/${c.channelId}/messages`,
+        `AccessKey ${c.apiKey}`,
+        { receiver: { contacts: [{ identifierValue: `+${to}`, identifierKey: 'phonenumber' }] }, ...payload, ...(ref ? { reference: ref } : {}) },
+      );
+    } catch (e) {
+      // Canal ou workspace não encontrado: mostra os canais que a chave enxerga (só IDs e nomes), para achar o ID certo sem adivinhar.
+      if (e instanceof WaError && e.status === 404) {
+        const list = await this.fetchFn(`${c.baseUrl}/workspaces/${c.workspaceId}/channels`, { headers: { authorization: `AccessKey ${c.apiKey}` }, signal: AbortSignal.timeout(10_000) }).then(async (r) => (r.ok ? ((await r.json()) as { results?: { id?: string; name?: string; platformId?: string }[] }).results ?? [] : null)).catch(() => null);
+        const seen = list ? list.map((x) => `${x.id} ${x.platformId ?? ''} ${x.name ?? ''}`.trim()).join(' | ').slice(0, 220) : 'não consegui listar os canais';
+        throw new WaError(`${e.message} [canais visíveis: ${seen}]`.slice(0, 480), 404, null);
+      }
+      throw e;
+    }
   }
 
   private async post(body: Record<string, unknown>, ref?: string): Promise<{ id: string }> {
