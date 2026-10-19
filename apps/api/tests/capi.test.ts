@@ -54,7 +54,7 @@ async function order(adsConsent: boolean, key: string) {
   const c = client();
   const created = await c('POST', '/api/cases', { body: caseBody });
   assert.equal(created.status, 201);
-  const o = await c('POST', '/api/orders', { body: { caseId: created.json.caseId, products: ['recovery_map'], contact: { email: 'Maria@Exemplo.com', phone: '(11) 91234-5678', adsConsent, fbc: 'fb.1.1760000000000.AbCdEf123456' } }, headers: { 'idempotency-key': key } });
+  const o = await c('POST', '/api/orders', { body: { caseId: created.json.caseId, products: ['recovery_map'], contact: { email: 'Maria@Exemplo.com', phone: '(11) 91234-5678', adsConsent, fbc: 'fb.1.1760000000000.AbCdEf123456', fbp: 'fb.1.1760000000000.1234567890' } }, headers: { 'idempotency-key': key } });
   assert.equal(o.status, 201, JSON.stringify(o.json));
   return { caseId: created.json.caseId as string, orderId: o.json.orderId as string, c };
 }
@@ -75,6 +75,7 @@ test('com aceite de publicidade: Lead, InitiateCheckout e Purchase saem com e-ma
   assert.deepEqual(u.em, [sha('maria@exemplo.com')]);
   assert.deepEqual(u.ph, [sha('5511912345678')]);
   assert.equal(u.client_user_agent, 'TesteAgent/1.0');
+  assert.equal(u.fbp, 'fb.1.1760000000000.1234567890'); // fbp do pixel do navegador segue com Lead e InitiateCheckout
   assert.equal(sent[1]!.body.data[0].custom_data.currency, 'BRL');
   assert.ok(!JSON.stringify(sent).toLowerCase().includes('maria@exemplo.com'), 'e-mail nunca em claro');
   assert.ok(!JSON.stringify(sent).includes('91234'), 'celular nunca em claro');
@@ -88,6 +89,7 @@ test('com aceite de publicidade: Lead, InitiateCheckout e Purchase saem com e-ma
   // A Meta exige navegador em eventos de site: o Purchase (disparado pelo webhook) reaproveita IP, navegador e fbc guardados com o contato.
   assert.equal(sent[0]!.body.data[0].user_data.client_user_agent, 'TesteAgent/1.0');
   assert.equal(sent[0]!.body.data[0].user_data.fbc, 'fb.1.1760000000000.AbCdEf123456');
+  assert.equal(sent[0]!.body.data[0].user_data.fbp, 'fb.1.1760000000000.1234567890');
   assert.ok(sent[0]!.body.data[0].user_data.client_ip_address);
   // pagou: o caso (e o contato) passa a durar 30 dias
   const row = await db.query<{ days: string }>(`SELECT round(extract(epoch FROM purge_after - now()) / 86400)::text AS days FROM app.cases WHERE id = $1`, [caseId]);
