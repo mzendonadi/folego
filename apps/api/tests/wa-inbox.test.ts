@@ -26,7 +26,7 @@ const mailbox = new MemorySender();
 const config = {
   ...loadConfig({ NODE_ENV: 'test' }),
   webhookSecret: 'segredo-de-teste', leadsEnabled: true, partnerAdminToken: ADMIN, adminEmails: ['dono@exemplo.com'],
-  bird: { apiKey: 'bk_test_0123456789012345', from: '+5511913792370', baseUrl: 'http://bird.invalid', template: 'folego-indicacao-prumo', language: 'pt-BR', webhookSecret: `whsec_${BIRD_RAW.toString('base64')}` },
+  bird: { apiKey: 'bk_test_0123456789012345', from: '+5511913792370', baseUrl: 'http://bird.invalid', template: 'folego-indicacao-prumo', language: 'pt-BR', webhookSecret: `whsec_${BIRD_RAW.toString('base64')}`, classic: false, workspaceId: 'ws-teste', channelId: 'canal-teste', inviteProjectId: 'proj-teste', inviteVersion: 'ver-teste' },
 };
 
 const sentText: { to: string; text: string; from: string; ref?: string | undefined }[] = [];
@@ -228,6 +228,28 @@ test('parceiro: perfil da empresa (descrição, e-mail, site) e foto do perfil p
   const set = await call('PUT', '/api/partner/wa/business-profile/photo', { headers: P.auth, body: { mediaId: photo.json.id } });
   assert.equal(set.status, 200, set.text);
   assert.deepEqual(photos[0], { size: JPG.length, mime: 'image/jpeg' });
+});
+
+test('adaptador da Bird clássica: texto e modelo pelo projeto/versão, chave AccessKey e destinatário em receiver', async () => {
+  const calls: { url: string; headers: Record<string, string>; body: any }[] = [];
+  const f = (async (url: string, init: { headers: Record<string, string>; body: string }) => {
+    calls.push({ url: String(url), headers: init.headers, body: JSON.parse(init.body) });
+    return new Response(JSON.stringify({ id: 'cls_1', status: 'accepted' }), { status: 202, headers: { 'content-type': 'application/json' } });
+  }) as unknown as typeof fetch;
+  const cfg = { ...config.bird!, classic: true, baseUrl: 'https://api.bird.test', workspaceId: 'ws-1', channelId: 'ch-1', apiKey: 'GZchaveantigadeteste1234567' };
+  const t = new BirdWaTransport(cfg, f);
+  const cred = { phoneNumberId: '+5511913792370', token: '', provider: 'bird' as const, ref: 'ref-9' };
+
+  assert.equal((await t.sendText(cred, '5534998375296', 'Olá')).id, 'cls_1');
+  assert.equal(calls[0]!.url, 'https://api.bird.test/workspaces/ws-1/channels/ch-1/messages');
+  assert.equal(calls[0]!.headers.authorization, 'AccessKey GZchaveantigadeteste1234567');
+  assert.deepEqual(calls[0]!.body, { receiver: { contacts: [{ identifierValue: '+5534998375296', identifierKey: 'phonenumber' }] }, body: { type: 'text', text: { text: 'Olá' } }, reference: 'ref-9' });
+
+  await t.sendTemplate(cred, '5534998375296', { name: 'folego-retorno-chatbot', language: 'pt_BR', params: ['Ana'], paramNames: ['nome_do_cliente'], birdProjectId: 'p-1', birdVersion: 'v-1' });
+  assert.deepEqual(calls[1]!.body.template, { projectId: 'p-1', version: 'v-1', locale: 'pt-BR', parameters: [{ type: 'string', key: 'nome_do_cliente', value: 'Ana' }] });
+
+  await assert.rejects(() => t.sendTemplate(cred, '5534998375296', { name: 'sem-id', language: 'pt_BR', params: [] }), /ID do projeto/);
+  assert.equal(calls.length, 2, 'sem o ID do projeto nem chama a Bird');
 });
 
 test('adaptador da Bird: se o identificador ou as variáveis não batem (422), tenta sublinhado e variáveis numeradas antes de desistir', async () => {

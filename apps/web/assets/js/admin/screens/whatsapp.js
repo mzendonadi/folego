@@ -101,12 +101,16 @@ export async function whatsappScreen(ctx = {}) {
     const lang = el('input', { class: 'input', id: 'wt-lang', type: 'text', value: t?.language ?? 'pt_BR', maxlength: '5' });
     const body = el('textarea', { class: 'input', id: 'wt-body', rows: '9', maxlength: '1024', placeholder: 'Olá {{1}}, aqui é a equipe do Fôlego…' }, t?.body ?? '');
     const names = el('input', { class: 'input', id: 'wt-names', type: 'text', placeholder: 'nome_do_cliente, codigo', value: t?.paramNames?.join(', ') ?? '' });
+    const projectId = el('input', { class: 'input', id: 'wt-pid', type: 'text', placeholder: 'ex.: c6227d49-0400-4925-ba7d-07aa302ea3ad', value: t?.birdProjectId ?? '', autocomplete: 'off', spellcheck: 'false' });
+    const versionId = el('input', { class: 'input', id: 'wt-ver', type: 'text', placeholder: 'ex.: c3ffd3fe-2b02-4fd5-91cb-d7650f599e8b', value: t?.birdVersion ?? '', autocomplete: 'off', spellcheck: 'false' });
     const save = el('button', { class: 'btn btn-primary', type: 'submit' }, t ? 'Salvar alterações' : 'Salvar modelo');
     const form = el('form', { class: 'tool-form' },
       field('Identificador do modelo na Bird (slug)', name, 'Pode digitar como na Bird (ex.: Fôlego Indicação Prumo): vira folego-indicacao-prumo ao salvar.'),
       field('Categoria', cat), field('Idioma', lang),
       field('Texto', body, 'Use {{1}}, {{2}} para as partes que mudam. Copie o texto exatamente como foi aprovado.'),
       field('Nome das variáveis (só se o modelo da Bird usa variáveis nomeadas)', names, 'Separe por vírgula, na ordem de {{1}}, {{2}}…'),
+      field('ID do projeto na Bird', projectId, 'Na Bird: Marketing > Modelos de mensagem > abra o modelo > "ID do Projeto". Necessário para enviar.'),
+      field('ID da versão publicada na Bird', versionId, 'Na mesma tela: "ID da versão publicada". Se você publicar uma nova versão, atualize aqui.'),
       t ? el('p', { class: 'note note-amber' }, icon('info'), el('span', {}, 'Ao editar, a situação (Aprovado etc.) continua a mesma. Só mude o texto se ele também foi alterado na Bird.')) : null,
       save);
     form.addEventListener('submit', async (e) => {
@@ -116,7 +120,7 @@ export async function whatsappScreen(ctx = {}) {
         const paramNames = names.value.split(',').map((s) => s.trim()).filter(Boolean);
         const slug = name.value.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
         name.value = slug;
-        const payload = { name: slug, category: cat.value, language: lang.value.trim() || 'pt_BR', body: body.value.trim(), paramNames };
+        const payload = { name: slug, category: cat.value, language: lang.value.trim() || 'pt_BR', body: body.value.trim(), paramNames, birdProjectId: projectId.value.trim(), birdVersion: versionId.value.trim() };
         if (t) await api.wa.call('PUT', `/templates/${t.id}`, payload);
         else await api.wa.call('POST', '/templates', paramNames.length ? payload : { ...payload, paramNames: undefined });
         toast(t ? 'Modelo atualizado.' : 'Modelo salvo. Marque como aprovado quando a Bird confirmar.');

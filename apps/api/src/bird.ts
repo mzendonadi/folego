@@ -46,7 +46,7 @@ export interface BirdTransport {
   send(m: BirdSend): Promise<{ messageId: string }>;
 }
 
-export interface BirdConfig { apiKey: string; from: string; baseUrl: string }
+export interface BirdConfig { apiKey: string; from: string; baseUrl: string; classic?: boolean; workspaceId?: string; channelId?: string; inviteProjectId?: string; inviteVersion?: string }
 
 export class HttpBird implements BirdTransport {
   readonly name = 'bird';
@@ -59,16 +59,24 @@ export class HttpBird implements BirdTransport {
   async send(m: BirdSend): Promise<{ messageId: string }> {
     let res: Response;
     try {
-      res = await this.fetchFn(`${this.cfg.baseUrl}/v1/whatsapp/messages`, {
+      // Plataforma clássica (app.bird.com): modelo pelo projeto e versão publicada, destinatário em `receiver`, chave "AccessKey".
+      const classic = this.cfg.classic === true;
+      res = await this.fetchFn(classic ? `${this.cfg.baseUrl}/workspaces/${this.cfg.workspaceId}/channels/${this.cfg.channelId}/messages` : `${this.cfg.baseUrl}/v1/whatsapp/messages`, {
         method: 'POST',
-        headers: { authorization: `Bearer ${this.cfg.apiKey}`, 'content-type': 'application/json', 'idempotency-key': m.idempotencyKey },
-        body: JSON.stringify({
-          from: this.cfg.from,
-          to: m.to,
-          template: { slug: m.template, language: m.language, components: [{ type: 'body', parameters: Object.entries(m.params).map(([name, text]) => ({ type: 'text', name, text })) }] },
-          tags: [{ name: 'purpose', value: m.purpose }],
-          metadata: { ref: m.ref },
-        }),
+        headers: { authorization: classic ? `AccessKey ${this.cfg.apiKey}` : `Bearer ${this.cfg.apiKey}`, 'content-type': 'application/json', 'idempotency-key': m.idempotencyKey },
+        body: JSON.stringify(classic
+          ? {
+              receiver: { contacts: [{ identifierValue: m.to, identifierKey: 'phonenumber' }] },
+              template: { projectId: this.cfg.inviteProjectId, version: this.cfg.inviteVersion, locale: m.language, parameters: Object.entries(m.params).map(([key, value]) => ({ type: 'string', key, value })) },
+              reference: m.ref,
+            }
+          : {
+              from: this.cfg.from,
+              to: m.to,
+              template: { slug: m.template, language: m.language, components: [{ type: 'body', parameters: Object.entries(m.params).map(([name, text]) => ({ type: 'text', name, text })) }] },
+              tags: [{ name: 'purpose', value: m.purpose }],
+              metadata: { ref: m.ref },
+            }),
         signal: AbortSignal.timeout(10_000),
       });
     } catch {
@@ -107,7 +115,7 @@ export class FakeBird implements BirdTransport {
 export function birdOf(ctx: Ctx): BirdTransport | null {
   if (ctx.bird) return ctx.bird;
   const c = ctx.config.bird;
-  return c ? new HttpBird({ apiKey: c.apiKey, from: c.from, baseUrl: c.baseUrl }) : null;
+  return c ? new HttpBird({ apiKey: c.apiKey, from: c.from, baseUrl: c.baseUrl, classic: c.classic, workspaceId: c.workspaceId, channelId: c.channelId, inviteProjectId: c.inviteProjectId, inviteVersion: c.inviteVersion }) : null;
 }
 
 export const birdTemplate = (ctx: Ctx): { slug: string; language: string } => ({ slug: ctx.config.bird?.template ?? 'indicacao_prumo', language: ctx.config.bird?.language ?? 'pt-BR' });

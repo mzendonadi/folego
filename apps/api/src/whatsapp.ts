@@ -39,7 +39,7 @@ export function phoneKey(secret: string, partnerId: string, e164: string): strin
 // ---------------------------------------------------------------------------------------------------------------------
 /** `ref`: id interno da mensagem; a Bird o devolve nos avisos de status (metadata.ref) e é assim que achamos a mensagem. */
 export interface WaCredentials { phoneNumberId: string; token: string; provider?: 'meta' | 'bird'; appId?: string | null; ref?: string }
-export interface WaTemplateCall { name: string; language: string; params: string[]; paramNames?: string[] | null }
+export interface WaTemplateCall { name: string; language: string; params: string[]; paramNames?: string[] | null; birdProjectId?: string | null; birdVersion?: string | null }
 export interface MediaSend { kind: 'image' | 'audio' | 'document' | 'video'; mime: string; filename: string | null; caption: string; bytes: Buffer; publicUrl: string; voice: boolean }
 export interface BusinessProfile { about: string; description: string; email: string; websites: string[]; address: string; vertical: string; photoUrl: string | null }
 
@@ -466,10 +466,10 @@ async function sendOne(ctx: Ctx, acc: WaAccount, m: QueuedRow, opts: { log?: (e:
   try {
     let id: string;
     if (m.kind === 'template') {
-      const tpl = m.template_id ? await ctx.db.query<{ name: string; language: string; status: string; param_names: string[] | null }>(`SELECT name, language, status, param_names FROM app.wa_templates WHERE id = $1`, [m.template_id]) : { rows: [] };
+      const tpl = m.template_id ? await ctx.db.query<{ name: string; language: string; status: string; param_names: string[] | null; bird_project_id: string | null; bird_version: string | null }>(`SELECT name, language, status, param_names, bird_project_id, bird_version FROM app.wa_templates WHERE id = $1`, [m.template_id]) : { rows: [] };
       if (!tpl.rows[0] || tpl.rows[0].status !== 'aprovado') return fail('Modelo não aprovado.');
       const vars = m.vars_enc ? (JSON.parse(decryptText(ctx.config.secret, m.vars_enc)) as string[]) : [];
-      id = (await transport.sendTemplate(cred, to, { name: tpl.rows[0].name, language: tpl.rows[0].language, params: vars, paramNames: tpl.rows[0].param_names })).id;
+      id = (await transport.sendTemplate(cred, to, { name: tpl.rows[0].name, language: tpl.rows[0].language, params: vars, paramNames: tpl.rows[0].param_names, birdProjectId: tpl.rows[0].bird_project_id, birdVersion: tpl.rows[0].bird_version })).id;
     } else if (m.kind === 'text') {
       id = (await transport.sendText(cred, to, decryptText(ctx.config.secret, m.body_enc))).id;
     } else {

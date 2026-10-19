@@ -198,7 +198,7 @@ export function renderPreview(root, preview, { onBuy, onWipe, offer = null }) {
     priceNote ? el('p', { class: 'muted' }, priceNote) : null,
     el('p', { class: 'decision-lead' }, 'Você terá acesso completo:'),
     tickList([
-      'As cartas prontas, com cláusulas e direitos seus, para você só copiar, colar e enviar aos credores',
+      'As mensagens prontas, para você só copiar, colar e enviar aos credores',
       'Ordem completa de pagamento',
       'Orçamento do mês e linha do tempo',
       'Roteiros de negociação por credor para conseguir o máximo de descontos nas dívidas',

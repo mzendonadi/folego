@@ -59,7 +59,7 @@ export interface Config {
   /** Programa de indicações (convites por e-mail e desconto para assinantes). */
   referralEnabled: boolean;
   /** WhatsApp do Fôlego pela Bird (convite de indicação do Prumo). Sem a chave e o número, o convite por WhatsApp fica desligado e só o link de compartilhar funciona. */
-  bird: { apiKey: string; from: string; baseUrl: string; template: string; language: string; webhookSecret: string | null } | null;
+  bird: { apiKey: string; from: string; baseUrl: string; template: string; language: string; webhookSecret: string | null; classic: boolean; workspaceId: string; channelId: string; inviteProjectId: string; inviteVersion: string } | null;
   /** Agregador de Open Finance (Pluggy). Sem as duas chaves, as contas conectadas ficam desligadas. */
   openFinance: { clientId: string; clientSecret: string; baseUrl: string } | null;
   /** Endereço do widget de conexão do agregador (deve estar liberado na CSP). */
@@ -160,8 +160,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
           apiKey: env.BIRD_API_KEY,
           from: env.BIRD_WHATSAPP_FROM,
           // `||` e não `??`: o docker-compose entrega "" quando o segredo não existe, e vazio precisa cair no endereço padrão (senão o envio falha com "Failed to parse URL").
-          // A região vem da própria chave (bk_us1_… ou bk_eu1_…): o endereço é https://<região>.platform.bird.com; chave de uma região em outro endereço é recusada (401/421).
-          baseUrl: (env.BIRD_BASE_URL?.trim() || `https://${/^bk_([a-z]{2}\d)_/.exec(env.BIRD_API_KEY)?.[1] ?? 'us1'}.platform.bird.com`).replace(/\/+$/, ''),
+          // Chave "bk_<região>_…" = plataforma nova (https://<região>.platform.bird.com, Bearer). Qualquer outra chave é a da plataforma clássica
+          // (app.bird.com: https://api.bird.com, "AccessKey", envio pelo workspace e canal), onde estão o número +55 11 91379-2370 e os modelos aprovados.
+          classic: !env.BIRD_API_KEY.startsWith('bk_'),
+          baseUrl: (env.BIRD_BASE_URL?.trim() || (env.BIRD_API_KEY.startsWith('bk_') ? `https://${/^bk_([a-z]{2}\d)_/.exec(env.BIRD_API_KEY)?.[1] ?? 'us1'}.platform.bird.com` : 'https://api.bird.com')).replace(/\/+$/, ''),
+          workspaceId: env.BIRD_WORKSPACE_ID?.trim() || '55788597-4cb1-494a-b5fe-ee8fbc4e08a3',
+          channelId: env.BIRD_CHANNEL_ID?.trim() || 'd16725f8-3e65-4343-881a-d76a4031312f',
+          // Modelo "Fôlego Indicação Prumo" (convite de indicação do Prumo): projeto e versão publicada na Bird clássica.
+          inviteProjectId: env.BIRD_INVITE_PROJECT_ID?.trim() || '2ba1fa0a-3a45-4f82-9ba9-bae5fbe9dfc9',
+          inviteVersion: env.BIRD_INVITE_VERSION?.trim() || 'c6603fc4-b3ce-416d-9a7e-35c6ed659d86',
           // Modelo aprovado: "Fôlego Indicação Prumo". Aceita o nome como aparece na Bird ou o identificador (slug); nome vira slug: sem acento, minúsculo, hífen no lugar de espaço.
           template: (env.BIRD_TEMPLATE_INDICACAO || 'folego-indicacao-prumo').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase().replace(/\s+/g, '-'),
           language: env.BIRD_TEMPLATE_LANGUAGE?.trim() || 'pt-BR',

@@ -27,7 +27,7 @@ const config = {
   webhookSecret: 'segredo-de-teste',
   subscriptionsEnabled: true,
   adminEmails: ['dono@exemplo.com'],
-  bird: { apiKey: 'bk_test_0123456789012345', from: '+5511913792370', baseUrl: 'http://bird.invalid', template: 'folego-indicacao-prumo', language: 'pt-BR', webhookSecret: `whsec_${BIRD_SECRET_RAW.toString('base64')}` },
+  bird: { apiKey: 'bk_test_0123456789012345', from: '+5511913792370', baseUrl: 'http://bird.invalid', template: 'folego-indicacao-prumo', language: 'pt-BR', webhookSecret: `whsec_${BIRD_SECRET_RAW.toString('base64')}`, classic: false, workspaceId: 'ws-teste', channelId: 'canal-teste', inviteProjectId: 'proj-teste', inviteVersion: 'ver-teste' },
 };
 const ctx = () => ({ db, config, gateway, email: mailbox, bird: fakeBird });
 

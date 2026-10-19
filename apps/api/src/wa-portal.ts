@@ -134,17 +134,20 @@ export const templateSchema = z.strictObject({
   body: z.string().trim().min(5).max(1024),
   /** Só para modelos com variáveis nomeadas (Bird): o nome de cada {{n}}, na ordem. */
   paramNames: z.array(z.string().trim().regex(/^[a-z0-9_]{2,40}$/)).max(10).optional(),
+  /** Bird (plataforma clássica): o modelo é chamado pelo ID do projeto e da versão publicada. Vazio = limpar. */
+  birdProjectId: z.union([z.string().trim().uuid(), z.literal('')]).optional(),
+  birdVersion: z.union([z.string().trim().uuid(), z.literal('')]).optional(),
 });
 export const templatePatchSchema = z.strictObject({ status: z.enum(['rascunho', 'em_analise', 'aprovado', 'rejeitado']) });
 
 export async function listTemplates(ctx: Ctx, partnerId: string) {
-  const r = await ctx.db.query<{ id: string; name: string; language: string; category: string; body: string; status: string; created_at: Date; param_names: string[] | null }>(`SELECT id, name, language, category, body, status, created_at, param_names FROM app.wa_templates WHERE partner_id = $1 ORDER BY created_at DESC`, [partnerId]);
-  return { templates: r.rows.map((t) => ({ id: t.id, name: t.name, language: t.language, category: t.category, body: t.body, status: t.status, slots: templateSlots(t.body), paramNames: t.param_names, createdAt: iso(t.created_at) })) };
+  const r = await ctx.db.query<{ id: string; name: string; language: string; category: string; body: string; status: string; created_at: Date; param_names: string[] | null; bird_project_id: string | null; bird_version: string | null }>(`SELECT id, name, language, category, body, status, created_at, param_names, bird_project_id, bird_version FROM app.wa_templates WHERE partner_id = $1 ORDER BY created_at DESC`, [partnerId]);
+  return { templates: r.rows.map((t) => ({ id: t.id, name: t.name, language: t.language, category: t.category, body: t.body, status: t.status, slots: templateSlots(t.body), paramNames: t.param_names, birdProjectId: t.bird_project_id, birdVersion: t.bird_version, createdAt: iso(t.created_at) })) };
 }
 
 export async function createTemplate(ctx: Ctx, partnerId: string, input: z.infer<typeof templateSchema>) {
   try {
-    const r = await ctx.db.query<{ id: string }>(`INSERT INTO app.wa_templates(partner_id, name, language, category, body, param_names) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`, [partnerId, input.name, input.language, input.category, input.body, input.paramNames ?? null]);
+    const r = await ctx.db.query<{ id: string }>(`INSERT INTO app.wa_templates(partner_id, name, language, category, body, param_names, bird_project_id, bird_version) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`, [partnerId, input.name, input.language, input.category, input.body, input.paramNames ?? null, input.birdProjectId || null, input.birdVersion || null]);
     return { id: r.rows[0]!.id };
   } catch (e) {
     if (e instanceof Error && /duplicate key/i.test(e.message)) throw new AppError(409, 'duplicate', 'Já existe um modelo com este nome.');
@@ -160,8 +163,11 @@ export async function updateTemplate(ctx: Ctx, partnerId: string, id: string, in
   try {
     const r = await ctx.db.query(
       `UPDATE app.wa_templates SET name = coalesce($3, name), language = coalesce($4, language), category = coalesce($5, category), body = coalesce($6, body),
-              param_names = CASE WHEN $7::boolean THEN $8::text[] ELSE param_names END WHERE id = $1 AND partner_id = $2`,
-      [id, partnerId, input.name ?? null, input.language ?? null, input.category ?? null, input.body ?? null, input.paramNames !== undefined, names],
+              param_names = CASE WHEN $7::boolean THEN $8::text[] ELSE param_names END,
+              bird_project_id = CASE WHEN $9::boolean THEN nullif($10, '') ELSE bird_project_id END, bird_version = CASE WHEN $11::boolean THEN nullif($12, '') ELSE bird_version END
+        WHERE id = $1 AND partner_id = $2`,
+      [id, partnerId, input.name ?? null, input.language ?? null, input.category ?? null, input.body ?? null, input.paramNames !== undefined, names,
+        input.birdProjectId !== undefined, input.birdProjectId ?? '', input.birdVersion !== undefined, input.birdVersion ?? ''],
     );
     if (!r.rowCount) throw notFound();
   } catch (e) {

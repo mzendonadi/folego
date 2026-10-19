@@ -27,14 +27,29 @@ export class BirdWaTransport implements WaTransport {
     return this.cfg;
   }
 
+  /** Plataforma clássica (app.bird.com): POST /workspaces/{ws}/channels/{canal}/messages, "Authorization: AccessKey". Destinatário em `receiver.contacts`. */
+  private async postClassic(payload: Record<string, unknown>, to: string, ref?: string): Promise<{ id: string }> {
+    const c = this.conf();
+    return this.send(
+      `${c.baseUrl}/workspaces/${c.workspaceId}/channels/${c.channelId}/messages`,
+      `AccessKey ${c.apiKey}`,
+      { receiver: { contacts: [{ identifierValue: `+${to}`, identifierKey: 'phonenumber' }] }, ...payload, ...(ref ? { reference: ref } : {}) },
+    );
+  }
+
   private async post(body: Record<string, unknown>, ref?: string): Promise<{ id: string }> {
     const c = this.conf();
     if (ref) body = { ...body, metadata: { ref } };
+    return this.send(`${c.baseUrl}/v1/whatsapp/messages`, `Bearer ${c.apiKey}`, body);
+  }
+
+  private async send(url: string, authorization: string, body: Record<string, unknown>): Promise<{ id: string }> {
+    const c = this.conf();
     let res: Response;
     try {
-      res = await this.fetchFn(`${c.baseUrl}/v1/whatsapp/messages`, {
+      res = await this.fetchFn(url, {
         method: 'POST',
-        headers: { authorization: `Bearer ${c.apiKey}`, 'content-type': 'application/json' },
+        headers: { authorization, 'content-type': 'application/json' },
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(20_000),
       });
@@ -50,17 +65,28 @@ export class BirdWaTransport implements WaTransport {
     let detail = raw.slice(0, 200);
     if (res.status === 401 || res.status === 403 || res.status === 421) {
       const msg = /"message"\s*:\s*"([^"]+)"/.exec(raw)?.[1] ?? raw.slice(0, 80);
-      detail = `${msg} (endereço ${new URL(c.baseUrl).host}, chave ${c.apiKey.slice(0, 7)}…)`;
+      detail = `${msg} (endereço ${new URL(c.baseUrl).host}, chave ${c.apiKey.startsWith('bk_') ? c.apiKey.slice(0, 7) : c.apiKey.slice(0, 2)}…)`;
     }
     throw new WaError(`Bird ${res.status}${detail ? `: ${detail}` : ''}`, res.status, null);
   }
 
   async sendText(cred: WaCredentials, to: string, text: string): Promise<{ id: string }> {
+    if (this.conf().classic) return this.postClassic({ body: { type: 'text', text: { text } } }, to, cred.ref);
     return this.post({ from: cred.phoneNumberId, to: `+${to}`, text: { body: text } }, cred.ref);
   }
 
   async sendTemplate(cred: WaCredentials, to: string, tpl: WaTemplateCall): Promise<{ id: string }> {
     const names = tpl.paramNames?.some(Boolean) ? tpl.paramNames : null;
+    if (this.conf().classic) {
+      // Modelo aprovado na Bird clássica: chamado pelo projeto e pela versão publicada; as variáveis vão pelo nome (ou pela posição, se não tiver nome).
+      if (!tpl.birdProjectId || !tpl.birdVersion) throw new WaError('Este modelo ainda não tem o ID do projeto e da versão da Bird. Preencha em WhatsApp > Modelos > Editar.', 422, null);
+      return this.postClassic({
+        template: {
+          projectId: tpl.birdProjectId, version: tpl.birdVersion, locale: tpl.language.replace('_', '-'),
+          parameters: tpl.params.map((value, i) => ({ type: 'string', key: names?.[i] || String(i + 1), value })),
+        },
+      }, to, cred.ref);
+    }
     const build = (slug: string, named: boolean) => {
       const parameters = tpl.params.map((text, i) => (named && names?.[i] ? { type: 'text', name: names[i], text } : { type: 'text', text }));
       return {
@@ -87,6 +113,12 @@ export class BirdWaTransport implements WaTransport {
   }
 
   async sendMedia(cred: WaCredentials, to: string, m: MediaSend): Promise<{ id: string }> {
+    if (this.conf().classic) {
+      const body = m.kind === 'image'
+        ? { type: 'image', image: { images: [{ mediaUrl: m.publicUrl, altText: m.caption || m.filename || 'imagem' }], text: m.caption || undefined } }
+        : { type: 'file', file: { files: [{ mediaUrl: m.publicUrl, contentType: m.mime, ...(m.filename ? { filename: m.filename } : {}) }], text: m.caption || undefined } };
+      return this.postClassic({ body }, to, cred.ref);
+    }
     const content: Obj = { url: m.publicUrl };
     if (m.kind === 'audio') {
       if (m.voice) content.voice = true;
