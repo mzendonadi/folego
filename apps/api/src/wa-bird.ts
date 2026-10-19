@@ -45,7 +45,13 @@ export class BirdWaTransport implements WaTransport {
       const j = (await res.json().catch(() => ({}))) as { id?: string; message_id?: string };
       return { id: String(j.id ?? j.message_id ?? '') };
     }
-    const detail = (await res.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 200);
+    const raw = (await res.text().catch(() => '')).replace(/\s+/g, ' ');
+    // Erro de autenticação: mostra o endereço usado e o início da chave (nunca a chave inteira) para achar região/chave trocada.
+    let detail = raw.slice(0, 200);
+    if (res.status === 401 || res.status === 403 || res.status === 421) {
+      const msg = /"message"\s*:\s*"([^"]+)"/.exec(raw)?.[1] ?? raw.slice(0, 80);
+      detail = `${msg} (endereço ${new URL(c.baseUrl).host}, chave ${c.apiKey.slice(0, 7)}…)`;
+    }
     throw new WaError(`Bird ${res.status}${detail ? `: ${detail}` : ''}`, res.status, null);
   }
 
