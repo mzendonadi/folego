@@ -160,7 +160,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
           apiKey: env.BIRD_API_KEY,
           from: env.BIRD_WHATSAPP_FROM,
           // `||` e não `??`: o docker-compose entrega "" quando o segredo não existe, e vazio precisa cair no endereço padrão (senão o envio falha com "Failed to parse URL").
-          baseUrl: (env.BIRD_BASE_URL?.trim() || (env.BIRD_API_KEY.startsWith('bk_eu1_') ? 'https://eu1.platform.bird.com' : 'https://platform.bird.com')).replace(/\/+$/, ''),
+          // A região vem da própria chave (bk_us1_… ou bk_eu1_…): o endereço é https://<região>.platform.bird.com; chave de uma região em outro endereço é recusada (401/421).
+          baseUrl: (env.BIRD_BASE_URL?.trim() || `https://${/^bk_([a-z]{2}\d)_/.exec(env.BIRD_API_KEY)?.[1] ?? 'us1'}.platform.bird.com`).replace(/\/+$/, ''),
           // Modelo aprovado: "Fôlego Indicação Prumo". Aceita o nome como aparece na Bird ou o identificador (slug); nome vira slug: sem acento, minúsculo, hífen no lugar de espaço.
           template: (env.BIRD_TEMPLATE_INDICACAO || 'folego-indicacao-prumo').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase().replace(/\s+/g, '-'),
           language: env.BIRD_TEMPLATE_LANGUAGE?.trim() || 'pt-BR',
