@@ -30,7 +30,7 @@ import * as accountData from './account-data.ts';
 import * as referrals from './referrals.ts';
 import { handleBirdEvent, verifyBirdSignature } from './bird.ts';
 import { loadMedia, mediaHeaders, validMediaSig } from './wa-media.ts';
-import { referralWhatsappSchema, FBP_RE, FBC_RE } from './schemas.ts';
+import { referralWhatsappSchema } from './schemas.ts';
 import * as insights from './insights.ts';
 import { verifyTurnstile, turnstileEnabled } from './turnstile.ts';
 import * as chatbot from './chatbot.ts';
@@ -106,11 +106,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const ADS_COOKIE = 'folego_ads';
   // Em produção o nginx entrega o HTML direto do disco (a API não vê o GET /), então quem avisa a cada visita é o navegador: POST /api/pageview.
   app.post('/api/pageview', { config: { rateLimit: { max: 60 * scale, timeWindow: '1 minute' } } }, async (req, reply) => {
-    const { path, eventId, fbp, fbc } = z.strictObject({ path: z.string().max(200).regex(/^\/[^\s]*$/).default('/'), eventId: z.string().uuid().optional(), fbp: FBP_RE.optional(), fbc: FBC_RE.optional() }).parse(req.body ?? {});
+    const { path } = z.strictObject({ path: z.string().max(200).regex(/^\/[^\s]*$/).default('/') }).parse(req.body ?? {});
     const ck = req.headers.cookie ?? '';
     if (config.metaPageView && config.metaCapiToken && new RegExp(`(?:^|;\\s*)${ADS_COOKIE}=1(?:;|$)`).test(ck)) {
       const ua = req.headers['user-agent'];
-      void sendCapi(ctx, { name: 'PageView', eventId: eventId ?? randomUUID(), ip: clientIp(req), userAgent: typeof ua === 'string' ? ua : undefined, url: `${config.publicUrl}${path}`, fbc: fbc ?? /_fbc=([^;]+)/.exec(ck)?.[1], fbp: fbp ?? /_fbp=([^;]+)/.exec(ck)?.[1] });
+      void sendCapi(ctx, { name: 'PageView', eventId: randomUUID(), ip: clientIp(req), userAgent: typeof ua === 'string' ? ua : undefined, url: `${config.publicUrl}${path}`, fbc: /_fbc=([^;]+)/.exec(ck)?.[1], fbp: /_fbp=([^;]+)/.exec(ck)?.[1] });
     }
     return reply.status(204).send();
   });
@@ -315,13 +315,13 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   // Aviso de cookies: guarda a escolha sobre compartilhar dados de navegação com a Meta (publicidade). Aceitar liga o PageView; recusar apaga o cookie.
   app.post('/api/consent', { config: { rateLimit: { max: 20 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => {
-    const { ads, eventId, fbp, fbc } = z.strictObject({ ads: z.boolean(), eventId: z.string().uuid().optional(), fbp: FBP_RE.optional(), fbc: FBC_RE.optional() }).parse(req.body);
+    const { ads } = z.strictObject({ ads: z.boolean() }).parse(req.body);
     if (ads) {
       reply.setCookie(ADS_COOKIE, '1', { httpOnly: true, sameSite: 'lax', secure: config.cookieSecure, path: '/', maxAge: 180 * 24 * 3600 });
       if (config.metaPageView && config.metaCapiToken) {
         const ck = req.headers.cookie ?? '';
         const ua = req.headers['user-agent'];
-        void sendCapi(ctx, { name: 'PageView', eventId: eventId ?? randomUUID(), ip: clientIp(req), userAgent: typeof ua === 'string' ? ua : undefined, url: `${config.publicUrl}/`, fbc: fbc ?? /_fbc=([^;]+)/.exec(ck)?.[1], fbp: fbp ?? /_fbp=([^;]+)/.exec(ck)?.[1] });
+        void sendCapi(ctx, { name: 'PageView', eventId: randomUUID(), ip: clientIp(req), userAgent: typeof ua === 'string' ? ua : undefined, url: `${config.publicUrl}/`, fbc: /_fbc=([^;]+)/.exec(ck)?.[1], fbp: /_fbp=([^;]+)/.exec(ck)?.[1] });
       }
     } else reply.clearCookie(ADS_COOKIE, { path: '/' });
     return { ok: true, ads };

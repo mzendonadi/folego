@@ -17,7 +17,7 @@ test('Bird: chave que não começa com bk_ é da plataforma clássica (api.bird.
   assert.equal(c.bird?.classic, true);
   assert.equal(c.bird?.baseUrl, 'https://api.bird.com');
   assert.equal(c.bird?.workspaceId, '55788597-4cb1-494a-b5fe-ee8fbc4e08a3');
-  assert.equal(c.bird?.channelId, 'd16725f8-3e65-4343-881a-d76a4031312f');
+  assert.equal(c.bird?.channelId, '83640587-85a2-54c5-b047-7bfab72d26ad');
   assert.equal(loadConfig(base).bird?.classic, false, 'chave bk_ segue na plataforma nova');
 });
 

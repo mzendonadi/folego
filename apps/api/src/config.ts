@@ -165,7 +165,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
           classic: !env.BIRD_API_KEY.startsWith('bk_'),
           baseUrl: (env.BIRD_BASE_URL?.trim() || (env.BIRD_API_KEY.startsWith('bk_') ? `https://${/^bk_([a-z]{2}\d)_/.exec(env.BIRD_API_KEY)?.[1] ?? 'us1'}.platform.bird.com` : 'https://api.bird.com')).replace(/\/+$/, ''),
           workspaceId: env.BIRD_WORKSPACE_ID?.trim() || '55788597-4cb1-494a-b5fe-ee8fbc4e08a3',
-          channelId: env.BIRD_CHANNEL_ID?.trim() || 'd16725f8-3e65-4343-881a-d76a4031312f',
+          channelId: env.BIRD_CHANNEL_ID?.trim() || '83640587-85a2-54c5-b047-7bfab72d26ad', // canal WhatsApp "Fôlego Financeiro" (o id da barra de endereço da Bird é o do conector, não o do canal)
           // Modelo "Fôlego Indicação Prumo" (convite de indicação do Prumo): projeto e versão publicada na Bird clássica.
           inviteProjectId: env.BIRD_INVITE_PROJECT_ID?.trim() || '2ba1fa0a-3a45-4f82-9ba9-bae5fbe9dfc9',
           inviteVersion: env.BIRD_INVITE_VERSION?.trim() || 'c6603fc4-b3ce-416d-9a7e-35c6ed659d86',
