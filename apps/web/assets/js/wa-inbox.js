@@ -383,7 +383,7 @@ export function waInbox({ host, start = {}, features = {} }) {
     if (d.canTemplate && lastTpl && st.fullTpl !== d.id) {
       const lock = el('div', { class: 'wi-composer is-locked' },
         el('button', { class: 'wi-round', type: 'button', disabled: true, 'aria-label': 'Anexar (libera quando a pessoa responder)' }, ico('clip', 22)),
-        el('textarea', { class: 'wi-input', rows: '1', disabled: true, placeholder: 'Escreva uma mensagem (libera quando a pessoa responder)', 'aria-label': 'Mensagem (bloqueada até a pessoa responder)' }),
+        el('textarea', { class: 'wi-input', rows: '1', disabled: true, placeholder: 'Libera quando a pessoa responder', 'aria-label': 'Mensagem (bloqueada até a pessoa responder)' }),
         el('button', { class: 'wi-round primary', type: 'button', disabled: true, 'aria-label': 'Gravar áudio (libera quando a pessoa responder)' }, ico('mic', 20)));
       const again = el('button', { class: 'btn btn-quiet btn-sm', type: 'button' }, 'Enviar outro modelo');
       again.addEventListener('click', () => { st.fullTpl = d.id; paintFoot(d); });
