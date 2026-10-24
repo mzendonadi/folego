@@ -143,7 +143,9 @@ export class BirdWaTransport implements WaTransport {
   async downloadMedia(_cred: WaCredentials, ref: { id?: string; url?: string }): Promise<{ bytes: Buffer; mime: string }> {
     const c = this.conf();
     if (!ref.url || !ref.url.startsWith('https://')) throw new WaError('Mídia sem endereço.', 422, null);
-    const first = await this.fetchFn(ref.url, { headers: { authorization: `Bearer ${c.apiKey}` }, redirect: 'manual', signal: AbortSignal.timeout(20_000) });
+    // A chave só vai para endereços da própria Bird; arquivo hospedado em outro lugar é baixado sem ela.
+    const trusted = /(^|\.)(bird\.com|messagebird\.com)$/.test(new URL(ref.url).hostname);
+    const first = await this.fetchFn(ref.url, { headers: trusted ? { authorization: c.classic ? `AccessKey ${c.apiKey}` : `Bearer ${c.apiKey}` } : {}, redirect: 'manual', signal: AbortSignal.timeout(20_000) });
     let res = first;
     if (first.status >= 300 && first.status < 400) {
       const loc = first.headers.get('location');
@@ -212,7 +214,9 @@ export async function ingestBirdInbound(ctx: Ctx, data: Obj, opts: { log?: (e: R
         fetch: () => {
           const t = transport();
           if (!t.downloadMedia) throw new WaError('Este número não baixa arquivos.', 422, null);
-          return t.downloadMedia({ phoneNumberId: acc.phoneNumberId, token: '', provider: 'bird' }, { ...(id ? { id } : {}), ...(url ? { url } : {}) });
+          const declared = str(x.mime_type);
+          return t.downloadMedia({ phoneNumberId: acc.phoneNumberId, token: '', provider: 'bird' }, { ...(id ? { id } : {}), ...(url ? { url } : {}) })
+            .then((f) => (declared && /octet-stream/.test(f.mime) ? { ...f, mime: declared } : f)); // a Bird às vezes serve o arquivo sem tipo
         },
       },
     }, opts);

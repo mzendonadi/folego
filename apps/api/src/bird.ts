@@ -240,6 +240,22 @@ export function verifyBirdToken(secret: string, token: unknown): boolean {
   return timingSafeEqual(a, b);
 }
 
+/** Arquivo de uma mensagem da Bird clássica: body.image.images[] ou body.file.files[] (aceita também mediaUrl solto, por segurança). */
+function classicMedia(msg: Obj): { url: string; contentType: string | null; filename: string | null; text: string | null } | null {
+  for (const key of ['image', 'file', 'audio', 'video']) {
+    const holder = obj(msg[key]);
+    const list = [...(Array.isArray(holder.images) ? holder.images : []), ...(Array.isArray(holder.files) ? holder.files : [])];
+    for (const raw of list) {
+      const it = obj(raw);
+      const url = str(it.mediaUrl) ?? str(it.url);
+      if (url && url.startsWith('https://')) return { url, contentType: str(it.contentType) ?? str(it.mimeType), filename: str(it.filename) ?? str(it.altText), text: str(holder.text) };
+    }
+    const direct = str(holder.mediaUrl) ?? str(holder.url);
+    if (direct && direct.startsWith('https://')) return { url: direct, contentType: str(holder.contentType), filename: str(holder.filename), text: str(holder.text) };
+  }
+  return null;
+}
+
 const CLASSIC_STATUS: Record<string, string> = { accepted: 'whatsapp.accepted', sent: 'whatsapp.sent', delivered: 'whatsapp.delivered', read: 'whatsapp.read', sending_failed: 'whatsapp.failed', delivery_failed: 'whatsapp.failed' };
 
 /**
@@ -255,8 +271,17 @@ export function classicToEvent(body: unknown): unknown {
     const contact = obj(obj(p.sender).contact);
     const msg = obj(p.body);
     const kind = str(msg.type) ?? 'text';
+    const from = { phone_number: str(contact.identifierValue) };
+    if (kind !== 'text') {
+      const f = classicMedia(msg);
+      if (f) {
+        const mime = f.contentType ?? (kind === 'image' ? 'image/jpeg' : 'application/octet-stream');
+        const k = mime.startsWith('image/') ? 'image' : mime.startsWith('audio/') ? 'audio' : mime.startsWith('video/') ? 'video' : 'document';
+        return { type: 'whatsapp.received', data: { id: str(p.id), from, [k]: { url: f.url, mime_type: mime, filename: f.filename, caption: f.text, voice: k === 'audio' && /ogg|opus/.test(mime) } } };
+      }
+    }
     const text = kind === 'text' ? (str(obj(msg.text).text) ?? '') : `[${kind === 'image' ? 'imagem' : kind === 'file' ? 'arquivo' : kind} recebido(a): veja na Bird]`;
-    return { type: 'whatsapp.received', data: { id: str(p.id), from: { phone_number: str(contact.identifierValue) }, text: { body: text } } };
+    return { type: 'whatsapp.received', data: { id: str(p.id), from, text: { body: text } } };
   }
   if (event === 'whatsapp.outbound') {
     const type = CLASSIC_STATUS[str(p.status) ?? ''];
@@ -369,6 +394,9 @@ export async function backfillBirdInbound(ctx: Ctx, days = 14, opts: { log?: (e:
 
   // Do mais antigo ao mais novo, para as conversas nascerem na ordem certa.
   incoming.sort((a, b) => String(a.createdAt ?? '').localeCompare(String(b.createdAt ?? '')));
+  // Arquivo que chegou antes só como aviso "[arquivo recebido: veja na Bird]": apaga o aviso para a mensagem entrar de novo, agora com o arquivo.
+  const withFile = incoming.filter((m) => obj(m.body).type !== 'text' && classicMedia(obj(m.body)) !== null).map((m) => str(m.id)).filter((x): x is string => x !== null);
+  if (withFile.length) await ctx.db.query(`DELETE FROM app.wa_messages WHERE partner_id = $1 AND direction = 'in' AND kind = 'text' AND wa_id = ANY($2::text[])`, [HOUSE_PARTNER_ID, withFile]);
   const waIds: string[] = [];
   for (const m of incoming) {
     const ev = classicToEvent({ event: 'whatsapp.inbound', payload: m }) as { type: string; data: Obj };

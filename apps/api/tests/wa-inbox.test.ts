@@ -407,6 +407,28 @@ test('status das enviadas: a conferência na Bird marca "lida" e não rebaixa um
   }
 });
 
+test('Bird clássica: foto, PDF e voz que o cliente envia viram arquivo na conversa (não mais aviso de texto)', async () => {
+  const ev = (body: unknown) => classicToEvent({ event: 'whatsapp.inbound', payload: { id: 'mid', sender: { contact: { identifierValue: '+5511977770011' } }, body } }) as { data: Record<string, unknown> };
+  const img = ev({ type: 'image', image: { images: [{ mediaUrl: 'https://media.bird.com/a.jpg', altText: 'foto' }], text: 'meu RG' } });
+  assert.deepEqual(img.data.image, { url: 'https://media.bird.com/a.jpg', mime_type: 'image/jpeg', filename: 'foto', caption: 'meu RG', voice: false });
+  const pdf = ev({ type: 'file', file: { files: [{ mediaUrl: 'https://media.bird.com/b.pdf', contentType: 'application/pdf', filename: 'extrato.pdf' }] } });
+  assert.equal((pdf.data.document as { mime_type: string }).mime_type, 'application/pdf');
+  const voz = ev({ type: 'file', file: { files: [{ mediaUrl: 'https://media.bird.com/c.ogg', contentType: 'audio/ogg' }] } });
+  assert.equal((voz.data.audio as { voice: boolean }).voice, true);
+  assert.deepEqual(ev({ type: 'file', file: { files: [{ mediaUrl: 'http://inseguro/x.pdf' }] } }).data.text, { body: '[arquivo recebido(a): veja na Bird]' }, 'endereço sem https não é baixado');
+
+  const { BirdWaTransport } = await import('../src/wa-bird.ts');
+  const calls: Array<{ url: string; auth: string | null }> = [];
+  const t = new BirdWaTransport({ ...config.bird!, classic: true, baseUrl: 'http://bird.invalid' }, (async (url: string, init?: RequestInit) => {
+    calls.push({ url: String(url), auth: new Headers(init?.headers).get('authorization') });
+    return new Response(Buffer.from('JPEGDATA'), { status: 200, headers: { 'content-type': 'image/jpeg' } });
+  }) as unknown as typeof fetch);
+  await t.downloadMedia({ phoneNumberId: 'x', token: '', provider: 'bird' }, { url: 'https://media.bird.com/a.jpg' });
+  await t.downloadMedia({ phoneNumberId: 'x', token: '', provider: 'bird' }, { url: 'https://outro-site.example/a.jpg' });
+  assert.match(calls[0]!.auth ?? '', /^AccessKey /, 'na Bird clássica a chave segue como AccessKey');
+  assert.equal(calls[1]!.auth, null, 'a chave não vai para endereço que não é da Bird');
+});
+
 test('quem respondeu, leu: só as mensagens nossas anteriores à resposta viram "lida"', async () => {
   const { ensureThread, markReadByReply } = await import('../src/whatsapp.ts');
   const ctx = { db, config } as unknown as import('../src/services.ts').Ctx;
