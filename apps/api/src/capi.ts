@@ -1,4 +1,4 @@
-// Meta Conversions API (servidor para servidor). Sem pixel no navegador (D-022).
+// Meta Conversions API (servidor para servidor), junto com o pixel no navegador após o aceite (D-120).
 // Os dados da pessoa (e-mail/celular em hash SHA-256, IP e navegador) seguem para a Meta, conforme informado nos termos.
 // O PageView anônimo fica desligado até META_CAPI_PAGEVIEW=1.
 // Falhas nunca derrubam o pedido: tudo aqui é "dispare e esqueça" e só registra no log do servidor.
@@ -44,6 +44,7 @@ export function buildPayload(input: CapiInput, testCode: string | null): Record<
   if (input.externalId) user.external_id = [sha(input.externalId)];
   if (input.ip) user.client_ip_address = input.ip;
   if (input.userAgent) user.client_user_agent = input.userAgent;
+  user.country = [sha('br')]; // o serviço é só para o Brasil: sinal extra de correspondência
   if (input.fbc) user.fbc = input.fbc;
   if (input.fbp) user.fbp = input.fbp;
   const custom: Record<string, unknown> = {};
@@ -90,10 +91,10 @@ const dec = (ctx: Ctx, b: Buffer | null): string | null => (b ? decryptText(ctx.
 /** Pix: a pessoa informou e-mail e celular e gerou o código. Dispara Lead e InitiateCheckout (só com o aceite de publicidade). */
 export async function pixIntent(ctx: Ctx, a: { caseId: string; orderId: string; totalCents: number; ip?: string | undefined; userAgent?: string | undefined }): Promise<void> {
   if (!ctx.config.metaCapiToken) return;
-  const r = await ctx.db.query<{ e: Buffer | null; p: Buffer | null; ads: boolean; fbc: string | null }>(`SELECT contact_email_enc AS e, contact_phone_enc AS p, ads_consent AS ads, contact_fbc AS fbc FROM app.cases WHERE id = $1`, [a.caseId]);
+  const r = await ctx.db.query<{ e: Buffer | null; p: Buffer | null; ads: boolean; fbc: string | null; fbp: string | null }>(`SELECT contact_email_enc AS e, contact_phone_enc AS p, ads_consent AS ads, contact_fbc AS fbc, contact_fbp AS fbp FROM app.cases WHERE id = $1`, [a.caseId]);
   const row = r.rows[0];
   if (!row) return;
-  const base = { email: dec(ctx, row.e), phone: dec(ctx, row.p), externalId: a.caseId, ip: a.ip, userAgent: a.userAgent, fbc: row.fbc ?? undefined, url: `${ctx.config.publicUrl}/pagamento` };
+  const base = { email: dec(ctx, row.e), phone: dec(ctx, row.p), externalId: a.caseId, ip: a.ip, userAgent: a.userAgent, fbc: row.fbc ?? undefined, fbp: row.fbp ?? undefined, url: `${ctx.config.publicUrl}/pagamento` };
   await sendCapi(ctx, { ...base, name: 'Lead', eventId: `lead-${a.caseId}` });
   await sendCapi(ctx, { ...base, name: 'InitiateCheckout', eventId: `ic-${a.orderId}`, valueCents: a.totalCents, orderId: a.orderId });
 }
@@ -101,10 +102,10 @@ export async function pixIntent(ctx: Ctx, a: { caseId: string; orderId: string; 
 /** Pagamento confirmado (Pix ou cartão): Purchase com o valor e os dados em hash, se houve aceite de publicidade. */
 export async function purchase(ctx: Ctx, providerPaymentId: string): Promise<void> {
   if (!ctx.config.metaCapiToken) return;
-  const r = await ctx.db.query<{ id: string; order_id: string; amount: string; provider: string; ce: Buffer | null; cp: Buffer | null; cads: boolean | null; case_id: string | null; sid: string | null; semail: string | null; sp: Buffer | null; sads: boolean | null; cip: string | null; cua: string | null; cfbc: string | null; sip: string | null; sua: string | null; sfbc: string | null }>(
+  const r = await ctx.db.query<{ id: string; order_id: string; amount: string; provider: string; ce: Buffer | null; cp: Buffer | null; cads: boolean | null; case_id: string | null; sid: string | null; semail: string | null; sp: Buffer | null; sads: boolean | null; cip: string | null; cua: string | null; cfbc: string | null; cfbp: string | null; sip: string | null; sua: string | null; sfbc: string | null; sfbp: string | null }>(
     `SELECT p.id, p.order_id, p.amount_cents AS amount, p.provider, c.contact_email_enc AS ce, c.contact_phone_enc AS cp, c.ads_consent AS cads, o.case_id, o.subscriber_id AS sid,
             s.email::text AS semail, s.phone_enc AS sp, s.ads_consent AS sads,
-            c.contact_ip AS cip, c.contact_ua AS cua, c.contact_fbc AS cfbc, s.contact_ip AS sip, s.contact_ua AS sua, s.contact_fbc AS sfbc
+            c.contact_ip AS cip, c.contact_ua AS cua, c.contact_fbc AS cfbc, c.contact_fbp AS cfbp, s.contact_ip AS sip, s.contact_ua AS sua, s.contact_fbc AS sfbc, s.contact_fbp AS sfbp
        FROM app.payments p JOIN app.orders o ON o.id = p.order_id
        LEFT JOIN app.cases c ON c.id = o.case_id LEFT JOIN app.subscribers s ON s.id = o.subscriber_id
       WHERE p.provider_payment_id = $1 LIMIT 1`,
@@ -123,6 +124,7 @@ export async function purchase(ctx: Ctx, providerPaymentId: string): Promise<voi
     ip: (isSub ? row.sip : row.cip) ?? undefined,
     userAgent: (isSub ? row.sua : row.cua) ?? undefined,
     fbc: (isSub ? row.sfbc : row.cfbc) ?? undefined,
+    fbp: (isSub ? row.sfbp : row.cfbp) ?? undefined,
     valueCents: Number(row.amount),
     orderId: row.order_id,
     contentName: isSub ? 'Prumo' : 'Mapa da Virada',

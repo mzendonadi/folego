@@ -42,17 +42,19 @@ export async function createCase(input) {
   return request('POST', '/cases', { body: { profile: input.profile, debts, acceptTerms: true }, headers: await guard() });
 }
 
+import { getFbp, getFbc } from './meta-pixel.js';
+
 /** fbc do clique no anúncio (se houve), para a Meta atribuir a conversão. */
 const storedFbc = () => {
   try {
-    return localStorage.getItem('folego_fbc') || undefined;
+    return localStorage.getItem('folego_fbc') || getFbc();
   } catch {
-    return undefined;
+    return getFbc();
   }
 };
 
 export async function createOrder({ caseId, products, contact }) {
-  return request('POST', '/orders', { body: { caseId, products, ...(contact ? { contact: { ...contact, ...(storedFbc() ? { fbc: storedFbc() } : {}) } } : {}) }, headers: { 'idempotency-key': crypto.randomUUID() } });
+  return request('POST', '/orders', { body: { caseId, products, ...(contact ? { contact: { ...contact, ...(storedFbc() ? { fbc: storedFbc() } : {}), ...(getFbp() ? { fbp: getFbp() } : {}) } } : {}) }, headers: { 'idempotency-key': crypto.randomUUID() } });
 }
 
 /** Já pagou neste navegador? O cookie de sessão diz; assim o Mapa reabre sem cadastro. */

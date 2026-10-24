@@ -185,13 +185,13 @@ export const OFFERABLE = ['recovery_map', 'defense_letters', 'calendar_30d', 'ex
 /** Preço fechado do Kit Completo (Mapa + Cartas + Calendário comprados juntos). O desconto é calculado aqui, nunca no navegador. */
 export const BUNDLE_PRICE_CENTS = 5990;
 
-export async function createOrder(ctx: Ctx, args: { sessionId: string; caseId: string; products: string[]; idempotencyKey: string; contact?: { email: string; phone: string; adsConsent: boolean; fbc?: string | undefined } | undefined; ip?: string | undefined; userAgent?: string | undefined }): Promise<OrderView> {
+export async function createOrder(ctx: Ctx, args: { sessionId: string; caseId: string; products: string[]; idempotencyKey: string; contact?: { email: string; phone: string; adsConsent: boolean; fbc?: string | undefined; fbp?: string | undefined } | undefined; ip?: string | undefined; userAgent?: string | undefined }): Promise<OrderView> {
   await ownedCase(ctx.db, args.sessionId, args.caseId);
   // Contato rápido (e-mail e celular) antes de gerar o Pix: criptografado, no caso, e some junto com ele (7 dias sem pagar, 30 depois de pago).
   if (args.contact) {
     await ctx.db.query(
-      `UPDATE app.cases SET contact_email_enc = $2, contact_phone_enc = $3, ads_consent = $4, contact_at = now(), contact_ip = $5, contact_ua = $6, contact_fbc = coalesce($7, contact_fbc) WHERE id = $1`,
-      [args.caseId, encryptText(ctx.config.secret, args.contact.email), encryptText(ctx.config.secret, args.contact.phone), args.contact.adsConsent, args.ip ?? null, (args.userAgent ?? '').slice(0, 400) || null, args.contact.fbc ?? null],
+      `UPDATE app.cases SET contact_email_enc = $2, contact_phone_enc = $3, ads_consent = $4, contact_at = now(), contact_ip = $5, contact_ua = $6, contact_fbc = coalesce($7, contact_fbc), contact_fbp = coalesce($8, contact_fbp) WHERE id = $1`,
+      [args.caseId, encryptText(ctx.config.secret, args.contact.email), encryptText(ctx.config.secret, args.contact.phone), args.contact.adsConsent, args.ip ?? null, (args.userAgent ?? '').slice(0, 400) || null, args.contact.fbc ?? null, args.contact.fbp ?? null],
     );
   }
 
