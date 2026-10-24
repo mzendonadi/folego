@@ -49,17 +49,12 @@ export const createCaseSchema = z.object({
   acceptTerms: z.literal(true),
 });
 
-/** Cookies da Meta: _fbp (navegador) e _fbc (clique no anúncio). */
-export const FBP_RE = z.string().regex(/^fb\.1\.\d{10,14}\.\d{5,20}$/);
-export const FBC_RE = z.string().regex(/^fb\.1\.\d{10,14}\.[A-Za-z0-9_-]{6,200}$/);
-
 /** Contato de quem vai pagar o Pix: e-mail e celular com DDD; adsConsent é o aceite separado (opcional, desmarcado). */
 export const orderContactSchema = z.strictObject({
   email: z.string().trim().toLowerCase().email().max(200),
   phone: z.string().trim().transform((v) => v.replace(/\D/g, '')).refine((d) => /^\d{10,11}$/.test(d), 'Celular inválido'),
   adsConsent: z.boolean().default(true), // o aceite vem dos termos aceitos no diagnóstico; o campo não aparece mais na tela
-  fbc: FBC_RE.optional(),
-  fbp: FBP_RE.optional(),
+  fbc: z.string().regex(/^fb\.1\.\d{10,14}\.[A-Za-z0-9_-]{6,200}$/).optional(),
 });
 
 export const createOrderSchema = z.object({

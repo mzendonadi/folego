@@ -33,9 +33,9 @@ export interface Config {
   email: import('./email.ts').EmailConfig | null;
   /** Endereço público do site (links nos e-mails). */
   publicUrl: string;
-  /** Propostas de parceiros (leads). Revisão jurídica concluída (D-123); ligado pela variável LEADS_ENABLED. */
+  /** Propostas de parceiros (leads). Desligado até a revisão jurídica (LGPD/superendividamento). */
   leadsEnabled: boolean;
-  /** Assinaturas mensais (conta por e-mail). Desligado até haver e-mail (RESEND_API_KEY). */
+  /** Assinaturas mensais (conta por e-mail). Desligado até haver e-mail e revisão jurídica. */
   subscriptionsEnabled: boolean;
   /** Token do administrador para cadastrar parceiros (32+ caracteres). Sem ele, as rotas de administração não existem. */
   partnerAdminToken: string | null;

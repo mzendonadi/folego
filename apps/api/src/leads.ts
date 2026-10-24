@@ -1,4 +1,4 @@
-// Propostas de parceiros (leads), depois da entrega. Ligado pela variável LEADS_ENABLED (revisão jurídica concluída, D-123).
+// Propostas de parceiros (leads), depois da entrega. DESLIGADO por padrão (LEADS_ENABLED) até a revisão jurídica.
 // Princípios: consentimento específico e separado (nunca embutido nos termos nem condição de compra), caixa desmarcada,
 // só categorias em que a troca/renegociação faz sentido para a pessoa, CPF nunca é coletado por nós, revogação a qualquer
 // momento, e o Mapa continua honesto mesmo quando isso não gera lead.

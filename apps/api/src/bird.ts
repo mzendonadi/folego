@@ -232,6 +232,14 @@ export function verifyBirdClassicSignature(signingKey: string, headers: { signat
   return got.length === expected.length && timingSafeEqual(got, expected);
 }
 
+/** Alternativa à assinatura: o mesmo segredo, passado como ?k= no endereço do webhook (HTTPS). Comparação em tempo constante. */
+export function verifyBirdToken(secret: string, token: unknown): boolean {
+  if (typeof token !== 'string' || token.length < 16) return false;
+  const a = createHash('sha256').update(secret).digest();
+  const b = createHash('sha256').update(token).digest();
+  return timingSafeEqual(a, b);
+}
+
 const CLASSIC_STATUS: Record<string, string> = { accepted: 'whatsapp.accepted', sent: 'whatsapp.sent', delivered: 'whatsapp.delivered', read: 'whatsapp.read', sending_failed: 'whatsapp.failed', delivery_failed: 'whatsapp.failed' };
 
 /**

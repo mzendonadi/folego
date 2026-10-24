@@ -364,6 +364,15 @@ test('Bird clássica: webhook assinado (messagebird-signature) traz a resposta e
   assert.equal((classicToEvent({ event: 'whatsapp.outbound', payload: { id: 'm1', status: 'delivery_failed', reason: 'x' } }) as { type: string }).type, 'whatsapp.failed');
   assert.equal((classicToEvent({ event: 'whatsapp.outbound', payload: { id: 'm1', status: 'processing' } }) as { type: string }).type, 'ignorado');
 
+  // Sem chave de assinatura no webhook da Bird, o segredo vai no endereço (?k=): aceito; código errado, recusado.
+  const unsigned = JSON.stringify({ service: 'channels', event: 'whatsapp.inbound', payload: { id: 'cls_in_2', sender: { contact: { identifierValue: '+5534998375296' } }, body: { type: 'text', text: { text: 'Pode me ligar?' } } } });
+  const post = (k: string) => app.inject({ method: 'POST', url: `/webhooks/bird?k=${encodeURIComponent(k)}`, headers: { 'content-type': 'application/json' }, payload: unsigned });
+  assert.equal((await post('codigo-errado-com-mais-de-16-caracteres')).statusCode, 401);
+  assert.equal((await app.inject({ method: 'POST', url: '/webhooks/bird', headers: { 'content-type': 'application/json' }, payload: unsigned })).statusCode, 401, 'sem assinatura e sem código: recusado');
+  assert.equal((await post(key)).statusCode, 200);
+  assert.equal((await db.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.wa_messages WHERE wa_id = 'cls_in_2'`)).rows[0]!.n, '1', 'a resposta chegou pelo código no endereço');
+  await db.query(`DELETE FROM app.wa_messages WHERE wa_id = 'cls_in_2'`);
+
   // limpa o que este teste criou, para não mudar a contagem dos testes seguintes
   await db.query(`DELETE FROM app.wa_messages WHERE wa_id = 'cls_in_1'`);
   await db.query(`DELETE FROM app.wa_threads WHERE partner_id = $1 AND id NOT IN (SELECT thread_id FROM app.wa_messages)`, [HOUSE_PARTNER_ID]);

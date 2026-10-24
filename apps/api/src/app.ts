@@ -28,9 +28,9 @@ import * as billing from './billing.ts';
 import * as planChange from './plan-change.ts';
 import * as accountData from './account-data.ts';
 import * as referrals from './referrals.ts';
-import { classicToEvent, handleBirdEvent, verifyBirdClassicSignature, verifyBirdSignature } from './bird.ts';
+import { classicToEvent, handleBirdEvent, verifyBirdClassicSignature, verifyBirdSignature, verifyBirdToken } from './bird.ts';
 import { loadMedia, mediaHeaders, validMediaSig } from './wa-media.ts';
-import { referralWhatsappSchema, FBP_RE, FBC_RE } from './schemas.ts';
+import { referralWhatsappSchema } from './schemas.ts';
 import * as insights from './insights.ts';
 import { verifyTurnstile, turnstileEnabled } from './turnstile.ts';
 import * as chatbot from './chatbot.ts';
@@ -106,11 +106,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const ADS_COOKIE = 'folego_ads';
   // Em produção o nginx entrega o HTML direto do disco (a API não vê o GET /), então quem avisa a cada visita é o navegador: POST /api/pageview.
   app.post('/api/pageview', { config: { rateLimit: { max: 60 * scale, timeWindow: '1 minute' } } }, async (req, reply) => {
-    const { path, eventId, fbp, fbc } = z.strictObject({ path: z.string().max(200).regex(/^\/[^\s]*$/).default('/'), eventId: z.string().uuid().optional(), fbp: FBP_RE.optional(), fbc: FBC_RE.optional() }).parse(req.body ?? {});
+    const { path } = z.strictObject({ path: z.string().max(200).regex(/^\/[^\s]*$/).default('/') }).parse(req.body ?? {});
     const ck = req.headers.cookie ?? '';
     if (config.metaPageView && config.metaCapiToken && new RegExp(`(?:^|;\\s*)${ADS_COOKIE}=1(?:;|$)`).test(ck)) {
       const ua = req.headers['user-agent'];
-      void sendCapi(ctx, { name: 'PageView', eventId: eventId ?? randomUUID(), ip: clientIp(req), userAgent: typeof ua === 'string' ? ua : undefined, url: `${config.publicUrl}${path}`, fbc: fbc ?? /_fbc=([^;]+)/.exec(ck)?.[1], fbp: fbp ?? /_fbp=([^;]+)/.exec(ck)?.[1] });
+      void sendCapi(ctx, { name: 'PageView', eventId: randomUUID(), ip: clientIp(req), userAgent: typeof ua === 'string' ? ua : undefined, url: `${config.publicUrl}${path}`, fbc: /_fbc=([^;]+)/.exec(ck)?.[1], fbp: /_fbp=([^;]+)/.exec(ck)?.[1] });
     }
     return reply.status(204).send();
   });
@@ -315,13 +315,13 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   // Aviso de cookies: guarda a escolha sobre compartilhar dados de navegação com a Meta (publicidade). Aceitar liga o PageView; recusar apaga o cookie.
   app.post('/api/consent', { config: { rateLimit: { max: 20 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => {
-    const { ads, eventId, fbp, fbc } = z.strictObject({ ads: z.boolean(), eventId: z.string().uuid().optional(), fbp: FBP_RE.optional(), fbc: FBC_RE.optional() }).parse(req.body);
+    const { ads } = z.strictObject({ ads: z.boolean() }).parse(req.body);
     if (ads) {
       reply.setCookie(ADS_COOKIE, '1', { httpOnly: true, sameSite: 'lax', secure: config.cookieSecure, path: '/', maxAge: 180 * 24 * 3600 });
       if (config.metaPageView && config.metaCapiToken) {
         const ck = req.headers.cookie ?? '';
         const ua = req.headers['user-agent'];
-        void sendCapi(ctx, { name: 'PageView', eventId: eventId ?? randomUUID(), ip: clientIp(req), userAgent: typeof ua === 'string' ? ua : undefined, url: `${config.publicUrl}/`, fbc: fbc ?? /_fbc=([^;]+)/.exec(ck)?.[1], fbp: fbp ?? /_fbp=([^;]+)/.exec(ck)?.[1] });
+        void sendCapi(ctx, { name: 'PageView', eventId: randomUUID(), ip: clientIp(req), userAgent: typeof ua === 'string' ? ua : undefined, url: `${config.publicUrl}/`, fbc: /_fbc=([^;]+)/.exec(ck)?.[1], fbp: /_fbp=([^;]+)/.exec(ck)?.[1] });
       }
     } else reply.clearCookie(ADS_COOKIE, { path: '/' });
     return { ok: true, ads };
@@ -836,10 +836,13 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       const h = req.headers;
       const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
       // Bird clássica (app.bird.com) assina com messagebird-signature; a plataforma nova usa Standard Webhooks (webhook-*).
-      const classic = one(h['messagebird-signature']) !== undefined;
-      const valid = classic
+      const classicHeader = one(h['messagebird-signature']) !== undefined;
+      // Sem chave de assinatura no webhook da Bird, o aviso vem sem assinatura: o segredo pode ir no endereço (?k=), em HTTPS.
+      const byToken = verifyBirdToken(secret, (req.query as { k?: string } | undefined)?.k);
+      const valid = byToken || (classicHeader
         ? verifyBirdClassicSignature(secret, { signature: one(h['messagebird-signature']), timestamp: one(h['messagebird-request-timestamp']) }, `${config.publicUrl}/webhooks/bird`, raw)
-        : verifyBirdSignature(secret, { id: one(h['webhook-id']), timestamp: one(h['webhook-timestamp']), signature: one(h['webhook-signature']) }, raw);
+        : verifyBirdSignature(secret, { id: one(h['webhook-id']), timestamp: one(h['webhook-timestamp']), signature: one(h['webhook-signature']) }, raw));
+      const classic = classicHeader;
       // Registro dos avisos (aceitos e recusados, com o motivo) para o backoffice mostrar em WhatsApp > Conexão; nenhum dado pessoal.
       const skew = Math.round(Date.now() / 1000 - Number(one(h['messagebird-request-timestamp']) ?? one(h['webhook-timestamp']) ?? NaN));
       if (!valid) {
@@ -852,9 +855,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       } catch {
         return reply.status(400).send({ error: 'invalid_json' });
       }
-      const evento = classic ? String((parsed as { event?: unknown })?.event ?? '').slice(0, 40) : String((parsed as { type?: unknown })?.type ?? '').slice(0, 40);
-      if (classic) parsed = classicToEvent(parsed);
-      await svc.audit(ctx.db, 'system', 'bird_aviso_aceito', 'bird_webhook', 'webhook', { formato: classic ? 'classica' : 'nova', evento }).catch(() => {});
+      // O formato é o do corpo: o da Bird clássica tem "event" + "payload"; o da plataforma nova tem "type" + "data".
+      const body = (parsed ?? {}) as { event?: unknown; payload?: unknown; type?: unknown };
+      const isClassicBody = classic || (typeof body.event === 'string' && body.event.startsWith('whatsapp.') && body.payload !== undefined);
+      const evento = String((isClassicBody ? body.event : body.type) ?? '').slice(0, 40);
+      if (isClassicBody) parsed = classicToEvent(parsed);
+      await svc.audit(ctx.db, 'system', 'bird_aviso_aceito', 'bird_webhook', 'webhook', { formato: isClassicBody ? 'classica' : 'nova', evento, via: byToken ? 'codigo no endereco' : 'assinatura' }).catch(() => {});
       try {
         await handleBirdEvent(ctx, parsed, { log: (e) => req.log.warn(e) });
       } catch (error) {
