@@ -334,7 +334,7 @@ export async function handleBirdEvent(ctx: Ctx, event: unknown, opts: { log?: (e
  * Lê as mensagens do canal na API clássica da Bird (GET /workspaces/{ws}/channels/{canal}/messages, com limit, pageToken e startAt), fica com as
  * recebidas e passa cada uma pelo mesmo caminho do webhook (inclui o SAIR). Não duplica (a mensagem é identificada pelo id da Bird) e mantém a hora original.
  */
-export async function backfillBirdInbound(ctx: Ctx, days = 14, opts: { log?: (e: Record<string, unknown>) => void } = {}): Promise<{ lidas: number; recebidasNaBird: number; novas: number }> {
+export async function backfillBirdInbound(ctx: Ctx, days = 14, opts: { log?: (e: Record<string, unknown>) => void } = {}): Promise<{ lidas: number; recebidasNaBird: number; novas: number; maisAntiga: string | null }> {
   const c = ctx.config.bird;
   if (!c || !c.classic) throw new AppError(409, 'wa_backfill', 'A busca das respostas atrasadas só existe na Bird clássica (a que está em uso).');
   const acc = (await loadAccount(ctx, HOUSE_PARTNER_ID)) ?? (await ensureHouseAccount(ctx));
@@ -343,21 +343,28 @@ export async function backfillBirdInbound(ctx: Ctx, days = 14, opts: { log?: (e:
   const count = async () => Number((await ctx.db.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.wa_messages WHERE partner_id = $1 AND direction = 'in'`, [HOUSE_PARTNER_ID])).rows[0]?.n ?? 0);
   const before = await count();
 
+  // Sem o filtro startAt da Bird (ele devolveu quase nada na prática): lê as páginas da mais nova para a mais antiga e para quando passar da data.
   const incoming: Obj[] = [];
   let lidas = 0;
+  let maisAntiga: string | null = null;
   let pageToken = '';
-  for (let page = 0; page < 60; page += 1) {
-    const q = new URLSearchParams({ limit: '100', startAt: since, ...(pageToken ? { pageToken } : {}) });
+  for (let page = 0; page < 80; page += 1) {
+    const q = new URLSearchParams({ limit: '100', ...(pageToken ? { pageToken } : {}) });
     const res = await fetch(`${c.baseUrl}/workspaces/${c.workspaceId}/channels/${c.channelId}/messages?${q}`, { headers: { authorization: `AccessKey ${c.apiKey}` }, signal: AbortSignal.timeout(25_000) });
     if (!res.ok) throw new AppError(502, 'wa_backfill_bird', `A Bird recusou a consulta (erro ${res.status}).`);
     const j = obj(await res.json().catch(() => ({})));
     const results = Array.isArray(j.results) ? (j.results as unknown[]) : [];
-    for (const m of results) {
+    let passou = false;
+    for (const raw of results) {
+      const m = obj(raw);
+      const at = str(m.createdAt);
+      if (at && (maisAntiga === null || at < maisAntiga)) maisAntiga = at;
+      if (at && at < since) { passou = true; continue; } // mais antiga que o período pedido
       lidas += 1;
-      if (obj(m).direction === 'incoming') incoming.push(obj(m));
+      if (m.direction === 'incoming') incoming.push(m);
     }
     pageToken = str(j.nextPageToken) ?? '';
-    if (!pageToken || results.length === 0) break;
+    if (!pageToken || results.length === 0 || passou) break;
   }
 
   // Do mais antigo ao mais novo, para as conversas nascerem na ordem certa.
@@ -383,7 +390,7 @@ export async function backfillBirdInbound(ctx: Ctx, days = 14, opts: { log?: (e:
       [HOUSE_PARTNER_ID, waIds],
     );
   }
-  return { lidas, recebidasNaBird: incoming.length, novas: (await count()) - before };
+  return { lidas, recebidasNaBird: incoming.length, novas: (await count()) - before, maisAntiga };
 }
 
 /** Resumo para o backoffice: como estão os envios dos últimos 30 dias. */

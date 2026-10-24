@@ -365,14 +365,14 @@ test('respostas atrasadas: traz da Bird só as recebidas que o webhook perdeu, c
   }) as unknown as typeof fetch;
   try {
     const r1 = await backfillBirdInbound(ctx, 7);
-    assert.deepEqual(r1, { lidas: 2, recebidasNaBird: 1, novas: 1 });
-    assert.match(urls[0]!, /\/workspaces\/[^/]+\/channels\/[^/]+\/messages\?limit=100&startAt=/);
+    assert.deepEqual(r1, { lidas: 2, recebidasNaBird: 1, novas: 1, maisAntiga: antiga });
+    assert.match(urls[0]!, /\/workspaces\/[^/]+\/channels\/[^/]+\/messages\?limit=100$/);
     const m = await db.query<{ created_at: Date; last_inbound_at: Date | null; windowOpen: boolean }>(
       `SELECT m.created_at, t.last_inbound_at, (t.last_inbound_at > now() - interval '24 hours') AS "windowOpen" FROM app.wa_messages m JOIN app.wa_threads t ON t.id = m.thread_id WHERE m.wa_id = 'bf_1'`,
     );
     assert.ok(Math.abs(new Date(m.rows[0]!.created_at).getTime() - Date.parse(antiga)) < 1000, 'a mensagem guarda a hora em que o cliente escreveu');
     assert.equal(m.rows[0]!.windowOpen, false, 'resposta de 3 dias atrás não abre a janela de 24 h');
-    assert.deepEqual(await backfillBirdInbound(ctx, 7), { lidas: 2, recebidasNaBird: 1, novas: 0 }, 'rodar de novo não duplica');
+    assert.deepEqual(await backfillBirdInbound(ctx, 7), { lidas: 2, recebidasNaBird: 1, novas: 0, maisAntiga: antiga }, 'rodar de novo não duplica');
   } finally {
     globalThis.fetch = real;
     await db.query(`DELETE FROM app.wa_messages WHERE wa_id = 'bf_1'`);

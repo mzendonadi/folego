@@ -78,7 +78,7 @@ export async function voiceToOgg(bytes: Buffer): Promise<Buffer | null> {
   try {
     await writeFile(input, bytes);
     await new Promise<void>((resolve, reject) => {
-      const p = spawn('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', input, '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'libopus', '-b:a', '24k', '-f', 'ogg', output], { stdio: ['ignore', 'ignore', 'pipe'] });
+      const p = spawn('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', input, '-vn', '-map_metadata', '-1', '-fflags', '+bitexact', '-flags:a', '+bitexact', '-ac', '1', '-ar', '16000', '-c:a', 'libopus', '-b:a', '24k', '-application', 'voip', '-f', 'ogg', output], { stdio: ['ignore', 'ignore', 'pipe'] });
       let err = '';
       p.stderr.on('data', (d: Buffer) => { err += d.toString().slice(0, 300); });
       const timer = setTimeout(() => { p.kill('SIGKILL'); reject(new Error('ffmpeg demorou demais')); }, 20_000);
