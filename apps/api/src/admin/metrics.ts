@@ -57,10 +57,12 @@ export async function funnel(ctx: Ctx, days: number) {
        count(*) FILTER (WHERE NOT paid AND has_order) AS abandoned_checkout,
        count(*) FILTER (WHERE NOT paid AND NOT has_order) AS never_checkout,
        count(*) FILTER (WHERE paid) AS paid
-     FROM (SELECT c.id,
-                  EXISTS (SELECT 1 FROM app.orders o WHERE o.case_id = c.id AND o.status = 'paid') AS paid,
-                  EXISTS (SELECT 1 FROM app.orders o WHERE o.case_id = c.id) AS has_order
-             FROM app.cases c WHERE c.created_at >= ${from} AND ${NOT_TRANSLATOR}) t`,
+     FROM (SELECT s.session_id,
+                  -- por PESSOA (sessão), como o funil: quem refaz o diagnóstico gera vários formulários e não pode contar duas vezes;
+                  -- e quem pagou em qualquer um deles não é "não pagou".
+                  EXISTS (SELECT 1 FROM app.orders o JOIN app.cases c ON c.id = o.case_id WHERE o.session_id = s.session_id AND o.status = 'paid' AND ${NOT_TRANSLATOR}) AS paid,
+                  EXISTS (SELECT 1 FROM app.orders o JOIN app.cases c ON c.id = o.case_id WHERE o.session_id = s.session_id AND ${NOT_TRANSLATOR}) AS has_order
+             FROM (SELECT DISTINCT c.session_id FROM app.cases c WHERE c.created_at >= ${from} AND ${NOT_TRANSLATOR}) s) t`,
     [days],
   );
   return {
