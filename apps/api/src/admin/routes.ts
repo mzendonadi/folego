@@ -19,7 +19,8 @@ import * as dispatch from './dispatch.ts';
 import * as chatbot from '../chatbot.ts';
 import * as waPortal from '../wa-portal.ts';
 import { HOUSE_PARTNER_ID, ensureHouseAccount } from '../wa-bird.ts';
-import { mediaHeaders } from '../wa-media.ts';
+import { VOICE_DEFAULT, mediaHeaders, storeMedia, voiceToOgg } from '../wa-media.ts';
+import type { VoiceEncoding } from '../wa-media.ts';
 import { computeAlerts, markAlertsSeen } from './alerts.ts';
 import * as customers from './customers.ts';
 import * as manage from './manage.ts';
@@ -621,6 +622,29 @@ export function registerGestao(app: FastifyInstance, deps: AdminRouteDeps): void
     const r = await backfillBirdInbound(ctx, dias, { log: (e) => req.log.warn(e) });
     await audit(ctx.db, `admin:${a.id}`, 'wa_backfill_inbound', 'partner', HOUSE_PARTNER_ID, { dias, ...r });
     return r;
+  });
+  // TEMPORÁRIO (diagnóstico do áudio): recodifica um áudio já gravado de 5 jeitos e manda os 5, em ordem, para a conversa, para ver quais o WhatsApp toca.
+  app.post(`${WA}/teste-voz`, { config: { rateLimit: { max: 3 * scale, timeWindow: '10 minutes' } } }, async (req) => {
+    const a = await house(req);
+    const { threadId, mediaId } = z.strictObject({ threadId: z.string().uuid(), mediaId: z.string().uuid() }).parse(req.body);
+    const src = await waPortal.mediaFile(ctx, HOUSE_PARTNER_ID, mediaId);
+    const variants: [string, VoiceEncoding][] = [
+      ['A: 16 kHz, 24 kbps, voip (o atual)', VOICE_DEFAULT],
+      ['B: 48 kHz, 32 kbps, voip', { rate: 48000, bitrate: '32k', application: 'voip', bitexact: true, cbr: false }],
+      ['C: 16 kHz, 16 kbps constante, quadros de 20 ms', { rate: 16000, bitrate: '16k', application: 'voip', bitexact: true, cbr: true }],
+      ['D: 48 kHz, 64 kbps, áudio', { rate: 48000, bitrate: '64k', application: 'audio', bitexact: true, cbr: false }],
+      ['E: 16 kHz, 24 kbps, voip, sem bitexact', { rate: 16000, bitrate: '24k', application: 'voip', bitexact: false, cbr: false }],
+    ];
+    const sent: string[] = [];
+    for (const [label, enc] of variants) {
+      const ogg = await voiceToOgg(src.bytes, enc);
+      if (!ogg) { sent.push(`${label}: falhou ao converter`); continue; }
+      const s = await storeMedia(ctx, HOUSE_PARTNER_ID, { mime: 'audio/ogg', filename: `teste-${label[0]}.ogg`, bytes: ogg, origin: 'out' });
+      await waPortal.sendInThread(ctx, HOUSE_PARTNER_ID, threadId, { mediaId: s.id, caption: '', voice: true }, a.email);
+      sent.push(label);
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+    return { enviados: sent };
   });
   app.get(`${WA}/templates`, async (req) => { await house(req); return waPortal.listTemplates(ctx, HOUSE_PARTNER_ID); });
   app.post(`${WA}/templates`, async (req, reply) => { await house(req); return reply.status(201).send(await waPortal.createTemplate(ctx, HOUSE_PARTNER_ID, waPortal.templateSchema.parse(req.body))); });

@@ -242,7 +242,9 @@ export async function applyBirdStatus(ctx: Ctx, type: string, data: Obj, why: st
   if (next === null) return true; // "aceita": já está "enviada"
   if (next === 'falhou') {
     if ((RANK[m.status] ?? 0) >= RANK.entregue!) return true;
-    await ctx.db.query(`UPDATE app.wa_messages SET status = 'falhou', error = $2 WHERE id = $1`, [m.id, why.slice(0, 300)]);
+    // 130472: a Meta separou esse número num experimento próprio e não entrega mensagem de empresa a ele. Não é falha nossa nem se resolve reenviando.
+    const text = /130472/.test(why) ? 'A Meta não entregou: este número está num experimento da própria Meta (erro 130472). Não é falha do Fôlego; tente outro canal com a pessoa.' : why;
+    await ctx.db.query(`UPDATE app.wa_messages SET status = 'falhou', error = $2 WHERE id = $1`, [m.id, text.slice(0, 300)]);
   } else if (next && ((RANK[next] ?? 0) > (RANK[m.status] ?? 0) || m.status === 'falhou')) {
     await ctx.db.query(`UPDATE app.wa_messages SET status = $2, error = NULL WHERE id = $1`, [m.id, next]);
   }

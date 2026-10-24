@@ -71,14 +71,18 @@ const cleanName = (n: string | null | undefined): string | null => {
  * Sem isso a Meta recusa o arquivo (erro 131053, "Media file scrutiny failed"). Usa o ffmpeg do servidor; devolve null se ele não existir ou falhar,
  * e quem chama segue com o arquivo original.
  */
-export async function voiceToOgg(bytes: Buffer): Promise<Buffer | null> {
+export interface VoiceEncoding { rate: number; bitrate: string; application: 'voip' | 'audio'; bitexact: boolean; cbr: boolean }
+export const VOICE_DEFAULT: VoiceEncoding = { rate: 16000, bitrate: '24k', application: 'voip', bitexact: true, cbr: false };
+
+export async function voiceToOgg(bytes: Buffer, enc: VoiceEncoding = VOICE_DEFAULT): Promise<Buffer | null> {
   const dir = await mkdtemp(join(tmpdir(), 'folego-voz-'));
   const input = join(dir, 'entrada');
   const output = join(dir, 'saida.ogg');
   try {
     await writeFile(input, bytes);
     await new Promise<void>((resolve, reject) => {
-      const p = spawn('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', input, '-vn', '-map_metadata', '-1', '-fflags', '+bitexact', '-flags:a', '+bitexact', '-ac', '1', '-ar', '16000', '-c:a', 'libopus', '-b:a', '24k', '-application', 'voip', '-f', 'ogg', output], { stdio: ['ignore', 'ignore', 'pipe'] });
+      const args = ['-hide_banner', '-loglevel', 'error', '-y', '-i', input, '-vn', '-map_metadata', '-1', ...(enc.bitexact ? ['-fflags', '+bitexact', '-flags:a', '+bitexact'] : []), '-ac', '1', '-ar', String(enc.rate), '-c:a', 'libopus', '-b:a', enc.bitrate, '-application', enc.application, ...(enc.cbr ? ['-vbr', 'off', '-frame_duration', '20'] : []), '-f', 'ogg', output];
+      const p = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
       let err = '';
       p.stderr.on('data', (d: Buffer) => { err += d.toString().slice(0, 300); });
       const timer = setTimeout(() => { p.kill('SIGKILL'); reject(new Error('ffmpeg demorou demais')); }, 20_000);
