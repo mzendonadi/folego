@@ -21,6 +21,12 @@ test('Bird: chave que não começa com bk_ é da plataforma clássica (api.bird.
   assert.equal(loadConfig(base).bird?.classic, false, 'chave bk_ segue na plataforma nova');
 });
 
+test('Bird: o segredo do webhook ignora quebra de linha no fim (como o terminal grava) e exige 16 caracteres úteis', () => {
+  const k = 'abcdefghijklmnopqrstuvwxyz0123456789ABCD';
+  assert.equal(loadConfig({ ...base, BIRD_WEBHOOK_SECRET: `${k}\r\n` }).bird?.webhookSecret, k);
+  assert.equal(loadConfig({ ...base, BIRD_WEBHOOK_SECRET: `  curto \n` }).bird?.webhookSecret, null);
+});
+
 test('Bird: endereço informado é respeitado (sem barra no fim)', () => {
   assert.equal(loadConfig({ ...base, BIRD_BASE_URL: 'https://api.exemplo.test/' }).bird?.baseUrl, 'https://api.exemplo.test');
 });

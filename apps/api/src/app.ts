@@ -846,7 +846,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       // Registro dos avisos (aceitos e recusados, com o motivo) para o backoffice mostrar em WhatsApp > Conexão; nenhum dado pessoal.
       const skew = Math.round(Date.now() / 1000 - Number(one(h['messagebird-request-timestamp']) ?? one(h['webhook-timestamp']) ?? NaN));
       if (!valid) {
-        await svc.audit(ctx.db, 'system', 'bird_aviso_recusado', 'bird_webhook', 'webhook', { formato: classic ? 'classica' : 'nova', temAssinatura: classic || one(h['webhook-signature']) !== undefined, atrasoSegundos: Number.isFinite(skew) ? skew : null }).catch(() => {});
+        await svc.audit(ctx.db, 'system', 'bird_aviso_recusado', 'bird_webhook', 'webhook', { formato: classic ? 'classica' : 'nova', temAssinatura: classic || one(h['webhook-signature']) !== undefined, atrasoSegundos: Number.isFinite(skew) ? skew : null, temCodigo: typeof (req.query as { k?: unknown } | undefined)?.k === 'string', tamanhoCodigo: String((req.query as { k?: unknown } | undefined)?.k ?? '').length, tamanhoSegredo: secret.length }).catch(() => {});
         return reply.status(401).send({ error: 'invalid_signature' });
       }
       let parsed: unknown;

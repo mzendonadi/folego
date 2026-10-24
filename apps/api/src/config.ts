@@ -172,7 +172,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
           // Modelo aprovado: "Fôlego Indicação Prumo". Aceita o nome como aparece na Bird ou o identificador (slug); nome vira slug: sem acento, minúsculo, hífen no lugar de espaço.
           template: (env.BIRD_TEMPLATE_INDICACAO || 'folego-indicacao-prumo').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase().replace(/\s+/g, '-'),
           language: env.BIRD_TEMPLATE_LANGUAGE?.trim() || 'pt-BR',
-          webhookSecret: env.BIRD_WEBHOOK_SECRET && env.BIRD_WEBHOOK_SECRET.length >= 16 ? env.BIRD_WEBHOOK_SECRET : null,
+          // trim: o segredo gravado pelo terminal costuma vir com quebra de linha no fim, e aí nunca bate com o código da URL nem com a assinatura.
+          webhookSecret: env.BIRD_WEBHOOK_SECRET && env.BIRD_WEBHOOK_SECRET.trim().length >= 16 ? env.BIRD_WEBHOOK_SECRET.trim() : null,
         }
       : null,
     turnstileSiteKey: env.TURNSTILE_SITE_KEY ? env.TURNSTILE_SITE_KEY : null,
