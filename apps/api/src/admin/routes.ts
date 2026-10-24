@@ -607,6 +607,12 @@ export function registerGestao(app: FastifyInstance, deps: AdminRouteDeps): void
     await audit(ctx.db, `admin:${a.id}`, 'wa_opportunities_viewed', 'partner', HOUSE_PARTNER_ID, {});
     return opportunities(ctx);
   });
+  // Últimos avisos que a Bird mandou ao webhook (aceitos e recusados, com o motivo): mostra se o retorno de entrega e as respostas estão chegando.
+  app.get(`${WA}/avisos`, async (req) => {
+    await admin(req, 'whatsapp');
+    const r = await ctx.db.query<{ occurred_at: Date | string; action: string; data: Record<string, unknown> }>(`SELECT occurred_at, action, data FROM app.audit_log WHERE entity = 'bird_webhook' ORDER BY id DESC LIMIT 25`);
+    return { items: r.rows.map((x) => ({ at: new Date(x.occurred_at).toISOString(), accepted: x.action === 'bird_aviso_aceito', ...x.data })) };
+  });
   app.get(`${WA}/templates`, async (req) => { await house(req); return waPortal.listTemplates(ctx, HOUSE_PARTNER_ID); });
   app.post(`${WA}/templates`, async (req, reply) => { await house(req); return reply.status(201).send(await waPortal.createTemplate(ctx, HOUSE_PARTNER_ID, waPortal.templateSchema.parse(req.body))); });
   app.put(`${WA}/templates/:id`, async (req) => { await house(req); return waPortal.updateTemplate(ctx, HOUSE_PARTNER_ID, tid(req), waPortal.templateUpdateSchema.parse(req.body)); });

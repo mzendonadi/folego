@@ -840,14 +840,21 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       const valid = classic
         ? verifyBirdClassicSignature(secret, { signature: one(h['messagebird-signature']), timestamp: one(h['messagebird-request-timestamp']) }, `${config.publicUrl}/webhooks/bird`, raw)
         : verifyBirdSignature(secret, { id: one(h['webhook-id']), timestamp: one(h['webhook-timestamp']), signature: one(h['webhook-signature']) }, raw);
-      if (!valid) return reply.status(401).send({ error: 'invalid_signature' });
+      // Registro dos avisos (aceitos e recusados, com o motivo) para o backoffice mostrar em WhatsApp > Conexão; nenhum dado pessoal.
+      const skew = Math.round(Date.now() / 1000 - Number(one(h['messagebird-request-timestamp']) ?? one(h['webhook-timestamp']) ?? NaN));
+      if (!valid) {
+        await svc.audit(ctx.db, 'system', 'bird_aviso_recusado', 'bird_webhook', 'webhook', { formato: classic ? 'classica' : 'nova', temAssinatura: classic || one(h['webhook-signature']) !== undefined, atrasoSegundos: Number.isFinite(skew) ? skew : null }).catch(() => {});
+        return reply.status(401).send({ error: 'invalid_signature' });
+      }
       let parsed: unknown;
       try {
         parsed = JSON.parse(raw);
       } catch {
         return reply.status(400).send({ error: 'invalid_json' });
       }
+      const evento = classic ? String((parsed as { event?: unknown })?.event ?? '').slice(0, 40) : String((parsed as { type?: unknown })?.type ?? '').slice(0, 40);
       if (classic) parsed = classicToEvent(parsed);
+      await svc.audit(ctx.db, 'system', 'bird_aviso_aceito', 'bird_webhook', 'webhook', { formato: classic ? 'classica' : 'nova', evento }).catch(() => {});
       try {
         await handleBirdEvent(ctx, parsed, { log: (e) => req.log.warn(e) });
       } catch (error) {

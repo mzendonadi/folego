@@ -202,6 +202,13 @@ export async function whatsappScreen(ctx = {}) {
       b.addEventListener('click', async () => { try { await navigator.clipboard.writeText(value); toast('Copiado.'); } catch { toast('Não consegui copiar. Selecione e copie.'); } });
       return b;
     };
+    // Últimos avisos recebidos da Bird: se a lista estiver vazia, a Bird não está chamando; se tiver "recusado", a chave de assinatura não confere.
+    const avisos = el('div', { class: 'bo-stack-sm' }, el('p', { class: 'fine muted' }, 'Carregando os últimos avisos…'));
+    api.wa.call('GET', '/avisos').then(({ items }) => {
+      avisos.replaceChildren(items.length
+        ? el('ul', { class: 'bo-list' }, ...items.map((x) => el('li', {}, `${dt(x.at)} · ${x.accepted ? `recebido (${x.evento || x.formato})` : `RECUSADO: assinatura não confere${x.atrasoSegundos !== null && x.atrasoSegundos !== undefined ? ` (relógio ${x.atrasoSegundos}s)` : ''}`}`)))
+        : el('p', { class: 'note note-amber' }, icon('alert'), el('span', {}, 'Nenhum aviso chegou ainda. Sem eles, as mensagens ficam em "enviada" e as respostas dos clientes não aparecem aqui. Confira na Bird se os dois webhooks (inbound e outbound) estão ativos.')));
+    }).catch(() => avisos.replaceChildren(el('p', { class: 'fine muted' }, 'Não consegui carregar os avisos agora.')));
     const test = el('button', { class: 'btn btn-secondary', type: 'button' }, 'Testar conexão');
     test.addEventListener('click', async () => {
       test.disabled = true;
