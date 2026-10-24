@@ -1,6 +1,6 @@
 // Tela de pagamento: resumo do pedido → Pix (QR + copia e cola) → confirmação.
 // Nesta versão o pagamento é SIMULADO (ver api.js); o aviso fica visível na tela.
-import { el, icon, announce, toast, copyText } from './dom.js';
+import { el, icon, announce, toast, copyText, revealField } from './dom.js';
 import { brl, mmss } from './format.js';
 import { qrSvg } from '../vendor/qr.js';
 import { DEV } from '../config.js';
@@ -138,6 +138,11 @@ export function renderCheckout(root, ctx) {
       const badPhone = ![10, 11].includes(digitsOf(contact.phone).length);
       emailEl.toggleAttribute('aria-invalid', badEmail);
       phoneEl.toggleAttribute('aria-invalid', badPhone);
+      if (badEmail || badPhone) {
+        const bad = badEmail ? emailEl : phoneEl;
+        bad.focus({ preventScroll: true });
+        revealField(bad.closest('.field')); // o campo com erro aparece inteiro, sem a pessoa precisar rolar a tela
+      }
       if (badEmail || badPhone) return toast(badEmail ? 'Confira o e-mail: precisamos dele para enviar o seu acesso.' : 'Confira o celular: informe com DDD.');
     }
     const btn = payCard.querySelector('#gen-pix');

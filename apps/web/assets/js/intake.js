@@ -1,6 +1,6 @@
 // Formulário do diagnóstico: mesma estrutura e mesmo estado em qualquer tela.
 // Celular: um passo por vez. Desktop: linha do tempo que nasce apagada e acende a cada passo concluído.
-import { $, $$, el, icon, announce, focusSoon, prefersReducedMotion } from './dom.js';
+import { $, $$, el, icon, announce, focusSoon, revealField, prefersReducedMotion } from './dom.js';
 import { state, saveDraft, newDebt } from './state.js';
 import { EMPLOYMENT, CLT_CONTRACTS, AGE_BANDS, UFS, DEBT_KINDS, OVERDUE_BANDS, KIND_LABEL } from './copy.js';
 import { brl, centsToField, fieldToCents, maskMoneyLive, percentToBps, todayISO, plural } from './format.js';
@@ -420,6 +420,7 @@ function applyErrors(i, errors) {
   const first = document.getElementById(errors[0][0]);
   const focusTarget = first?.matches?.('[role="radiogroup"]') ? $('input', first) : first;
   focusSoon(focusTarget);
+  revealField(first?.closest('.field') ?? first); // o campo e a mensagem de erro nunca ficam escondidos atrás da barra do Continuar
   announce(`${errors.length} ${plural(errors.length, 'campo precisa', 'campos precisam')} de ajuste. ${errors[0][1]}`);
 }
 
@@ -561,7 +562,7 @@ function onInput(event) {
       const noteField = $(`#${d.uid}-kindnote`)?.closest('.field');
       if (noteField) {
         noteField.hidden = d.kind !== 'other';
-        if (d.kind === 'other') $(`#${d.uid}-kindnote`)?.focus();
+        if (d.kind === 'other') { focusSoon($(`#${d.uid}-kindnote`)); revealField(noteField); }
       }
     } else if (key === 'kindNote') d.kindNote = t.value;
     else if (key === 'balance') d.balanceCents = cents;
@@ -569,7 +570,10 @@ function onInput(event) {
     else if (key === 'overdue') {
       d.overdue = t.value;
       const bandField = $(`#${d.uid}-band`)?.closest('.field');
-      if (bandField) bandField.hidden = d.overdue !== 'yes';
+      if (bandField) {
+        bandField.hidden = d.overdue !== 'yes';
+        if (d.overdue === 'yes') revealField(bandField); // 'Em atraso há quanto tempo?' aparece e a tela desce até ele
+      }
       clearError(`${d.uid}-overdue`);
     } else if (key === 'overdueBand') d.overdueBand = t.value;
     else if (key === 'installments') d.installments = t.value.replace(/\D/g, '');
@@ -588,11 +592,12 @@ function onInput(event) {
     if (contractField) {
       contractField.hidden = a.employmentType !== 'clt';
       if (a.employmentType !== 'clt') a.cltContract = '';
+      else revealField(contractField); // 'Qual é o seu tipo de contrato?' aparece e a tela sobe até ele
     }
     const noteField = $('.field-employment-note');
     if (noteField) {
       noteField.hidden = a.employmentType !== 'other';
-      if (a.employmentType === 'other') $('#employment-note')?.focus();
+      if (a.employmentType === 'other') { focusSoon($('#employment-note')); revealField(noteField); }
     }
   } else if (key === 'consent') {
     a.consent = t.checked;
@@ -619,6 +624,7 @@ function onClick(event) {
     saveDraft();
     renderSummary();
     focusSoon(document.getElementById(`${debt.uid}-creditor`));
+    revealField(document.getElementById(`${debt.uid}-creditor`)?.closest('fieldset.debt'));
     announce(`Dívida ${state.answers.debts.length} adicionada`);
   } else if (t.dataset.remove) {
     state.answers.debts = state.answers.debts.filter((d) => d.uid !== t.dataset.remove);

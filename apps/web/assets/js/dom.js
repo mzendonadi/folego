@@ -57,6 +57,26 @@ export function scrollToTop() {
   window.scrollTo({ top: 0, behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
 }
 
+/** Traz um campo para a área visível: entre o cabeçalho fixo e a barra do Continuar (que fica fixa no rodapé no celular).
+    Usado quando um campo obrigatório acaba de aparecer ou de dar erro, para a pessoa nunca precisar rolar a tela por conta própria. */
+export function revealField(node) {
+  if (!node || node.hidden) return;
+  window.requestAnimationFrame(() => {
+    const header = document.querySelector('.site-header');
+    const bar = document.querySelector('.step[data-state="active"] .step-actions');
+    const top = (header ? Math.max(0, header.getBoundingClientRect().bottom) : 0) + 12;
+    const barTop = bar && getComputedStyle(bar).position === 'sticky' ? bar.getBoundingClientRect().top : window.innerHeight;
+    const banner = document.querySelector('.cookie-banner'); // o aviso de cookies também cobre o rodapé enquanto a pessoa não escolhe
+    const bannerTop = banner ? banner.getBoundingClientRect().top : window.innerHeight;
+    const bottom = Math.min(barTop, bannerTop, window.innerHeight) - 12;
+    const r = node.getBoundingClientRect();
+    let dy = 0;
+    if (r.top < top || r.height > bottom - top) dy = r.top - top; // acima da área, ou maior que ela: alinha o começo
+    else if (r.bottom > bottom) dy = r.bottom - bottom; // escondido atrás da barra: sobe só o necessário
+    if (Math.abs(dy) > 2) window.scrollBy({ top: dy, behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+  });
+}
+
 export function focusSoon(node) {
   if (!node) return;
   window.requestAnimationFrame(() => node.focus({ preventScroll: true }));
