@@ -1951,6 +1951,12 @@ body[data-route="partner"] .fl-chat, body[data-route="unsubscribe"] .fl-chat, bo
   .fl-chat-panel { position: fixed; inset: 0; width: auto; height: 100dvh; border: 0; border-radius: 0; }
   .fl-chat.is-open .fl-chat-fab { display: none; }
 }
+/* Diagnóstico no celular/tablet: a barra do Continuar fica fixa no rodapé, então o chat sobe acima dela (não cobre o botão) e o balão de dica não aparece. */
+@media (max-width: 1023.98px) {
+  body[data-route="intake"] .fl-chat:not(.is-open) { bottom: calc(max(16px, env(safe-area-inset-bottom)) + 88px); }
+  body[data-route="intake"] .fl-chat-tip { display: none; }
+  body[data-route="intake"] .fl-chat-fab { height: 48px; min-width: 48px; padding: 0 11px; }
+}
 @media (max-width: 559px) {
   /* No celular o rótulo pode ocupar duas linhas; a linha é reservada em todos os cartões, então os números seguem alinhados. */
   :is(.bo-kpi-label, .stat dt, .indicator:not(.is-locked) > :first-child, .cc-stat-label, .pt-metric-label, .pt-mini-label):not(#c) {
