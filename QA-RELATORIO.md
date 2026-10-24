@@ -106,7 +106,7 @@ Severidade: **Alta** = pode levar a decisão errada do cliente ou quebra séria 
 - **Entrega real de e-mail** (Resend): caixa de entrada, spam, links de descadastro em e-mails reais, renderização em clientes de e-mail.
 - **Outros navegadores e aparelhos reais** (Safari/iOS, Firefox, Android): testado em Chromium emulando 375/768/1280.
 - **Carga e desempenho:** nenhum teste de estresse; Pix simulado levou ~4 s para gerar no ambiente local (a conferir com o Asaas real).
-- **Teste de invasão profissional**, revisão jurídica dos textos (LGPD/Termos) e dados do rodapé (CNPJ/DPO/contato) — continuam no checklist §11A.
+- **Teste de invasão profissional**, dados do rodapé (CNPJ/DPO/contato) — continuam no checklist §11A.
 - **IA em produção** (planejador/roteiros com a chave da Anthropic): qualidade e custo reais.
 - **Open Finance, Dinheiro esquecido pago, Currículo por vaga, Renegociador, Comparador de financiamento**: fora do escopo atual.
 

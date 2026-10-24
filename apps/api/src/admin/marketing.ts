@@ -112,7 +112,7 @@ export async function insights(ctx: Ctx, days: number): Promise<{ days: number; 
       id: 'parcerias_volume', area: 'parcerias', priority: 'media',
       title: 'Números para apresentar a parceiros',
       evidence: `No período: ${p.potential.cases} diagnósticos; ${p.potential.renegotiation} com dívida em atraso (renegociação); ${p.potential.consignadoProfile} com perfil de consignado (CLT, servidor ou INSS com cartão/empréstimo caro); ${p.potential.entrepreneurship} autônomos/outros vínculos (empreendedorismo). Contatos que já autorizaram ser procurados: ${p.consentedCases}.`,
-      actions: ['Para escolas técnicas, SEBRAE e faculdades: use o número de autônomos e as entrevistas de renda extra (' + p.incomeInterviews.total + ' no período, ' + p.incomeInterviews.committed + ' com 10h+ por semana).', 'Para renegociação e crédito: use o perfil de atraso e a faixa de dívida, sem expor pessoas — o consentimento por categoria é o que transforma público em lead.', 'Antes de vender qualquer lead, feche a revisão jurídica (LGPD e superendividamento).'],
+      actions: ['Para escolas técnicas, SEBRAE e faculdades: use o número de autônomos e as entrevistas de renda extra (' + p.incomeInterviews.total + ' no período, ' + p.incomeInterviews.committed + ' com 10h+ por semana).', 'Para renegociação e crédito: use o perfil de atraso e a faixa de dívida, sem expor pessoas — o consentimento por categoria é o que transforma público em lead.'],
       plan: { title: 'Montar o material de apresentação para parceiros', goal: 'Ter 3 conversas com parceiros de capacitação/crédito', segment: 'Parceiros (SEBRAE, escolas técnicas, faculdades, instituições financeiras)', channel: 'Reunião / apresentação' },
     });
   }

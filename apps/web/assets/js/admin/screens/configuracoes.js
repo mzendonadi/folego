@@ -21,7 +21,7 @@ async function siteTab(ctx) {
   const { settings: s, environment: env } = await api.config();
   const mk = await api.mercado().catch(() => null);
   const subs = toggle('cf-subs', 'Prumo: assinaturas (conta por e-mail, cobrança mensal no cartão)', env.emailConfigured ? 'Desligar esconde a área de conta para novos acessos; os dados e as assinaturas continuam guardados.' : 'Precisa do envio de e-mail configurado no servidor.', s.subscriptionsEnabled, !env.emailConfigured && !s.subscriptionsEnabled);
-  const leads = toggle('cf-leads', 'Propostas de parceiros (leads)', 'Deixe desligado até a revisão jurídica (LGPD e superendividamento).', s.leadsEnabled);
+  const leads = toggle('cf-leads', 'Propostas de parceiros (leads)', 'Mostra "Quero propostas para o meu perfil" no resultado e libera o portal dos parceiros.', s.leadsEnabled);
   const ai = toggle('cf-ai', 'IA nas entregas (roteiros e plano de renda extra)', env.aiKeyConfigured ? 'Desligada, as entregas saem pelos modelos fixos, sem custo de IA.' : 'Não há chave da Anthropic configurada no servidor: mesmo ligada, sai o modelo fixo.', s.aiEnabled);
   const paused = toggle('cf-paused', 'Pausar as vendas', 'Ninguém consegue assinar nem gerar Pix novo (visitantes veem um aviso). Quem já assina continua usando e sendo cobrado normalmente. O resultado grátis continua funcionando.', s.salesPaused);
   const cap = el('input', { class: 'input input-sm', type: 'number', min: '0', max: '100000', value: String(s.aiMaxCallsPerDay), 'aria-label': 'Teto diário de chamadas à IA' });
