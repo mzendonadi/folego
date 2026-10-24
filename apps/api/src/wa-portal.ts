@@ -10,7 +10,7 @@ import {
 } from './whatsapp.ts';
 import type { ThreadRow, WaAccount } from './whatsapp.ts';
 import { THREAD_COLS } from './whatsapp.ts';
-import { classifyOutgoing, loadMedia, previewOf, storeMedia } from './wa-media.ts';
+import { baseMime, classifyOutgoing, loadMedia, previewOf, storeMedia, voiceToOgg } from './wa-media.ts';
 
 const iso = (d: unknown): string => new Date(d as string).toISOString();
 const PAGE = 30;
@@ -334,7 +334,13 @@ const waFail = (e: unknown): unknown => (e instanceof WaError ? new AppError(422
 
 /** Guarda um arquivo para enviar depois (foto, áudio, documento, vídeo) ou uma foto de perfil (`avatar`). */
 export async function uploadMedia(ctx: Ctx, partnerId: string, a: { bytes: Buffer; mime: string; filename: string | null; avatar?: boolean }) {
-  const s = await storeMedia(ctx, partnerId, { mime: a.mime, filename: a.filename, bytes: a.bytes, origin: a.avatar ? 'avatar' : 'out' });
+  // Gravação feita no navegador ("voz.m4a"/"voz.ogg"/"voz.mp3"): converte para OGG/Opus mono antes de guardar, para a Meta aceitar (só em produção, onde há ffmpeg).
+  let { bytes, mime, filename } = a;
+  if (!a.avatar && ctx.config.env === 'production' && /^voz\.(m4a|ogg|mp3|webm)$/i.test(filename ?? '') && baseMime(mime).startsWith('audio/')) {
+    const ogg = await voiceToOgg(bytes);
+    if (ogg) { bytes = ogg; mime = 'audio/ogg'; filename = 'voz.ogg'; }
+  }
+  const s = await storeMedia(ctx, partnerId, { mime, filename, bytes, origin: a.avatar ? 'avatar' : 'out' });
   return { id: s.id, kind: s.kind, mime: s.mime, filename: s.filename, size: s.size };
 }
 

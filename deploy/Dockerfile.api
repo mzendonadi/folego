@@ -2,6 +2,9 @@
 # Node 24 executa TypeScript "apagando" os tipos, então não há etapa de compilação.
 FROM node:24-slim
 
+# ffmpeg: converte a gravação de voz do navegador para OGG/Opus mono, o formato que a Meta aceita nas mensagens de voz do WhatsApp.
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 COPY apps/api/package.json apps/api/package-lock.json apps/api/
 RUN cd apps/api && npm ci --omit=dev && npm cache clean --force
