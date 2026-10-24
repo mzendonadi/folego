@@ -209,6 +209,16 @@ export async function whatsappScreen(ctx = {}) {
         ? el('ul', { class: 'bo-list' }, ...items.map((x) => el('li', {}, `${dt(x.at)} · ${x.accepted ? `recebido (${x.evento || x.formato})` : `RECUSADO: ${x.temCodigo ? `código da URL com ${x.tamanhoCodigo} caracteres, segredo do servidor com ${x.tamanhoSegredo}` : 'sem código na URL'}${x.temAssinatura ? ', com assinatura' : ', sem assinatura'}${x.atrasoSegundos !== null && x.atrasoSegundos !== undefined ? ` (aviso de ${x.atrasoSegundos}s atrás)` : ''}`}`)))
         : el('p', { class: 'note note-amber' }, icon('alert'), el('span', {}, 'Nenhum aviso chegou ainda. Sem eles, as mensagens ficam em "enviada" e as respostas dos clientes não aparecem aqui. Confira na Bird se os dois webhooks (inbound e outbound) estão ativos.')));
     }).catch(() => avisos.replaceChildren(el('p', { class: 'fine muted' }, 'Não consegui carregar os avisos agora.')));
+    // Traz as respostas que a Bird recebeu e o webhook não entregou (não duplica; mantém a hora em que o cliente escreveu).
+    const backfill = el('button', { class: 'btn btn-secondary', type: 'button' }, 'Buscar respostas atrasadas');
+    backfill.addEventListener('click', async () => {
+      backfill.disabled = true;
+      try {
+        const r = await api.wa.call('POST', '/respostas-atrasadas', { dias: 14 });
+        toast(r.novas ? `${r.novas} resposta${r.novas === 1 ? '' : 's'} trazida${r.novas === 1 ? '' : 's'} da Bird (${r.recebidasNaBird} recebidas nos últimos 14 dias).` : `Nada novo: as ${r.recebidasNaBird} respostas dos últimos 14 dias já estão aqui.`);
+      } catch (err) { toast(err.message); }
+      backfill.disabled = false;
+    });
     const test = el('button', { class: 'btn btn-secondary', type: 'button' }, 'Testar conexão');
     test.addEventListener('click', async () => {
       test.disabled = true;
@@ -232,7 +242,7 @@ export async function whatsappScreen(ctx = {}) {
     return el('div', { class: 'bo-stack' },
       card(`Conectado: ${acc.displayPhone ?? ''}`,
         el('p', { class: 'muted' }, `Hoje: ${int(acc.usedToday ?? 0)} de ${int(acc.dailyCap)} modelos. ${acc.status === 'ativa' ? 'Envios ativos.' : 'Envios pausados.'} Envio pela Bird (WhatsApp Business API).`),
-        el('div', { class: 'bo-actions' }, test, pause)),
+        el('div', { class: 'bo-actions' }, test, backfill, pause)),
       card('Avisos da Bird (webhook)',
         el('p', { class: 'muted' }, 'Na Bird, aponte o webhook para este endereço com os eventos whatsapp.* (aceita, enviada, entregue, lida, falhou, recebida). É por ele que as mensagens dos clientes chegam aqui.'),
         el('p', {}, el('code', {}, acc.webhookUrl), ' ', copy(acc.webhookUrl))),

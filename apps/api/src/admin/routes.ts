@@ -26,6 +26,7 @@ import * as manage from './manage.ts';
 import * as marketing from './marketing.ts';
 import * as metrics from './metrics.ts';
 import { opportunities } from './oportunidades.ts';
+import { backfillBirdInbound } from '../bird.ts';
 import * as partners from './partners.ts';
 import { ROLE_LABEL, ROLE_PRESETS, ROLES, SECTIONS, SECTION_LABEL } from './permissions.ts';
 import type { Section } from './permissions.ts';
@@ -612,6 +613,14 @@ export function registerGestao(app: FastifyInstance, deps: AdminRouteDeps): void
     await admin(req, 'whatsapp');
     const r = await ctx.db.query<{ occurred_at: Date | string; action: string; data: Record<string, unknown> }>(`SELECT occurred_at, action, data FROM app.audit_log WHERE entity = 'bird_webhook' ORDER BY id DESC LIMIT 25`);
     return { items: r.rows.map((x) => ({ at: new Date(x.occurred_at).toISOString(), accepted: x.action === 'bird_aviso_aceito', ...x.data })) };
+  });
+  // Busca na Bird as respostas que o webhook não entregou (por exemplo, enquanto ele estava recusando os avisos). Não duplica e mantém a hora original.
+  app.post(`${WA}/respostas-atrasadas`, { config: { rateLimit: { max: 6 * scale, timeWindow: '10 minutes' } } }, async (req) => {
+    const a = await house(req);
+    const { dias } = z.strictObject({ dias: z.number().int().min(1).max(30).default(14) }).parse(req.body ?? {});
+    const r = await backfillBirdInbound(ctx, dias, { log: (e) => req.log.warn(e) });
+    await audit(ctx.db, `admin:${a.id}`, 'wa_backfill_inbound', 'partner', HOUSE_PARTNER_ID, { dias, ...r });
+    return r;
   });
   app.get(`${WA}/templates`, async (req) => { await house(req); return waPortal.listTemplates(ctx, HOUSE_PARTNER_ID); });
   app.post(`${WA}/templates`, async (req, reply) => { await house(req); return reply.status(201).send(await waPortal.createTemplate(ctx, HOUSE_PARTNER_ID, waPortal.templateSchema.parse(req.body))); });

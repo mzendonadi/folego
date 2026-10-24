@@ -350,6 +350,36 @@ const classicHook = async (event: unknown, key: string, opts: { badSignature?: b
   return res.statusCode;
 };
 
+test('respostas atrasadas: traz da Bird só as recebidas que o webhook perdeu, com a hora original, sem duplicar', async () => {
+  const { backfillBirdInbound } = await import('../src/bird.ts');
+  const ctx = { db, config: { ...config, bird: { ...config.bird!, classic: true, baseUrl: 'http://bird.invalid' } } } as unknown as import('../src/services.ts').Ctx;
+  const antiga = new Date(Date.now() - 3 * 86_400_000).toISOString();
+  const real = globalThis.fetch;
+  const urls: string[] = [];
+  globalThis.fetch = (async (url: string) => {
+    urls.push(String(url));
+    return new Response(JSON.stringify({ results: [
+      { id: 'bf_1', direction: 'incoming', createdAt: antiga, sender: { contact: { identifierValue: '+5511977770001' } }, body: { type: 'text', text: { text: 'Quero saber mais' } } },
+      { id: 'bf_2', direction: 'outgoing', createdAt: antiga, receiver: { contacts: [{ identifierValue: '+5511977770001' }] }, body: { type: 'text', text: { text: 'Olá' } } },
+    ] }), { status: 200, headers: { 'content-type': 'application/json' } });
+  }) as unknown as typeof fetch;
+  try {
+    const r1 = await backfillBirdInbound(ctx, 7);
+    assert.deepEqual(r1, { lidas: 2, recebidasNaBird: 1, novas: 1 });
+    assert.match(urls[0]!, /\/workspaces\/[^/]+\/channels\/[^/]+\/messages\?limit=100&startAt=/);
+    const m = await db.query<{ created_at: Date; last_inbound_at: Date | null; windowOpen: boolean }>(
+      `SELECT m.created_at, t.last_inbound_at, (t.last_inbound_at > now() - interval '24 hours') AS "windowOpen" FROM app.wa_messages m JOIN app.wa_threads t ON t.id = m.thread_id WHERE m.wa_id = 'bf_1'`,
+    );
+    assert.ok(Math.abs(new Date(m.rows[0]!.created_at).getTime() - Date.parse(antiga)) < 1000, 'a mensagem guarda a hora em que o cliente escreveu');
+    assert.equal(m.rows[0]!.windowOpen, false, 'resposta de 3 dias atrás não abre a janela de 24 h');
+    assert.deepEqual(await backfillBirdInbound(ctx, 7), { lidas: 2, recebidasNaBird: 1, novas: 0 }, 'rodar de novo não duplica');
+  } finally {
+    globalThis.fetch = real;
+    await db.query(`DELETE FROM app.wa_messages WHERE wa_id = 'bf_1'`);
+    await db.query(`DELETE FROM app.wa_threads WHERE partner_id = $1 AND id NOT IN (SELECT thread_id FROM app.wa_messages)`, [HOUSE_PARTNER_ID]);
+  }
+});
+
 test('Bird clássica: webhook assinado (messagebird-signature) traz a resposta e o andamento da mensagem; assinatura errada é recusada', async () => {
   const key = `whsec_${BIRD_RAW.toString('base64')}`; // o segredo é usado como texto puro nesse formato
   const inbound = { service: 'channels', event: 'whatsapp.inbound', payload: { id: 'cls_in_1', channelId: 'c', sender: { contact: { id: 'x', identifierKey: 'phonenumber', identifierValue: '+5534998375296' } }, body: { type: 'text', text: { text: 'Quanto custa?' } }, direction: 'incoming', status: 'delivered' } };

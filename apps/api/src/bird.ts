@@ -8,8 +8,8 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { decryptText, encryptText } from './crypto.ts';
 import { AppError } from './errors.ts';
 import type { Ctx } from './services.ts';
-import { inQuietHours, isOptOut, phoneKey, waPhone } from './whatsapp.ts';
-import { applyBirdStatus, ingestBirdInbound } from './wa-bird.ts';
+import { inQuietHours, isOptOut, loadAccount, phoneKey, waPhone } from './whatsapp.ts';
+import { HOUSE_PARTNER_ID, applyBirdStatus, ensureHouseAccount, ingestBirdInbound } from './wa-bird.ts';
 
 const MAX_ATTEMPTS = 5;
 const COMPANY = 'fl'; // "locatário" da chave de telefone: o próprio Fôlego (os parceiros usam o id deles em whatsapp.ts)
@@ -327,6 +327,63 @@ export async function handleBirdEvent(ctx: Ctx, event: unknown, opts: { log?: (e
     await ctx.db.query(`UPDATE app.msg_log SET status = $2, error = NULL WHERE id = $1`, [m.id, next]);
   }
   return { handled: true };
+}
+
+/**
+ * Traz para a caixa de entrada as respostas que a Bird recebeu mas o webhook não entregou (recusado por assinatura/código, servidor fora do ar).
+ * Lê as mensagens do canal na API clássica da Bird (GET /workspaces/{ws}/channels/{canal}/messages, com limit, pageToken e startAt), fica com as
+ * recebidas e passa cada uma pelo mesmo caminho do webhook (inclui o SAIR). Não duplica (a mensagem é identificada pelo id da Bird) e mantém a hora original.
+ */
+export async function backfillBirdInbound(ctx: Ctx, days = 14, opts: { log?: (e: Record<string, unknown>) => void } = {}): Promise<{ lidas: number; recebidasNaBird: number; novas: number }> {
+  const c = ctx.config.bird;
+  if (!c || !c.classic) throw new AppError(409, 'wa_backfill', 'A busca das respostas atrasadas só existe na Bird clássica (a que está em uso).');
+  const acc = (await loadAccount(ctx, HOUSE_PARTNER_ID)) ?? (await ensureHouseAccount(ctx));
+  if (!acc) throw birdOff();
+  const since = new Date(Date.now() - Math.min(Math.max(days, 1), 30) * 86_400_000).toISOString();
+  const count = async () => Number((await ctx.db.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.wa_messages WHERE partner_id = $1 AND direction = 'in'`, [HOUSE_PARTNER_ID])).rows[0]?.n ?? 0);
+  const before = await count();
+
+  const incoming: Obj[] = [];
+  let lidas = 0;
+  let pageToken = '';
+  for (let page = 0; page < 60; page += 1) {
+    const q = new URLSearchParams({ limit: '100', startAt: since, ...(pageToken ? { pageToken } : {}) });
+    const res = await fetch(`${c.baseUrl}/workspaces/${c.workspaceId}/channels/${c.channelId}/messages?${q}`, { headers: { authorization: `AccessKey ${c.apiKey}` }, signal: AbortSignal.timeout(25_000) });
+    if (!res.ok) throw new AppError(502, 'wa_backfill_bird', `A Bird recusou a consulta (erro ${res.status}).`);
+    const j = obj(await res.json().catch(() => ({})));
+    const results = Array.isArray(j.results) ? (j.results as unknown[]) : [];
+    for (const m of results) {
+      lidas += 1;
+      if (obj(m).direction === 'incoming') incoming.push(obj(m));
+    }
+    pageToken = str(j.nextPageToken) ?? '';
+    if (!pageToken || results.length === 0) break;
+  }
+
+  // Do mais antigo ao mais novo, para as conversas nascerem na ordem certa.
+  incoming.sort((a, b) => String(a.createdAt ?? '').localeCompare(String(b.createdAt ?? '')));
+  const waIds: string[] = [];
+  for (const m of incoming) {
+    const ev = classicToEvent({ event: 'whatsapp.inbound', payload: m }) as { type: string; data: Obj };
+    const id = str(ev.data.id);
+    await handleBirdEvent(ctx, ev, opts);
+    const at = str(m.createdAt);
+    if (id && at && !Number.isNaN(Date.parse(at))) {
+      // A mensagem entra "agora"; devolve a hora em que o cliente realmente escreveu (só se acabou de ser criada por esta busca).
+      await ctx.db.query(`UPDATE app.wa_messages SET created_at = $3 WHERE partner_id = $1 AND wa_id = $2 AND created_at > now() - interval '2 minutes'`, [HOUSE_PARTNER_ID, id, at]);
+      waIds.push(id);
+    }
+  }
+  if (waIds.length) {
+    // A janela de 24 h e a ordem da lista seguem o que o cliente fez de fato, não a hora desta busca.
+    await ctx.db.query(
+      `UPDATE app.wa_threads t SET last_inbound_at = (SELECT max(m.created_at) FROM app.wa_messages m WHERE m.thread_id = t.id AND m.direction = 'in'),
+                                  last_message_at = (SELECT max(m.created_at) FROM app.wa_messages m WHERE m.thread_id = t.id)
+        WHERE t.partner_id = $1 AND t.id IN (SELECT thread_id FROM app.wa_messages WHERE partner_id = $1 AND wa_id = ANY($2::text[]))`,
+      [HOUSE_PARTNER_ID, waIds],
+    );
+  }
+  return { lidas, recebidasNaBird: incoming.length, novas: (await count()) - before };
 }
 
 /** Resumo para o backoffice: como estão os envios dos últimos 30 dias. */
