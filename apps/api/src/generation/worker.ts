@@ -1,7 +1,7 @@
 import type { Ctx } from '../services.ts';
 import { deliverPendingLeads } from '../leads.ts';
 import { processWhatsAppQueue } from '../whatsapp.ts';
-import { processBirdQueue } from '../bird.ts';
+import { processBirdQueue, syncBirdStatuses } from '../bird.ts';
 import { maintenance } from '../subscriptions.ts';
 import { refreshRuntime } from '../runtime.ts';
 import { workerBeat } from '../health.ts';
@@ -250,6 +250,7 @@ export async function runWorker(ctx: Ctx, opts: WorkerOptions, control: { stoppe
       ['leads', () => deliverPendingLeads(ctx, log)],
       ['whatsapp', () => processWhatsAppQueue(ctx, log)],
       ['whatsapp_folego', () => processBirdQueue(ctx, log)],
+      ['whatsapp_status', () => syncBirdStatuses(ctx)],
       ['campanhas', () => dispatchCampaigns(ctx, log)],
       ['lembretes', () => sendDueReminders(ctx, log)],
       ['resumo_semanal', () => sendWeeklyDigests(ctx, log)],

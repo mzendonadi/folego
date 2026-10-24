@@ -380,6 +380,33 @@ test('respostas atrasadas: traz da Bird só as recebidas que o webhook perdeu, c
   }
 });
 
+test('status das enviadas: a conferência na Bird marca "lida" e não rebaixa uma mensagem que já foi lida', async () => {
+  const { syncBirdStatuses } = await import('../src/bird.ts');
+  const ctx = { db, config: { ...config, bird: { ...config.bird!, classic: true, baseUrl: 'http://bird.invalid' } } } as unknown as import('../src/services.ts').Ctx;
+  const { ensureThread } = await import('../src/whatsapp.ts');
+  const thread = (await ensureThread(ctx, HOUSE_PARTNER_ID, '+5511977770009', { name: 'Teste de status' })).id;
+  const ins = (waId: string, status: string) => db.query(`INSERT INTO app.wa_messages(partner_id, thread_id, direction, author, kind, body_enc, wa_id, status) VALUES ($1,$2,'out','humano','text',$3,$4,$5)`, [HOUSE_PARTNER_ID, thread, Buffer.from('x'), waId, status]);
+  await ins('st_read', 'entregue');
+  await ins('st_deliv', 'enviada');
+  await ins('st_back', 'lida');
+  const real = globalThis.fetch;
+  const now = new Date().toISOString();
+  globalThis.fetch = (async () => new Response(JSON.stringify({ results: [
+    { id: 'st_read', direction: 'outgoing', createdAt: now, status: 'read' },
+    { id: 'st_deliv', direction: 'outgoing', createdAt: now, status: 'delivered' },
+    { id: 'st_back', direction: 'outgoing', createdAt: now, status: 'delivered' },
+  ] }), { status: 200, headers: { 'content-type': 'application/json' } })) as unknown as typeof fetch;
+  try {
+    const r = await syncBirdStatuses(ctx, { force: true });
+    assert.deepEqual(r.situacoes, { read: 1, delivered: 2 });
+    const st = Object.fromEntries((await db.query<{ wa_id: string; status: string }>(`SELECT wa_id, status FROM app.wa_messages WHERE wa_id IN ('st_read','st_deliv','st_back')`)).rows.map((x) => [x.wa_id, x.status]));
+    assert.deepEqual(st, { st_read: 'lida', st_deliv: 'entregue', st_back: 'lida' });
+  } finally {
+    globalThis.fetch = real;
+    await db.query(`DELETE FROM app.wa_messages WHERE wa_id IN ('st_read','st_deliv','st_back')`);
+  }
+});
+
 test('Bird clássica: webhook assinado (messagebird-signature) traz a resposta e o andamento da mensagem; assinatura errada é recusada', async () => {
   const key = `whsec_${BIRD_RAW.toString('base64')}`; // o segredo é usado como texto puro nesse formato
   const inbound = { service: 'channels', event: 'whatsapp.inbound', payload: { id: 'cls_in_1', channelId: 'c', sender: { contact: { id: 'x', identifierKey: 'phonenumber', identifierValue: '+5534998375296' } }, body: { type: 'text', text: { text: 'Quanto custa?' } }, direction: 'incoming', status: 'delivered' } };

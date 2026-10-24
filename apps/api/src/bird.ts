@@ -393,6 +393,52 @@ export async function backfillBirdInbound(ctx: Ctx, days = 14, opts: { log?: (e:
   return { lidas, recebidasNaBird: incoming.length, novas: (await count()) - before, maisAntiga };
 }
 
+let lastStatusSync = 0;
+/**
+ * Confere na Bird o andamento (enviada, entregue, lida) das mensagens que mandamos pela caixa de entrada nas últimas horas.
+ * O webhook faz isso em tempo real; esta conferência cobre o que ele perdeu e é o que dá o "lida" quando o aviso não vem.
+ * Lê a lista do canal (mais nova primeiro) e aplica cada situação pelo mesmo caminho do webhook. `situacoes` mostra o que a Bird devolveu.
+ */
+export async function syncBirdStatuses(ctx: Ctx, opts: { hours?: number; force?: boolean } = {}): Promise<{ conferidas: number; atualizadas: number; situacoes: Record<string, number> }> {
+  const none = { conferidas: 0, atualizadas: 0, situacoes: {} as Record<string, number> };
+  const c = ctx.config.bird;
+  if (!c || !c.classic) return none;
+  if (!opts.force && Date.now() - lastStatusSync < 120_000) return none;
+  lastStatusSync = Date.now();
+  const hours = Math.min(Math.max(opts.hours ?? 72, 1), 24 * 14);
+  const open = await ctx.db.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.wa_messages WHERE partner_id = $1 AND direction = 'out' AND status IN ('enviada','entregue') AND created_at > now() - make_interval(hours => $2)`, [HOUSE_PARTNER_ID, hours]);
+  if (Number(open.rows[0]?.n ?? 0) === 0) return none;
+  const since = new Date(Date.now() - hours * 3_600_000).toISOString();
+  const before = await ctx.db.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.wa_messages WHERE partner_id = $1 AND direction = 'out' AND status = 'lida'`, [HOUSE_PARTNER_ID]);
+  const situacoes: Record<string, number> = {};
+  let conferidas = 0;
+  let pageToken = '';
+  for (let page = 0; page < 10; page += 1) {
+    const q = new URLSearchParams({ limit: '100', ...(pageToken ? { pageToken } : {}) });
+    const res = await fetch(`${c.baseUrl}/workspaces/${c.workspaceId}/channels/${c.channelId}/messages?${q}`, { headers: { authorization: `AccessKey ${c.apiKey}` }, signal: AbortSignal.timeout(25_000) });
+    if (!res.ok) throw new AppError(502, 'wa_status_bird', `A Bird recusou a consulta (erro ${res.status}).`);
+    const j = obj(await res.json().catch(() => ({})));
+    const results = Array.isArray(j.results) ? (j.results as unknown[]) : [];
+    let passou = false;
+    for (const raw of results) {
+      const m = obj(raw);
+      const at = str(m.createdAt);
+      if (at && at < since) { passou = true; continue; }
+      if (m.direction !== 'outgoing') continue;
+      const status = str(m.status) ?? 'sem situação';
+      situacoes[status] = (situacoes[status] ?? 0) + 1;
+      const ev = classicToEvent({ event: 'whatsapp.outbound', payload: m }) as { type: string; data: Obj };
+      if (!(ev.type in STATUS_OF)) continue;
+      conferidas += 1;
+      await applyBirdStatus(ctx, ev.type, ev.data, str(m.reason) ?? ev.type);
+    }
+    pageToken = str(j.nextPageToken) ?? '';
+    if (!pageToken || results.length === 0 || passou) break;
+  }
+  const after = await ctx.db.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.wa_messages WHERE partner_id = $1 AND direction = 'out' AND status = 'lida'`, [HOUSE_PARTNER_ID]);
+  return { conferidas, atualizadas: Number(after.rows[0]?.n ?? 0) - Number(before.rows[0]?.n ?? 0), situacoes };
+}
+
 /** Resumo para o backoffice: como estão os envios dos últimos 30 dias. */
 export async function birdStats(ctx: Ctx): Promise<{ enabled: boolean; queued: number; accepted: number; delivered: number; read: number; failed: number; optedOut: number }> {
   const s = await ctx.db.query<{ queued: string; accepted: string; delivered: string; read: string; failed: string }>(

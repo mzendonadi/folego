@@ -77,18 +77,22 @@ export const VOICE_DEFAULT: VoiceEncoding = { rate: 16000, bitrate: '24k', appli
 export async function voiceToOgg(bytes: Buffer, enc: VoiceEncoding = VOICE_DEFAULT): Promise<Buffer | null> {
   const dir = await mkdtemp(join(tmpdir(), 'folego-voz-'));
   const input = join(dir, 'entrada');
+  const pcm = join(dir, 'pcm.wav');
   const output = join(dir, 'saida.ogg');
+  const ffmpeg = (args: string[]) => new Promise<void>((resolve, reject) => {
+    const p = spawn('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...args], { stdio: ['ignore', 'ignore', 'pipe'] });
+    let err = '';
+    p.stderr.on('data', (d: Buffer) => { err += d.toString().slice(0, 300); });
+    const timer = setTimeout(() => { p.kill('SIGKILL'); reject(new Error('ffmpeg demorou demais')); }, 20_000);
+    p.on('error', (e) => { clearTimeout(timer); reject(e); });
+    p.on('close', (code) => { clearTimeout(timer); if (code === 0) resolve(); else reject(new Error(`ffmpeg saiu com ${code}: ${err}`)); });
+  });
   try {
     await writeFile(input, bytes);
-    await new Promise<void>((resolve, reject) => {
-      const args = ['-hide_banner', '-loglevel', 'error', '-y', '-i', input, '-vn', '-map_metadata', '-1', ...(enc.bitexact ? ['-fflags', '+bitexact', '-flags:a', '+bitexact'] : []), '-ac', '1', '-ar', String(enc.rate), '-c:a', 'libopus', '-b:a', enc.bitrate, '-application', enc.application, ...(enc.cbr ? ['-vbr', 'off', '-frame_duration', '20'] : []), '-f', 'ogg', output];
-      const p = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
-      let err = '';
-      p.stderr.on('data', (d: Buffer) => { err += d.toString().slice(0, 300); });
-      const timer = setTimeout(() => { p.kill('SIGKILL'); reject(new Error('ffmpeg demorou demais')); }, 20_000);
-      p.on('error', (e) => { clearTimeout(timer); reject(e); });
-      p.on('close', (code) => { clearTimeout(timer); if (code === 0) resolve(); else reject(new Error(`ffmpeg saiu com ${code}: ${err}`)); });
-    });
+    // Passo 1: a gravação do navegador (MP4 fragmentado, tempos irregulares) vira PCM limpo, com a linha do tempo começando em zero.
+    // Passo 2: só então codifica em Opus. Gravação que passou direto do MP4 ao OGG o Android recusava; a que partiu de áudio limpo tocou.
+    await ffmpeg(['-i', input, '-vn', '-map_metadata', '-1', '-af', 'aresample=async=1:first_pts=0', '-ac', '1', '-ar', String(enc.rate), '-c:a', 'pcm_s16le', '-f', 'wav', pcm]);
+    await ffmpeg(['-i', pcm, '-vn', '-map_metadata', '-1', ...(enc.bitexact ? ['-fflags', '+bitexact', '-flags:a', '+bitexact'] : []), '-ac', '1', '-ar', String(enc.rate), '-c:a', 'libopus', '-b:a', enc.bitrate, '-application', enc.application, ...(enc.cbr ? ['-vbr', 'off', '-frame_duration', '20'] : []), '-f', 'ogg', output]);
     const out = await readFile(output);
     return out.length > 0 && out.subarray(0, 4).toString('latin1') === 'OggS' ? out : null;
   } catch {
