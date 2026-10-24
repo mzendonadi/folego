@@ -407,6 +407,27 @@ test('status das enviadas: a conferência na Bird marca "lida" e não rebaixa um
   }
 });
 
+test('quem respondeu, leu: só as mensagens nossas anteriores à resposta viram "lida"', async () => {
+  const { ensureThread, markReadByReply } = await import('../src/whatsapp.ts');
+  const ctx = { db, config } as unknown as import('../src/services.ts').Ctx;
+  const thread = (await ensureThread(ctx, HOUSE_PARTNER_ID, '+5511977770010', { name: 'Teste resposta' })).id;
+  const ins = (dir: 'in' | 'out', waId: string, status: string, ago: string) => db.query(
+    `INSERT INTO app.wa_messages(partner_id, thread_id, direction, author, kind, body_enc, wa_id, status, created_at) VALUES ($1,$2,$3,$4,'text',$5,$6,$7, now() - $8::interval)`,
+    [HOUSE_PARTNER_ID, thread, dir, dir === 'in' ? 'contato' : 'humano', Buffer.from('x'), waId, status, ago],
+  );
+  await ins('out', 'rr_antes', 'entregue', '3 hours');
+  await ins('in', 'rr_resp', 'recebida', '2 hours');
+  await ins('out', 'rr_depois', 'entregue', '1 hour');
+  await ins('out', 'rr_falhou', 'falhou', '3 hours');
+  try {
+    await markReadByReply(ctx);
+    const st = Object.fromEntries((await db.query<{ wa_id: string; status: string }>(`SELECT wa_id, status FROM app.wa_messages WHERE wa_id LIKE 'rr_%'`)).rows.map((x) => [x.wa_id, x.status]));
+    assert.deepEqual(st, { rr_antes: 'lida', rr_resp: 'recebida', rr_depois: 'entregue', rr_falhou: 'falhou' });
+  } finally {
+    await db.query(`DELETE FROM app.wa_messages WHERE wa_id LIKE 'rr_%'`);
+  }
+});
+
 test('Bird clássica: webhook assinado (messagebird-signature) traz a resposta e o andamento da mensagem; assinatura errada é recusada', async () => {
   const key = `whsec_${BIRD_RAW.toString('base64')}`; // o segredo é usado como texto puro nesse formato
   const inbound = { service: 'channels', event: 'whatsapp.inbound', payload: { id: 'cls_in_1', channelId: 'c', sender: { contact: { id: 'x', identifierKey: 'phonenumber', identifierValue: '+5534998375296' } }, body: { type: 'text', text: { text: 'Quanto custa?' } }, direction: 'incoming', status: 'delivered' } };

@@ -8,7 +8,7 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { decryptText, encryptText } from './crypto.ts';
 import { AppError } from './errors.ts';
 import type { Ctx } from './services.ts';
-import { inQuietHours, isOptOut, loadAccount, phoneKey, waPhone } from './whatsapp.ts';
+import { inQuietHours, isOptOut, loadAccount, markReadByReply, phoneKey, waPhone } from './whatsapp.ts';
 import { HOUSE_PARTNER_ID, applyBirdStatus, ensureHouseAccount, ingestBirdInbound } from './wa-bird.ts';
 
 const MAX_ATTEMPTS = 5;
@@ -405,6 +405,7 @@ export async function syncBirdStatuses(ctx: Ctx, opts: { hours?: number; force?:
   if (!c || !c.classic) return none;
   if (!opts.force && Date.now() - lastStatusSync < 120_000) return none;
   lastStatusSync = Date.now();
+  await markReadByReply(ctx); // quem respondeu, leu (a Bird não devolve o aviso de leitura deste canal)
   const hours = Math.min(Math.max(opts.hours ?? 72, 1), 24 * 14);
   const open = await ctx.db.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.wa_messages WHERE partner_id = $1 AND direction = 'out' AND status IN ('enviada','entregue') AND created_at > now() - make_interval(hours => $2)`, [HOUSE_PARTNER_ID, hours]);
   if (Number(open.rows[0]?.n ?? 0) === 0) return none;

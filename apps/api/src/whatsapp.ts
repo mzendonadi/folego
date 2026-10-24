@@ -570,6 +570,7 @@ export async function ingestInbound(ctx: Ctx, acc: WaAccount, m: InboundIn, opts
   );
   if ((ins.rowCount ?? 0) === 0) return false;
   await ctx.db.query(`UPDATE app.wa_threads SET last_inbound_at = now(), last_message_at = now(), unread_n = unread_n + 1, state = 'aberta' WHERE id = $1`, [thread.id]);
+  await markReadByReply(ctx).catch(() => 0);
   // quem escreveu primeiro permitiu a conversa
   if (thread.contact_id) await ctx.db.query(`UPDATE app.partner_contacts SET wa_optin = 'sim' WHERE id = $1 AND wa_optin = 'desconhecido'`, [thread.contact_id]);
   if (m.kind === 'text' && isOptOut(text)) {
@@ -581,6 +582,20 @@ export async function ingestInbound(ctx: Ctx, acc: WaAccount, m: InboundIn, opts
   }
   await maybeAgentReply(ctx, acc, { ...thread, last_inbound_at: new Date().toISOString() }, previewOf(m.kind, text), opts);
   return true;
+}
+
+/**
+ * Quem responde, leu: toda mensagem nossa (enviada ou entregue) que tem uma resposta do contato depois dela passa a "lida".
+ * Cobre o canal em que a Meta/Bird não devolve o aviso de leitura (a Bird clássica só informa enviada, entregue e falhou).
+ * Vale pela hora real da resposta, então a busca retroativa também acerta.
+ */
+export async function markReadByReply(ctx: Ctx): Promise<number> {
+  const r = await ctx.db.query(
+    `UPDATE app.wa_messages o SET status = 'lida'
+      WHERE o.direction = 'out' AND o.status IN ('enviada','entregue') AND o.created_at > now() - interval '30 days'
+        AND EXISTS (SELECT 1 FROM app.wa_messages i WHERE i.thread_id = o.thread_id AND i.direction = 'in' AND i.created_at > o.created_at)`,
+  );
+  return r.rowCount ?? 0;
 }
 
 const STATUS_RANK: Record<string, number> = { fila: 0, enviada: 1, entregue: 2, lida: 3 };
