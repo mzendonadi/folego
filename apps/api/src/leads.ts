@@ -379,7 +379,7 @@ export async function partnerLeads(ctx: Ctx, partnerId: string): Promise<Record<
        JOIN app.partner_campaigns c ON c.id = d.campaign_id
        LEFT JOIN app.lead_contacts lc ON lc.case_id = d.case_id
        LEFT JOIN app.lead_profiles lp ON lp.case_id = d.case_id
-      WHERE d.partner_id = $1 ORDER BY d.created_at DESC LIMIT 200`,
+      WHERE d.partner_id = $1 AND lc.case_id IS NOT NULL ORDER BY d.created_at DESC LIMIT 200`, // quem revogou perde o contato (revokeLead apaga lead_contacts) e some da lista
     [partnerId],
   );
   return r.rows.map((x) => {

@@ -220,7 +220,7 @@ export async function viewFolego(ctx) {
     );
   };
   const reload = async () => {
-    leads = (await ctx.call('GET', '/partner/leads')).leads;
+    leads = (await ctx.call('GET', '/partner/leads')).leads.filter((l) => !l.revoked);
     draw();
   };
   const setStatus = async (l, status) => {

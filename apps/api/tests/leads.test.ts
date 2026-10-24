@@ -178,14 +178,13 @@ test('fluxo completo: consentimento → entrega assinada ao parceiro → portal 
   assert.equal((await admin('POST', `/api/partner/leads/${id}/status`, { body: { status: 'contacted' }, headers: { authorization: `Bearer ${betaLogin.json.token}` } })).status, 404);
   assert.equal((await admin('POST', `/api/partner/leads/${id}/status`, { body: { status: 'contacted' }, headers: auth })).status, 200);
 
-  // revogação: apaga contato e perfil; o parceiro vê que o titular revogou e perde o contato
+  // revogação: apaga contato e perfil; o contato some da listagem do parceiro
   const revoke = await c('DELETE', url);
   assert.equal(revoke.status, 204);
   assert.equal((await db.query(`SELECT 1 FROM app.lead_contacts WHERE case_id = $1`, [caseId])).rows.length, 0);
   assert.equal((await db.query(`SELECT 1 FROM app.lead_profiles WHERE case_id = $1`, [caseId])).rows.length, 0);
   const after = await admin('GET', '/api/partner/leads', { headers: auth });
-  assert.equal(after.json.leads[0].revoked, true);
-  assert.equal(after.json.leads[0].phone, null);
+  assert.equal(after.json.leads.length, 0); // quem revogou some da listagem do parceiro
   assert.equal((await c('DELETE', url)).status, 409); // já revogado
   const again = await c('GET', `/api/orders/${orderId}/delivery`);
   assert.equal(again.json.leads.active, null);
