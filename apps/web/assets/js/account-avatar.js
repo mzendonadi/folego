@@ -3,6 +3,7 @@
 import { API_BASE } from '../config.js';
 import { el, toast } from './dom.js';
 import { confirmDialog } from './confirm.js';
+import { platformOf } from './wa-links.js';
 
 const SIZE = 192;
 const MAX_BYTES = 36 * 1024;
@@ -88,15 +89,21 @@ export async function photoToAvatar(file) {
 export function avatarCard(ctx, openProfile) {
   const acc = ctx.acc;
   const has = Boolean(acc.profile?.avatarAt);
-  const input = el('input', { type: 'file', accept: 'image/*', hidden: true, 'aria-label': 'Escolher foto do perfil' });
-  const pick = el('button', { class: 'btn btn-primary btn-sm', type: 'button' }, has ? 'Trocar foto' : 'Escolher foto');
+  // No celular a pessoa escolhe entre tirar a foto agora (câmera frontal) e pegar da galeria; no computador, só arquivo das pastas.
+  const phone = platformOf() !== 'outro';
+  const gallery = el('input', { type: 'file', accept: 'image/*', hidden: true, 'aria-label': 'Escolher foto do perfil' });
+  const camera = phone ? el('input', { type: 'file', accept: 'image/*', capture: 'user', hidden: true, 'aria-label': 'Tirar foto do perfil com a câmera' }) : null;
+  const pick = el('button', { class: 'btn btn-primary btn-sm', type: 'button' }, phone ? 'Escolher da galeria' : (has ? 'Trocar foto' : 'Escolher foto'));
+  const shoot = phone ? el('button', { class: 'btn btn-primary btn-sm', type: 'button' }, 'Tirar foto agora') : null;
   const remove = has ? el('button', { class: 'btn btn-secondary btn-sm', type: 'button' }, 'Remover foto') : null;
-  pick.addEventListener('click', () => input.click());
-  input.addEventListener('change', async () => {
+  pick.addEventListener('click', () => gallery.click());
+  shoot?.addEventListener('click', () => camera.click());
+  const onFile = async (input) => {
     const file = input.files?.[0];
     input.value = '';
     if (!file) return;
     pick.disabled = true;
+    if (shoot) shoot.disabled = true;
     try {
       const out = await ctx.api.saveAvatar(await photoToAvatar(file));
       acc.profile = { ...acc.profile, avatarAt: out.avatarAt };
@@ -105,9 +112,12 @@ export function avatarCard(ctx, openProfile) {
       ctx.refresh();
     } catch (e) {
       pick.disabled = false;
+      if (shoot) shoot.disabled = false;
       toast(e?.message === 'foto_grande' ? 'Essa foto ficou grande demais. Tente outra.' : e?.status === 415 ? 'Não consegui ler essa imagem. Tente outra foto.' : 'Não consegui salvar a foto agora.');
     }
-  });
+  };
+  gallery.addEventListener('change', () => onFile(gallery));
+  camera?.addEventListener('change', () => onFile(camera));
   if (remove) {
     remove.addEventListener('click', async () => {
       if (!(await confirmDialog({ title: 'Remover a foto?', text: 'O ícone volta a mostrar a inicial do seu nome.', confirmLabel: 'Remover' }))) return;
@@ -122,7 +132,7 @@ export function avatarCard(ctx, openProfile) {
   }
   return el('section', { class: 'card d-section avatar-card' },
     el('h2', {}, 'Foto do perfil'),
-    el('div', { class: 'avatar-row' }, el('span', { class: 'avatar-big' }, face(acc, 'avatar-img')), el('div', { class: 'row-actions' }, pick, remove, input)),
+    el('div', { class: 'avatar-row' }, el('span', { class: 'avatar-big' }, face(acc, 'avatar-img')), el('div', { class: 'row-actions' }, shoot, pick, remove, gallery, camera)),
     el('p', { class: 'fine muted' }, 'Aparece no ícone do topo. Só você vê. Reduzimos a foto no seu aparelho antes de guardar.'),
   );
 }
