@@ -17,6 +17,9 @@ x-api-env: &api-env
   # IA dos roteiros. Sem ANTHROPIC_API_KEY o worker usa só os modelos determinísticos (o cliente recebe o conteúdo do mesmo jeito).
   ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
   ANTHROPIC_WORKSPACE_ID: ${ANTHROPIC_WORKSPACE_ID:-}
+  # Voz do assistente no WhatsApp (áudio vira texto). Sem OPENAI_API_KEY o assistente avisa que ainda não ouve áudio.
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  TRANSCRIBE_MODEL: ${TRANSCRIBE_MODEL:-whisper-1}
   # E-mails que podem virar dono do backoffice (folego.online/gestao) no primeiro acesso. Não é segredo.
   ADMIN_EMAILS: ${ADMIN_EMAILS:-}
   AI_MODEL: ${AI_MODEL:-claude-sonnet-5}

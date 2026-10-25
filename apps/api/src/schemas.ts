@@ -173,6 +173,7 @@ const entrySchema = z.strictObject({
   category: z.string().max(30).optional(),
   walletId: z.string().uuid().nullable().optional(),
   source: z.enum(['manual', 'import']).optional(),
+  transfer: z.boolean().optional(),
 });
 export const addEntriesSchema = z.object({ entries: z.array(entrySchema).min(1).max(500) });
 export const setCategorySchema = z.object({ category: z.string().max(30) });
@@ -282,6 +283,33 @@ export const cardImportSchema = z.strictObject({
     category: z.string().max(30).optional(),
   })).max(500),
   credits: z.array(z.strictObject({ date: isoDate, amountCents: cardCents, note: z.string().trim().max(120) })).max(200),
+  /** Pagamentos do topo da fatura: quitam a fatura anterior. */
+  payments: z.array(z.strictObject({ date: isoDate, amountCents: cardCents, note: z.string().trim().max(120) })).max(50).optional(),
+  invoice: z.strictObject({
+    key: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
+    periodStart: isoDate.nullable().optional(),
+    closingOn: isoDate,
+    dueOn: isoDate.nullable().optional(),
+    totalCents: z.number().int().min(0).max(100_000_000_00),
+    minPaymentCents: z.number().int().min(0).max(100_000_000_00).nullable().optional(),
+    previousCents: z.number().int().min(0).max(100_000_000_00).nullable().optional(),
+    previousKey: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).nullable().optional(),
+    history: z.array(z.strictObject({
+      key: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
+      periodStart: isoDate,
+      closingOn: isoDate,
+      totalCents: z.number().int().min(0).max(100_000_000_00),
+      paidCents: z.number().int().min(0).max(100_000_000_00).nullable(),
+    })).max(12).optional(),
+  }).optional(),
+  card: z.strictObject({
+    name: z.string().trim().min(1).max(40).optional(),
+    limitCents: z.number().int().min(0).max(100_000_000_000).optional(),
+    closingDay: z.number().int().min(1).max(31).optional(),
+    dueDay: z.number().int().min(1).max(31).optional(),
+    last4: z.string().regex(/^\d{4}$/).nullable().optional(),
+    availableCents: z.number().int().min(0).max(100_000_000_000).nullable().optional(),
+  }).optional(),
 });
 
 export type CreateCaseInput = z.infer<typeof createCaseSchema>;

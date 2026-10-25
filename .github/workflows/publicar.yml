@@ -145,6 +145,7 @@ jobs:
           PLUGGY_CONNECT_URL: ${{ secrets.PLUGGY_CONNECT_URL }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           ANTHROPIC_WORKSPACE_ID: ${{ secrets.ANTHROPIC_WORKSPACE_ID }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           BIRD_API_KEY: ${{ secrets.BIRD_API_KEY }}
           BIRD_WEBHOOK_SECRET: ${{ secrets.BIRD_WEBHOOK_SECRET }}
           BIRD_WHATSAPP_FROM: ${{ secrets.BIRD_WHATSAPP_FROM }}
@@ -158,6 +159,8 @@ jobs:
           # IA (roteiros, planejador e chat FôlIA): só grava se o segredo existe; sem ele, o que já está no servidor continua.
           [ -n "$ANTHROPIC_API_KEY" ] && printf 'ANTHROPIC_API_KEY=%s\n' "$ANTHROPIC_API_KEY" >> "$out"
           [ -n "$ANTHROPIC_WORKSPACE_ID" ] && printf 'ANTHROPIC_WORKSPACE_ID=%s\n' "$ANTHROPIC_WORKSPACE_ID" >> "$out"
+          # Voz do assistente no WhatsApp (áudio vira texto): só liga com a chave; sem ela o assistente avisa que ainda não ouve áudio.
+          [ -n "$OPENAI_API_KEY" ] && printf 'OPENAI_API_KEY=%s\n' "$OPENAI_API_KEY" >> "$out"
           [ -n "$TURNSTILE_SITE_KEY" ] && printf 'TURNSTILE_SITE_KEY=%s\n' "$TURNSTILE_SITE_KEY" >> "$out"
           [ -n "$TURNSTILE_SECRET" ]   && printf 'TURNSTILE_SECRET=%s\n' "$TURNSTILE_SECRET" >> "$out"
           [ -n "$META_CAPI_TOKEN" ]     && printf 'META_CAPI_TOKEN=%s\n' "$META_CAPI_TOKEN" >> "$out"

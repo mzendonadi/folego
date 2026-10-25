@@ -18,11 +18,11 @@ export async function loadCoachFacts(ctx: Ctx, subscriberId: string): Promise<{ 
   const month = monthOf(today);
   const q = ctx.db;
   const [sums, avg, days, base, cat, rem, wal, goals, contribs, poup, recent, pay7, gc7] = await Promise.all([
-    q.query<{ income: string; spent: string }>(`SELECT coalesce(sum(amount_cents) FILTER (WHERE amount_cents > 0), 0)::text AS income, coalesce(-sum(amount_cents) FILTER (WHERE amount_cents < 0), 0)::text AS spent FROM app.ledger_entries WHERE subscriber_id = $1 AND to_char(occurred_on, 'YYYY-MM') = $2`, [subscriberId, month]),
-    q.query<{ spent: string }>(`SELECT coalesce(-sum(amount_cents), 0)::text AS spent FROM app.ledger_entries WHERE subscriber_id = $1 AND amount_cents < 0 AND occurred_on > ($2::date - 90)`, [subscriberId, today]),
+    q.query<{ income: string; spent: string }>(`SELECT coalesce(sum(amount_cents) FILTER (WHERE amount_cents > 0), 0)::text AS income, coalesce(-sum(amount_cents) FILTER (WHERE amount_cents < 0), 0)::text AS spent FROM app.ledger_entries WHERE subscriber_id = $1 AND transfer_kind IS NULL AND to_char(occurred_on, 'YYYY-MM') = $2`, [subscriberId, month]),
+    q.query<{ spent: string }>(`SELECT coalesce(-sum(amount_cents), 0)::text AS spent FROM app.ledger_entries WHERE subscriber_id = $1 AND amount_cents < 0 AND transfer_kind IS NULL AND occurred_on > ($2::date - 90)`, [subscriberId, today]),
     q.query<{ d7: string; d14: string }>(`SELECT count(DISTINCT occurred_on) FILTER (WHERE occurred_on > ($2::date - 7))::text AS d7, count(DISTINCT occurred_on) FILTER (WHERE occurred_on > ($2::date - 14))::text AS d14 FROM app.ledger_entries WHERE subscriber_id = $1`, [subscriberId, today]),
     q.query<{ category: string; limit_cents: string }>(`SELECT category, limit_cents FROM app.budget_limits WHERE subscriber_id = $1`, [subscriberId]),
-    q.query<{ category: string; total: string }>(`SELECT category, (-sum(amount_cents))::text AS total FROM app.ledger_entries WHERE subscriber_id = $1 AND to_char(occurred_on, 'YYYY-MM') = $2 AND amount_cents < 0 GROUP BY category`, [subscriberId, month]),
+    q.query<{ category: string; total: string }>(`SELECT category, (-sum(amount_cents))::text AS total FROM app.ledger_entries WHERE subscriber_id = $1 AND to_char(occurred_on, 'YYYY-MM') = $2 AND amount_cents < 0 AND transfer_kind IS NULL GROUP BY category`, [subscriberId, month]),
     q.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.reminders WHERE subscriber_id = $1`, [subscriberId]),
     q.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.wallets WHERE subscriber_id = $1`, [subscriberId]),
     q.query<{ n: string; saved: string }>(`SELECT count(*)::text AS n, coalesce(sum(g.saved_cents + coalesce((SELECT sum(c.amount_cents) FROM app.goal_contributions c WHERE c.goal_id = g.id), 0)), 0)::text AS saved FROM app.goals g WHERE g.subscriber_id = $1`, [subscriberId]),
@@ -108,7 +108,7 @@ export async function coachOverview(ctx: Ctx, subscriberId: string) {
   const cmp = await ctx.db.query<{ m: string; category: string; total: string }>(
     `SELECT CASE WHEN to_char(occurred_on, 'YYYY-MM') = $2 THEN 'cur' ELSE 'prev' END AS m, category, (-sum(amount_cents))::text AS total
        FROM app.ledger_entries
-      WHERE subscriber_id = $1 AND amount_cents < 0
+      WHERE subscriber_id = $1 AND amount_cents < 0 AND transfer_kind IS NULL
         AND ((to_char(occurred_on, 'YYYY-MM') = $2 AND occurred_on <= $3::date)
           OR (to_char(occurred_on, 'YYYY-MM') = $4 AND extract(day FROM occurred_on) <= extract(day FROM $3::date)))
       GROUP BY 1, 2`,

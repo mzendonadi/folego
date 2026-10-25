@@ -35,11 +35,11 @@ export async function buildPlannerFacts(ctx: Ctx, subscriberId: string): Promise
   const month = monthOf(today);
   const sums = await ctx.db.query<{ income: string; spent: string }>(
     `SELECT coalesce(sum(amount_cents) FILTER (WHERE amount_cents > 0), 0)::text AS income, coalesce(-sum(amount_cents) FILTER (WHERE amount_cents < 0), 0)::text AS spent
-       FROM app.ledger_entries WHERE subscriber_id = $1 AND to_char(occurred_on, 'YYYY-MM') = $2`,
+       FROM app.ledger_entries WHERE subscriber_id = $1 AND transfer_kind IS NULL AND to_char(occurred_on, 'YYYY-MM') = $2`,
     [subscriberId, month],
   );
   const cats = await ctx.db.query<{ category: string; total: string }>(
-    `SELECT category, (-sum(amount_cents))::text AS total FROM app.ledger_entries WHERE subscriber_id = $1 AND to_char(occurred_on, 'YYYY-MM') = $2 AND amount_cents < 0 GROUP BY category ORDER BY sum(amount_cents) LIMIT 4`,
+    `SELECT category, (-sum(amount_cents))::text AS total FROM app.ledger_entries WHERE subscriber_id = $1 AND to_char(occurred_on, 'YYYY-MM') = $2 AND amount_cents < 0 AND transfer_kind IS NULL GROUP BY category ORDER BY sum(amount_cents) LIMIT 4`,
     [subscriberId, month],
   );
   const rem = await ctx.db.query<{ title: string; due_on: Date | string; amount_cents: string | null }>(

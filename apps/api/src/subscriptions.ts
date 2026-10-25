@@ -14,7 +14,7 @@ import { ownedWalletId, walletOverdraftAlerts } from './account-extras.ts';
 import { monthLimits } from './account-debts.ts';
 import { createCustomCategory, customCategories, deleteCustomCategory, isAllowedCategory } from './categories.ts';
 import { markMissionDone } from './coach-program.ts';
-import { materializeInstallments } from './cards.ts';
+import { classifyStatementPayments, linkStatementPayment, materializeInstallments } from './cards.ts';
 import { billingView, CARD_GRACE_DAYS } from './billing.ts';
 import { isDemoSubscriber } from './demo.ts';
 import type { BillingView } from './billing.ts';
@@ -250,17 +250,22 @@ export interface NewEntry {
   category?: string | undefined;
   source?: 'manual' | 'import' | undefined;
   walletId?: string | null | undefined;
+  /** Pagamento de fatura de cartão. Não informado: no extrato importado o sistema reconhece sozinho; true/false é a escolha da pessoa na prévia. */
+  transfer?: boolean | undefined;
 }
 
-export async function addEntries(ctx: Ctx, subscriberId: string, entries: NewEntry[]): Promise<{ added: number; duplicates: number; ids: string[] }> {
+export async function addEntries(ctx: Ctx, subscriberId: string, entries: NewEntry[]): Promise<{ added: number; duplicates: number; ids: string[]; transfers: number }> {
   await requireFeature(ctx, subscriberId, 'ledger');
   if (entries.length > MAX_ENTRIES_PER_CALL) throw new AppError(422, 'too_many', `Envie até ${MAX_ENTRIES_PER_CALL} lançamentos por vez.`);
   if (entries.some((e) => e.source === 'import')) await requireFeature(ctx, subscriberId, 'import');
   let added = 0;
   let duplicates = 0;
+  let transfers = 0;
   const ids: string[] = [];
   await ctx.db.tx(async (q) => {
-    for (const e of entries) {
+    // extrato importado: quais saídas são pagamento de fatura de cartão (o gasto já está nas compras do cartão)
+    const guess = await classifyStatementPayments(q, subscriberId, entries.map((e) => ({ date: e.date, amountCents: e.source === 'import' && e.transfer !== false ? e.amountCents : 0, note: e.note })));
+    for (const [i, e] of entries.entries()) {
       const category = e.category && (await isAllowedCategory(q, subscriberId, e.category)) ? e.category : categorize(e.note, e.amountCents);
       if (e.source === 'import') {
         const dup = await q.query(`SELECT 1 FROM app.ledger_entries WHERE subscriber_id = $1 AND occurred_on = $2 AND amount_cents = $3 AND note = $4 LIMIT 1`, [subscriberId, e.date, e.amountCents, e.note]);
@@ -273,9 +278,14 @@ export async function addEntries(ctx: Ctx, subscriberId: string, entries: NewEnt
       const ins = await q.query<{ id: string }>(`INSERT INTO app.ledger_entries(subscriber_id, occurred_on, amount_cents, category, note, source, wallet_id) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`, [subscriberId, e.date, e.amountCents, category, e.note.slice(0, 120), e.source ?? 'manual', walletId]);
       if (ins.rows[0]) ids.push(ins.rows[0].id);
       added += 1;
+      const match = e.amountCents < 0 && e.transfer !== false ? (guess[i] ?? (e.transfer === true ? { cardId: null, paymentId: null, invoiceKey: null } : null)) : null;
+      if (match && ins.rows[0]) {
+        await linkStatementPayment(q, subscriberId, { id: ins.rows[0].id, date: e.date, amountCents: e.amountCents, walletId }, match);
+        transfers += 1;
+      }
     }
   });
-  return { added, duplicates, ids };
+  return { added, duplicates, ids, transfers };
 }
 
 export async function deleteEntry(ctx: Ctx, subscriberId: string, id: string): Promise<void> {
@@ -291,12 +301,13 @@ export async function setEntryCategory(ctx: Ctx, subscriberId: string, id: strin
   if (r.rowCount === 0) throw notFound();
 }
 
-async function loadLedger(ctx: Ctx, subscriberId: string, fromDate: string): Promise<LedgerEntry[]> {
-  const r = await ctx.db.query<{ id: string; occurred_on: Date | string; amount_cents: string; category: string; note: string }>(
-    `SELECT id, occurred_on, amount_cents, category, note FROM app.ledger_entries WHERE subscriber_id = $1 AND occurred_on >= $2 ORDER BY occurred_on DESC, created_at DESC LIMIT 5000`,
+/** Lançamentos para análise. Pagamento de fatura de cartão (transferência) fica de fora, a não ser que se peça para listar. */
+async function loadLedger(ctx: Ctx, subscriberId: string, fromDate: string, withTransfers = false): Promise<LedgerEntry[]> {
+  const r = await ctx.db.query<{ id: string; occurred_on: Date | string; amount_cents: string; category: string; note: string; transfer_kind: string | null }>(
+    `SELECT id, occurred_on, amount_cents, category, note, transfer_kind FROM app.ledger_entries WHERE subscriber_id = $1 AND occurred_on >= $2 ${withTransfers ? '' : 'AND transfer_kind IS NULL'} ORDER BY occurred_on DESC, created_at DESC LIMIT 5000`,
     [subscriberId, fromDate],
   );
-  return r.rows.map((x) => ({ id: x.id, date: new Date(x.occurred_on).toISOString().slice(0, 10), amountCents: num(x.amount_cents), category: x.category, note: x.note }));
+  return r.rows.map((x) => ({ id: x.id, date: new Date(x.occurred_on).toISOString().slice(0, 10), amountCents: num(x.amount_cents), category: x.category, note: x.note, ...(x.transfer_kind ? { transfer: true } : {}) }));
 }
 
 async function loadLimits(ctx: Ctx, subscriberId: string): Promise<Record<string, number>> {
@@ -371,10 +382,11 @@ export async function monthView(ctx: Ctx, subscriberId: string, month: string) {
   if (planHas(plan, 'cards')) await materializeInstallments(ctx, subscriberId); // parcelas do cartão entram no mês certo
   const today = todaySaoPaulo();
   const from = `${monthOf(new Date(Date.parse(`${month}-01T00:00:00Z`) - 62 * 86_400_000).toISOString().slice(0, 10))}-01`; // 2 meses antes, para comparar
-  const entries = await loadLedger(ctx, subscriberId, from);
+  const everything = await loadLedger(ctx, subscriberId, from, true);
+  const entries = everything.filter((e) => !e.transfer); // análises (gasto, renda, ritmo, alertas) não contam pagamento de fatura
   const limits = { ...(await loadLimits(ctx, subscriberId)), ...(await monthLimits(ctx, subscriberId, month)) };
   const goals = planHas(plan, 'goals') ? await loadGoals(ctx, subscriberId) : [];
-  const inMonth = entries.filter((e) => monthOf(e.date) === month);
+  const inMonth = everything.filter((e) => monthOf(e.date) === month); // a lista mostra tudo, com o pagamento de fatura marcado
   type Meta = { id: string; wallet_id: string | null; card_id: string | null; card_name: string | null; installment_no: number | null; installment_total: number | null };
   const metas = inMonth.length
     ? await ctx.db.query<Meta>(
@@ -387,7 +399,7 @@ export async function monthView(ctx: Ctx, subscriberId: string, month: string) {
     month,
     entries: inMonth.map((e) => {
       const m = metaOf.get(e.id as string);
-      return { ...e, walletId: m?.wallet_id ?? null, cardId: m?.card_id ?? null, cardName: m?.card_name ?? null, installmentNo: m?.installment_no ?? null, installmentTotal: m?.installment_total ?? null };
+      return { ...e, transfer: Boolean(e.transfer), walletId: m?.wallet_id ?? null, cardId: m?.card_id ?? null, cardName: m?.card_name ?? null, installmentNo: m?.installment_no ?? null, installmentTotal: m?.installment_total ?? null };
     }),
     summary: summarizeMonth(entries, limits, month),
     pace: buildPace(entries, month, today), // ritmo do mês, mapa de calor e maior gasto (Visão geral)

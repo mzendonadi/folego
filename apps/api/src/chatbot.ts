@@ -80,9 +80,9 @@ PRODUTOS AVULSOS (Fôlego)
 - Calculadora de prescrição e guias de direitos são gratuitos.
 
 PRUMO (assinatura mensal paga NO CARTÃO DE CRÉDITO, todo mês; cancelamento em um clique dentro do app. A assinatura do Prumo NÃO é por Pix.)
-- Controle: controle de gastos e orçamento, importação de extrato (CSV/OFX), alertas e lembretes, controle de dívidas, treinador financeiro limitado, indicadores de mercado.
-- Ousado: tudo do Controle + metas, treinador financeiro completo (IA), jornadas, orçamento da casa/família, cartões de crédito, e-book de presente, cenários.
-- Desbravador: tudo do Ousado + simulador, planejador com IA, mercado profissional (dólar e histórico) e o Mapa da Virada incluso.
+- Controle: controle de gastos e orçamento, Lançar rápido (escrever ou fotografar o comprovante), assistente no WhatsApp (a pessoa manda "mercado 45" e o gasto é lançado), importação de extrato (CSV/OFX/PDF), alertas e lembretes, controle de dívidas, treinador financeiro limitado, indicadores de mercado.
+- Ousado: tudo do Controle + metas, treinador financeiro completo (IA), jornadas, orçamento da casa/família, cartões de crédito (limite, fatura, vencimento e parcelas; a fatura do cartão fica separada do extrato, sem gasto em dobro), e-book de presente, cenários.
+- Desbravador: tudo do Ousado + importar a fatura do cartão em PDF (o Prumo lê, confere a soma, atualiza o limite e cadastra o cartão novo; também dá para mandar o PDF pelo WhatsApp), estratégias e custo do rotativo, simulador, planejador com IA, mercado profissional (dólar e histórico) e o Mapa da Virada incluso.
 - Mapa da Virada para assinante Ousado tem preço especial (pago no Pix, por ser compra avulsa; acesso de 90 dias); no Desbravador já está incluso. Confirme o valor na tabela de preços abaixo.
 
 COMO APRESENTAR OS PLANOS DO PRUMO (quando perguntarem o que o Prumo é, os planos, diferenças ou "o que eu levo em cada um")

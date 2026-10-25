@@ -26,7 +26,13 @@ export function assistantCard(ctx) {
       });
       parts.push(
         el('p', { class: 'note' }, icon('check'), el('span', {}, `Conectado ao WhatsApp ${s.phone}. Mande mensagem para ${s.number}.`)),
-        el('ul', { class: 'tick-list left' }, ...['"uber 18,90 ontem" lança um gasto', 'SALDO mostra o mês', 'CONTAS lista o que vence em 7 dias', 'DESFAZER apaga o último lançamento'].map((t) => el('li', {}, icon('check'), t))),
+        el('ul', { class: 'tick-list left' }, ...[
+          '"uber 18,90 ontem" lança um gasto',
+          ...(s.abilities?.voice ? ['Mande um áudio falando: "mercado quarenta e cinco reais"'] : []),
+          ...(s.abilities?.photo ? ['Mande a foto do cupom ou da nota e diga a categoria: "despesas mercado"'] : []),
+          ...(s.abilities?.invoice && ctx.has('cards_pro') ? ['Mande o PDF da fatura e diga "lançar fatura em anexo em cartão de crédito"'] : []),
+          'SALDO mostra o mês', 'CONTAS lista o que vence em 7 dias', 'DESFAZER apaga o último lançamento',
+        ].map((t) => el('li', {}, icon('check'), t))),
         off,
       );
     } else if (s.pending) {

@@ -55,10 +55,23 @@ export interface CardCharge {
   note?: string;
   installmentNo?: number | null;
   installmentTotal?: number | null;
+  /** Fatura (AAAA-MM do fechamento) em que a compra foi cobrada, quando veio da fatura em PDF. Sem ela, vale o ciclo do cartão. */
+  invoiceKey?: string | null;
 }
 export interface CardPayment {
   date: string;
   amountCents: number;
+  /** Fatura que este pagamento quitou, quando a fatura em PDF informa. Sem ela, abate a fatura fechada mais antiga em aberto. */
+  invoiceKey?: string | null;
+}
+/** Fatura como o banco informou no PDF: vale mais do que a soma das linhas e do que o ciclo calculado. */
+export interface OfficialInvoice {
+  key: string;
+  closingOn: string;
+  dueOn: string | null;
+  totalCents: number;
+  /** Quanto o banco diz que já foi pago dessa fatura. */
+  paidCents: number | null;
 }
 export interface InstallmentPlan {
   perCents: number;
@@ -112,25 +125,38 @@ export function summarizeCard(
   payments: CardPayment[],
   plans: InstallmentPlan[],
   today: string,
+  official: OfficialInvoice[] = [],
 ): CardSummary {
   const totals = new Map<string, { cents: number; count: number }>();
   for (const c of charges) {
-    const key = invoiceKeyOf(c.date, card);
+    const key = c.invoiceKey ?? invoiceKeyOf(c.date, card);
     const t = totals.get(key) ?? { cents: 0, count: 0 };
     t.cents += c.amountCents;
     t.count += 1;
     totals.set(key, t);
   }
+  // A fatura que o banco informou no PDF manda no total (a soma das linhas pode ter ficado de fora algo que o banco cobrou).
+  const offByKey = new Map(official.map((o) => [o.key, o]));
+  for (const o of official) totals.set(o.key, { cents: o.totalCents, count: totals.get(o.key)?.count ?? 0 });
   const currentKey = invoiceKeyOf(today, card);
   if (!totals.has(currentKey)) totals.set(currentKey, { cents: 0, count: 0 });
   const keys = [...totals.keys()].sort();
-  // O que foi pago abate as faturas mais antigas primeiro.
-  let pool = payments.reduce((s, p) => s + p.amountCents, 0);
+  // Pagamento com fatura definida abate ESSA fatura (se ela não está na lista, é de uma fatura anterior que o Prumo não acompanha e não mexe em nenhuma outra).
+  // Pagamento sem fatura definida abate as faturas mais antigas primeiro.
+  const keyed = new Map<string, number>();
+  let pool = 0;
+  for (const p of payments) {
+    if (p.invoiceKey) keyed.set(p.invoiceKey, (keyed.get(p.invoiceKey) ?? 0) + p.amountCents);
+    else pool += p.amountCents;
+  }
   const asc: InvoiceView[] = keys.map((key) => {
     const t = totals.get(key)!;
-    const d = invoiceDates(key, card);
-    const paidCents = Math.min(pool, t.cents);
-    pool -= paidCents;
+    const o = offByKey.get(key);
+    const d = o ? { closingOn: o.closingOn, dueOn: o.dueOn ?? invoiceDates(key, card).dueOn } : invoiceDates(key, card);
+    let paidCents = Math.min(Math.max(keyed.get(key) ?? 0, o?.paidCents ?? 0), t.cents);
+    const free = Math.min(pool, t.cents - paidCents);
+    paidCents += free;
+    pool -= free;
     const remainingCents = t.cents - paidCents;
     const closed = d.closingOn <= today;
     const daysToDue = diffDays(today, d.dueOn);

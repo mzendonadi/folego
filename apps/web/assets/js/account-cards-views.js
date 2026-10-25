@@ -6,7 +6,8 @@ import { brl, percentToBps, todayISO } from './format.js';
 import { moneyInput } from './money.js';
 import { confirmDialog } from './confirm.js';
 import { categorySelect, NEW_CAT } from './account-categories.js';
-import { PLANS, CATEGORY_LABEL, parseCardInvoice } from '../vendor/engine.js';
+import { PLANS, CATEGORY_LABEL } from '../vendor/engine.js';
+import { invoiceImportPanel } from './account-invoice.js';
 
 const card = (...c) => el('section', { class: 'card d-section' }, ...c.filter(Boolean));
 const dayBr = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
@@ -226,65 +227,6 @@ function installmentsBlock(ctx, c) {
 }
 
 // ---------------------------------------------------------------- Desbravador: fatura em PDF e rotativo
-function importPanel(ctx, c) {
-  const k = c.id.slice(0, 6);
-  const input = el('input', { type: 'file', accept: '.pdf,application/pdf', hidden: true, 'aria-label': 'Fatura do cartão em PDF' });
-  const pick = el('button', { class: 'btn btn-secondary', type: 'button' }, icon('list'), 'Escolher a fatura em PDF');
-  pick.addEventListener('click', () => input.click());
-  const box = el('div', { class: 'import-preview', hidden: true });
-  input.addEventListener('change', async () => {
-    const file = input.files?.[0];
-    input.value = '';
-    if (!file) return;
-    toast('Lendo a fatura no seu aparelho…');
-    let parsed;
-    try {
-      const { extractPdfText } = await import('../vendor/pdfread.js');
-      const { text } = await extractPdfText(await file.arrayBuffer(), 24);
-      parsed = parseCardInvoice(text);
-    } catch {
-      return toast('Não consegui ler esse PDF. Se ele for uma foto ou estiver protegido, baixe a fatura de novo no app do banco.');
-    }
-    if (parsed.entries.length === 0) return toast('Não achei compras nesse PDF. Confira se é a fatura do cartão (e não o comprovante de pagamento).');
-    const picks = parsed.entries.map((e) => ({ e, on: true }));
-    const total = el('strong', {});
-    const sum = () => { total.textContent = brl(picks.filter((p) => p.on).reduce((s, p) => s + p.e.amountCents, 0)); };
-    const checks = picks.map((p, i) => {
-      const cb = el('input', { type: 'checkbox', checked: true, id: `imp-${k}-${i}`, 'aria-label': `Importar ${p.e.note}` });
-      cb.addEventListener('change', () => { p.on = cb.checked; sum(); });
-      return cb;
-    });
-    sum();
-    const m = parsed.meta;
-    const verdict = parsed.check
-      ? el('p', { class: `note ${parsed.check.ok ? 'note-green' : 'note-amber'}` }, icon(parsed.check.ok ? 'check' : 'alert'), el('span', {}, parsed.check.ok ? `A soma bate com o total da fatura (${brl(parsed.check.expectedCents)}).` : `A fatura diz ${brl(parsed.check.expectedCents)} e eu li ${brl(parsed.check.parsedCents)}. A diferença pode ser juros, encargos ou saldo de fatura anterior. Confira as linhas antes de importar.`))
-      : el('p', { class: 'fine' }, 'O PDF não traz um total para conferir a soma. Confira as linhas antes de importar.');
-    const go = el('button', { class: 'btn btn-primary', type: 'button' }, 'Importar para este cartão');
-    go.addEventListener('click', async () => {
-      go.disabled = true;
-      try {
-        const r = await ctx.api.importCardInvoice(c.id, {
-          entries: picks.filter((p) => p.on).map((p) => ({ date: p.e.date, amountCents: p.e.amountCents, note: p.e.note, installmentNo: p.e.installmentNo, installmentTotal: p.e.installmentTotal })),
-          credits: parsed.credits.map((x) => ({ date: x.date, amountCents: x.amountCents, note: x.note })),
-        });
-        toast(`${r.added} compras importadas${r.credits ? `, ${r.credits} crédito(s) abatido(s)` : ''}${r.duplicates ? `, ${r.duplicates} repetidas ignoradas` : ''}.`);
-        ctx.refresh();
-      } catch {
-        go.disabled = false;
-        toast('Não consegui importar agora.');
-      }
-    });
-    box.replaceChildren(
-      el('p', { class: 'fine' }, `Li ${parsed.entries.length} compras${parsed.credits.length ? ` e ${parsed.credits.length} crédito(s) ou pagamento(s)` : ''}${parsed.skipped ? ` (${parsed.skipped} linhas não reconhecidas)` : ''}${m.dueOn ? `. Vencimento: ${dayBr(m.dueOn)}` : ''}. Desmarque o que não quiser.`),
-      verdict,
-      el('ul', { class: 'entries import-list' }, ...picks.map((p, i) => el('li', { class: 'wallet-row' }, el('label', { class: 'check', for: checks[i].id }, checks[i], el('span', {}, el('strong', {}, p.e.note), el('span', { class: 'muted fine' }, ` ${dayBr(p.e.date)}${p.e.installmentNo ? ` · parcela ${p.e.installmentNo}/${p.e.installmentTotal}` : ''}`))), el('strong', { class: 'entry-amount neg' }, brl(p.e.amountCents)), el('span', {})))),
-      parsed.credits.length ? el('p', { class: 'fine' }, `Créditos que abatem a fatura: ${parsed.credits.map((x) => `${x.note} ${brl(x.amountCents)}`).join('; ')}.`) : null,
-      el('div', { class: 'button-row' }, go, el('span', { class: 'fine' }, 'Marcadas: ', total)),
-    );
-    box.hidden = false;
-  });
-  return el('div', { class: 'cc-panel-body' }, el('p', { class: 'muted' }, 'Baixe a fatura em PDF no app do banco e escolha o arquivo. Ele é lido aqui, no seu aparelho: o PDF não é enviado. As compras parceladas ("03/10") já criam as parcelas que faltam, e o que já estiver lançado é ignorado.'), pick, input, box);
-}
 
 function rotativoPanel(ctx, c) {
   const fixed = moneyInput({ id: `rv-${c.id.slice(0, 8)}`, ariaLabel: 'Quanto você consegue pagar por mês' });
@@ -354,7 +296,7 @@ function cardTile(ctx, c, data, wallets) {
     { id: 'compra', label: 'Nova compra', build: () => purchasePanel(ctx, c) },
     { id: 'pagar', label: 'Pagar fatura', build: () => paymentPanel(ctx, c, wallets) },
     { id: 'faturas', label: 'Faturas', build: () => invoicesPanel(ctx, c) },
-    ...(data.pro ? [{ id: 'pdf', label: 'Importar fatura (PDF)', build: () => importPanel(ctx, c) }, { id: 'rotativo', label: 'E se eu pagar só parte?', build: () => rotativoPanel(ctx, c) }] : []),
+    ...(data.pro ? [{ id: 'pdf', label: 'Importar fatura (PDF)', build: () => invoiceImportPanel(ctx, c) }, { id: 'rotativo', label: 'E se eu pagar só parte?', build: () => rotativoPanel(ctx, c) }] : []),
     { id: 'editar', label: 'Editar cartão', build: () => cardForm(ctx, c) },
   ]);
   return el('article', { class: `card cc-tile cc-${s.level}` },
@@ -391,10 +333,11 @@ export function viewCartoes(ctx) {
     el('summary', { class: 'btn btn-primary' }, icon('plus'), 'Adicionar cartão'),
     cardForm(ctx));
   const total = d.totals;
+  const quickImport = d.pro ? el('details', { class: 'cc-add' }, el('summary', { class: 'btn btn-secondary' }, icon('list'), 'Importar fatura (PDF)'), invoiceImportPanel(ctx, null)) : null;
   out.push(card(
     el('div', { class: 'cc-top' },
       el('div', {}, el('h2', {}, 'Cartões de crédito'), el('p', { class: 'muted' }, d.cards.length ? `${d.cards.length} de ${d.maxCards} cartões${total.limitCents ? ` · limite total ${brl(total.limitCents)}` : ''}.` : 'Cadastre seus cartões para acompanhar limite, fatura e vencimento. Compra no cartão conta como gasto do mês; pagar a fatura não conta de novo.')),
-      d.cards.length < d.maxCards ? add : el('p', { class: 'fine' }, d.pro ? 'Você chegou ao limite de cartões.' : `Seu plano comporta ${d.maxCards} cartões; o Desbravador comporta mais.`)),
+      el('div', { class: 'cc-top-actions' }, d.cards.length < d.maxCards ? add : el('p', { class: 'fine' }, d.pro ? 'Você chegou ao limite de cartões.' : `Seu plano comporta ${d.maxCards} cartões; o Desbravador comporta mais.`), quickImport)),
     d.cards.length > 0 && total.limitCents > 0 ? el('div', { class: 'lis-block' },
       el('div', { class: `lis-meter ${total.usedPct >= 90 ? 'lis-over' : total.usedPct >= 70 ? 'lis-high' : ''}`, role: 'img', 'aria-label': `${total.usedPct}% do limite total em uso` }, el('span', { style: `width:${Math.min(100, total.usedPct)}%` })),
       el('p', { class: 'fine' }, `Em uso: ${brl(total.usedCents)} (${total.usedPct}%). Disponível: ${brl(total.availableCents)}.`)) : null,
@@ -428,6 +371,6 @@ export function viewCartoes(ctx) {
       el('div', { class: 'button-row no-print' }, go)));
   }
 
-  if (d.cards.length > 0) out.push(el('p', { class: 'fine muted' }, 'Dica: se você também importa o extrato do banco, a linha de "pagamento de fatura" pode aparecer como gasto em dobro. Apague essa linha ou não lance as compras do cartão aqui.'));
+  if (d.cards.length > 0) out.push(el('p', { class: 'fine muted' }, 'Extrato do banco e fatura do cartão não se misturam: a linha de "pagamento de fatura" do extrato é reconhecida e não conta como gasto, porque as compras já estão no cartão. Importe a fatura aqui, em Cartões.'));
   return el('div', { class: 'acc-stack cc-screen' }, ...out);
 }

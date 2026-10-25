@@ -40,6 +40,9 @@ export interface Config {
   /** IA dos roteiros. Sem chave, o worker usa só os modelos determinísticos. */
   anthropicApiKey: string | null;
   anthropicWorkspaceId: string | null;
+  /** Voz do assistente no WhatsApp: converte o áudio em texto. Sem chave, o assistente avisa que ainda não ouve áudio. */
+  openaiApiKey: string | null;
+  transcribeModel: string;
   aiModel: string;
   aiMaxCallsPerDay: number;
   /** Roda o worker dentro do processo da API (desenvolvimento). Em produção, o worker é um container próprio. */
@@ -153,6 +156,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     cookieSecure: mode === 'production',
     anthropicApiKey: env.ANTHROPIC_API_KEY ? env.ANTHROPIC_API_KEY : null,
     anthropicWorkspaceId: env.ANTHROPIC_WORKSPACE_ID ? env.ANTHROPIC_WORKSPACE_ID : null,
+    openaiApiKey: env.OPENAI_API_KEY ? env.OPENAI_API_KEY : null,
+    transcribeModel: env.TRANSCRIBE_MODEL ? env.TRANSCRIBE_MODEL : 'whisper-1',
     aiModel: env.AI_MODEL ?? 'claude-sonnet-5',
     aiMaxCallsPerDay: Number(env.AI_MAX_CALLS_PER_DAY ?? 200),
     workerInline: env.WORKER_INLINE ? env.WORKER_INLINE === '1' : mode !== 'production',

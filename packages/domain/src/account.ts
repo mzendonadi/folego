@@ -409,6 +409,8 @@ export interface LedgerEntry {
   amountCents: number;
   category: string;
   note: string;
+  /** Pagamento de fatura de cartão: sai da conta, mas o gasto já está nas compras do cartão. Fica fora de gastos, renda e análises. */
+  transfer?: boolean;
 }
 
 export interface MonthSummary {

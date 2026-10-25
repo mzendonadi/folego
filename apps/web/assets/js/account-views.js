@@ -16,9 +16,9 @@ import { quickEntryCard } from './account-quick.js';
 import { paceCard } from './account-visual.js';
 import { viewCofre } from './account-vault.js';
 import { NEW_CAT, catLabel, catList, categoryEditor } from './account-categories.js';
-import { PLANS, CATEGORIES, CATEGORY_LABEL, categorize, parseExtract, parsePdfExtract, simulateInvestment } from '../vendor/engine.js';
+import { PLANS, CATEGORIES, CATEGORY_LABEL, cardPaymentHint, categorize, detectDocumentKind, parseExtract, parsePdfExtract, simulateInvestment } from '../vendor/engine.js';
 
-export const FEATURE_LABEL = { health: 'Nota de saúde financeira', debts: 'Dívidas com plano de quitação', reminders: 'Lembretes de contas por e-mail', ledger: 'Controle de gastos', import: 'Importar extrato', alerts: 'Alertas de limite', coach_limited: 'Treinador (3 dicas)', goals: 'Metas com aportes', coach: 'Treinador completo', simulator: 'Simulador de investimento', planner: 'Planejador com IA', household: 'Conta compartilhada (1 pessoa no Ousado, até 3 no Desbravador)', recurring: 'Detector de assinaturas e cobranças recorrentes', scenarios: 'Simulador "e se...?" de cenários', ebook: 'eBook de presente no seu e-mail (50+ páginas)', journeys: 'Todas as jornadas do coach', market: 'Cenário econômico (Selic, inflação, CDI)', market_pro: 'Dólar e histórico de 12 meses', cards: 'Cartões de crédito: limite, fatura, vencimento e parcelas', cards_pro: 'Cartões avançado: fatura em PDF, estratégias e custo do rotativo', map_member: 'Mapa da Virada com preço de assinante (Pix, 90 dias)', map_included: 'Mapa da Virada incluso, enquanto a assinatura valer' };
+export const FEATURE_LABEL = { health: 'Nota de saúde financeira', debts: 'Dívidas com plano de quitação', reminders: 'Lembretes de contas por e-mail', ledger: 'Controle de gastos, com Lançar rápido (texto, voz ou foto) e assistente no WhatsApp', import: 'Importar extrato (CSV, OFX ou PDF), com o pagamento da fatura fora dos gastos', alerts: 'Alertas de limite', coach_limited: 'Treinador (3 dicas)', goals: 'Metas com aportes', coach: 'Treinador completo', simulator: 'Simulador de investimento', planner: 'Planejador com IA', household: 'Conta compartilhada (1 pessoa no Ousado, até 3 no Desbravador)', recurring: 'Detector de assinaturas e cobranças recorrentes', scenarios: 'Simulador "e se...?" de cenários', ebook: 'eBook de presente no seu e-mail (50+ páginas)', journeys: 'Todas as jornadas do coach', market: 'Cenário econômico (Selic, inflação, CDI)', market_pro: 'Dólar e histórico de 12 meses', cards: 'Cartões de crédito: limite, fatura, vencimento e parcelas, sem misturar com o extrato', cards_pro: 'Cartões avançado: fatura em PDF lida e conferida (também pelo WhatsApp), cartão novo cadastrado na hora, estratégias e custo do rotativo', map_member: 'Mapa da Virada com preço de assinante (Pix, 90 dias)', map_included: 'Mapa da Virada incluso, enquanto a assinatura valer' };
 
 /** Abas da conta. `needs` = recurso do plano exigido (a aba aparece sempre; sem o recurso mostra o que o upgrade traz). */
 export const TABS = [
@@ -299,14 +299,16 @@ export function viewLancamentos(ctx) {
       try {
         let added = 0;
         let duplicates = 0;
+        let transfers = 0;
         for (let i = 0; i < parsed.length; i += 400) {
           const res = await ctx.api.addEntries(parsed.slice(i, i + 400).map((x) => ({ ...x, source: 'import', category: categorize(x.note, x.amountCents), walletId: walletSel?.value || null })));
           added += res.added;
           duplicates += res.duplicates ?? 0;
+          transfers += res.transfers ?? 0;
         }
         const month = dominantMonth(parsed);
         if (added > 0 && month) ctx.month = month;
-        toast(`${added} lançamentos importados${added > 0 && month ? ` em ${monthLabel(month)}` : ''}${duplicates ? `, ${duplicates} repetidos ignorados` : ''}${skipped ? `, ${skipped} linhas não reconhecidas` : ''}.`);
+        toast(`${added} lançamentos importados${added > 0 && month ? ` em ${monthLabel(month)}` : ''}${transfers ? `, ${transfers} pagamento(s) de fatura fora dos gastos` : ''}${duplicates ? `, ${duplicates} repetidos ignorados` : ''}${skipped ? `, ${skipped} linhas não reconhecidas` : ''}.`);
         ctx.refresh();
       } catch {
         toast('Não consegui importar agora.');
@@ -328,7 +330,15 @@ export function viewLancamentos(ctx) {
           else chosen.delete(i);
           refreshLabel();
         });
-        return el('li', { class: 'entry-row' }, box, el('span', { class: 'entry-date muted' }, fmtDay(x.date)), el('span', { class: 'entry-note' }, x.note), el('strong', { class: `entry-amount ${x.amountCents < 0 ? 'neg' : 'pos'}` }, brl(x.amountCents)));
+        // saída que parece pagamento de fatura de cartão: o gasto já está nas compras do cartão, então não conta de novo
+        const hint = x.amountCents < 0 ? cardPaymentHint(x.note) : null;
+        let payTag = null;
+        if (hint) {
+          const tick = el('input', { type: 'checkbox', ...(hint === 'forte' ? { checked: true } : {}), 'aria-label': `${x.note} é pagamento de fatura de cartão` });
+          tick.addEventListener('change', () => { x.transfer = tick.checked; });
+          payTag = el('label', { class: 'fine muted pay-tag' }, tick, hint === 'forte' ? ' pagamento de fatura (não conta como gasto)' : ' é pagamento de fatura? (não conta como gasto)');
+        }
+        return el('li', { class: 'entry-row' }, box, el('span', { class: 'entry-date muted' }, fmtDay(x.date)), el('span', { class: 'entry-note' }, x.note, payTag), el('strong', { class: `entry-amount ${x.amountCents < 0 ? 'neg' : 'pos'}` }, brl(x.amountCents)));
       });
       const verdict = check
         ? check.ok
@@ -365,6 +375,15 @@ export function viewLancamentos(ctx) {
           toast('Lendo o PDF no seu aparelho…');
           const { extractPdfText } = await import('../vendor/pdfread.js');
           const { text } = await extractPdfText(await file.arrayBuffer(), 36);
+          if (detectDocumentKind(text) === 'fatura') {
+            // fatura de cartão não é extrato: as compras vão para o cartão certo, não para a conta
+            input.value = '';
+            if (ctx.has('cards')) {
+              toast('Isso é uma fatura de cartão. Abri Cartões: importe por lá para as compras irem ao cartão certo.');
+              return ctx.goTab('cartoes');
+            }
+            return toast('Isso é uma fatura de cartão, não um extrato de conta. As faturas são importadas em Cartões, no plano Ousado ou Desbravador.');
+          }
           ({ entries: parsed, skipped, check } = parsePdfExtract(text));
           if (parsed.length === 0) {
             input.value = '';
@@ -423,7 +442,7 @@ export function viewLancamentos(ctx) {
     return el(
       'li', { class: 'entry-row' },
       el('span', { class: 'entry-date muted' }, fmtDay(x.date)),
-      el('span', { class: 'entry-note' }, x.note, x.cardName ? el('span', { class: 'wallet-tag' }, ` · ${x.cardName}${x.installmentNo ? ` ${x.installmentNo}/${x.installmentTotal}` : ''}`) : x.walletId && walletName.get(x.walletId) ? el('span', { class: 'wallet-tag' }, ` · ${walletName.get(x.walletId)}`) : null),
+      el('span', { class: 'entry-note' }, x.note, x.transfer ? el('span', { class: 'wallet-tag' }, ' · pagamento de fatura (fora dos gastos)') : null, x.cardName ? el('span', { class: 'wallet-tag' }, ` · ${x.cardName}${x.installmentNo ? ` ${x.installmentNo}/${x.installmentTotal}` : ''}`) : x.walletId && walletName.get(x.walletId) ? el('span', { class: 'wallet-tag' }, ` · ${walletName.get(x.walletId)}`) : null),
       cat,
       el('strong', { class: `entry-amount ${x.amountCents < 0 ? 'neg' : 'pos'}` }, brl(x.amountCents)),
       del,

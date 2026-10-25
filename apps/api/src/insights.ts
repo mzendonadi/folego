@@ -13,7 +13,7 @@ export async function recurringReport(ctx: Ctx, subscriberId: string) {
   await requireFeature(ctx, subscriberId, 'recurring');
   const today = todaySaoPaulo();
   const rows = await ctx.db.query<{ occurred_on: Date; amount_cents: string; note: string }>(
-    `SELECT occurred_on, amount_cents, note FROM app.ledger_entries WHERE subscriber_id = $1 AND amount_cents < 0 AND occurred_on > ($2::date - 420) ORDER BY occurred_on`,
+    `SELECT occurred_on, amount_cents, note FROM app.ledger_entries WHERE subscriber_id = $1 AND amount_cents < 0 AND transfer_kind IS NULL AND occurred_on > ($2::date - 420) ORDER BY occurred_on`,
     [subscriberId, today],
   );
   const report = detectRecurring(rows.rows.map((r) => ({ date: iso(r.occurred_on), amountCents: num(r.amount_cents), note: r.note })), today);
@@ -50,7 +50,7 @@ export async function scenarioBase(ctx: Ctx, subscriberId: string): Promise<{ ba
             coalesce(sum(amount_cents) FILTER (WHERE amount_cents > 0), 0)::text AS income,
             coalesce(-sum(amount_cents) FILTER (WHERE amount_cents < 0 AND category = ANY($3::text[])), 0)::text AS essential,
             coalesce(-sum(amount_cents) FILTER (WHERE amount_cents < 0 AND category <> 'dividas' AND NOT (category = ANY($3::text[]))), 0)::text AS flexible
-       FROM app.ledger_entries WHERE subscriber_id = $1 AND occurred_on > ($2::date - 92)`,
+       FROM app.ledger_entries WHERE subscriber_id = $1 AND transfer_kind IS NULL AND occurred_on > ($2::date - 92)`,
     [subscriberId, today, ESSENTIAL],
   );
   const s = sums.rows[0];

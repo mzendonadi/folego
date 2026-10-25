@@ -167,7 +167,7 @@ export async function sendWeeklyDigests(ctx: Ctx, opts: { log?: (e: Record<strin
   );
   let sent = 0;
   for (const b of who.rows) {
-    const spent = await ctx.db.query<{ category: string; total: string }>(`SELECT category, (-sum(amount_cents))::text AS total FROM app.ledger_entries WHERE subscriber_id = $1 AND occurred_on > ($2::date - 7) AND amount_cents < 0 GROUP BY category ORDER BY sum(amount_cents) LIMIT 3`, [b.id, today]);
+    const spent = await ctx.db.query<{ category: string; total: string }>(`SELECT category, (-sum(amount_cents))::text AS total FROM app.ledger_entries WHERE subscriber_id = $1 AND occurred_on > ($2::date - 7) AND amount_cents < 0 AND transfer_kind IS NULL GROUP BY category ORDER BY sum(amount_cents) LIMIT 3`, [b.id, today]);
     const totalSpent = spent.rows.reduce((s, x) => s + num(x.total), 0);
     const due = await ctx.db.query<{ title: string; due_on: Date | string }>(`SELECT title, due_on FROM app.reminders WHERE subscriber_id = $1 AND done_at IS NULL AND due_on BETWEEN $2::date AND ($2::date + 7) ORDER BY due_on LIMIT 5`, [b.id, today]);
     const debts = await listDebts(ctx, b.id).catch(() => null);

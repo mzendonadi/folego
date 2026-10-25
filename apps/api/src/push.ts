@@ -173,7 +173,7 @@ async function smartAlerts(ctx: Ctx, p: Person, today: string, weekday: number):
       const sums = await ctx.db.query<{ last: string | null; prev: string | null }>(
         `SELECT coalesce(sum(-amount_cents) FILTER (WHERE occurred_on >= $2::date - 7 AND occurred_on < $2::date), 0)::text AS last,
                 coalesce(sum(-amount_cents) FILTER (WHERE occurred_on >= $2::date - 14 AND occurred_on < $2::date - 7), 0)::text AS prev
-           FROM app.ledger_entries WHERE subscriber_id = $1 AND amount_cents < 0`,
+           FROM app.ledger_entries WHERE subscriber_id = $1 AND amount_cents < 0 AND transfer_kind IS NULL`,
         [p.data_id, today],
       );
       const last = num(sums.rows[0]?.last ?? '0');
@@ -182,7 +182,7 @@ async function smartAlerts(ctx: Ctx, p: Person, today: string, weekday: number):
         await markSent(ctx, p.id, key, today); // semana sem lançamentos: nada a resumir
       } else {
         const top = await ctx.db.query<{ category: string; c: string }>(
-          `SELECT category, sum(-amount_cents)::text AS c FROM app.ledger_entries WHERE subscriber_id = $1 AND amount_cents < 0 AND occurred_on >= $2::date - 7 AND occurred_on < $2::date GROUP BY category ORDER BY sum(-amount_cents) DESC LIMIT 1`,
+          `SELECT category, sum(-amount_cents)::text AS c FROM app.ledger_entries WHERE subscriber_id = $1 AND amount_cents < 0 AND transfer_kind IS NULL AND occurred_on >= $2::date - 7 AND occurred_on < $2::date GROUP BY category ORDER BY sum(-amount_cents) DESC LIMIT 1`,
           [p.data_id, today],
         );
         const cmp = prev > 0 ? ` (semana anterior: ${formatBrl(prev)})` : '';

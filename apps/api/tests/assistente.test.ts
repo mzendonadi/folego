@@ -113,7 +113,7 @@ test('assistente: vincula o número por código, lança por mensagem, consulta, 
   assert.equal(await say(PHONE, 'fui ao mercado'), true);
   assert.match(last(), /Não achei o valor/);
   assert.equal(await say(PHONE, null, { image: { url: 'https://x/y.jpg' } }), true);
-  assert.match(last(), /só entendo texto/);
+  assert.match(last(), /Ainda não consigo ler foto/, 'sem a chave da IA, a foto é recusada com franqueza (a leitura com IA está em assistente-midia.test.ts)');
   assert.equal(await say(PHONE, 'ajuda'), true);
   assert.match(last(), /Como falar comigo/);
 

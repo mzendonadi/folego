@@ -1,6 +1,6 @@
 // Assistente do Prumo no WhatsApp (número do Fôlego, pela Bird). O assinante vincula o aparelho mandando "VINCULAR <código>" e depois
 // escreve como fala: "mercado 45", "recebi 1.200 de salário ontem". Responde na hora com o recibo; DESFAZER apaga o último lançamento.
-// Só texto por enquanto (foto e áudio por WhatsApp pedem leitura no servidor, que não existe ainda). Nada disso entra na caixa de entrada do atendimento.
+// Também entende foto de cupom/nota, áudio e o PDF da fatura do cartão (assistant-media.ts). Nada disso entra na caixa de entrada do atendimento.
 import { randomBytes } from 'node:crypto';
 import { AppError } from './errors.ts';
 import { decryptText, encryptText, hmac } from './crypto.ts';
@@ -11,6 +11,8 @@ import { effectiveAccountId, memberAccess } from './household.ts';
 import { addEntries, monthView, requireFeature } from './subscriptions.ts';
 import { credOf, loadAccount, transportOf, waPhone } from './whatsapp.ts';
 import { ensureHouseAccount, HOUSE_PARTNER_ID } from './wa-bird.ts';
+import { finishInvoice, finishReceipt, getPending, handleDocument, handleImage, hearAudio, mediaOf, setPending } from './assistant-media.ts';
+import type { MediaEnv, MediaRef } from './assistant-media.ts';
 
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // sem 0/O/1/I para não confundir ao digitar
 const CODE_MINUTES = 30;
@@ -41,6 +43,8 @@ async function reply(ctx: Ctx, digits: string, text: string): Promise<void> {
 // Vínculo (tela do Prumo)
 // ---------------------------------------------------------------------------
 export interface AssistantView {
+  /** O que o assistente já sabe fazer neste servidor: foto de cupom e PDF de fatura (IA de leitura) e áudio (transcrição). */
+  abilities: { photo: boolean; invoice: boolean; voice: boolean };
   available: boolean;
   number: string | null;
   linked: boolean;
@@ -57,6 +61,7 @@ export async function assistantView(ctx: Ctx, personId: string): Promise<Assista
     ? { code: row.code, link: `https://wa.me/${digits}?text=${encodeURIComponent(`VINCULAR ${row.code}`)}`, expiresAt: new Date(row.code_expires_at).toISOString() }
     : null;
   return {
+    abilities: { photo: Boolean(ctx.config.anthropicApiKey), invoice: Boolean(ctx.config.anthropicApiKey), voice: Boolean(ctx.config.openaiApiKey) },
     available: Boolean(bird), number: bird ? bird.from : null, linked: Boolean(row?.phone_enc),
     phone: row?.phone_enc ? maskPhone(decryptText(ctx.config.secret, row.phone_enc).replace(/\D/g, '')) : null, pending,
   };
@@ -85,6 +90,9 @@ const HELP = [
   'Como falar comigo:',
   '• Lançar gasto: "mercado 45", "uber 18,90 ontem", "farmácia 62 dia 10"',
   '• Lançar entrada: "recebi 1.200 de salário"',
+  '• Por voz: mande um áudio falando o lançamento ("mercado quarenta e cinco")',
+  '• Foto de cupom ou nota: mande a foto e diga a categoria ("despesas mercado")',
+  '• Fatura do cartão: mande o PDF e diga "lançar fatura em anexo em cartão de crédito"',
   '• Consultar: SALDO, CONTAS (o que vence nos próximos dias), METAS',
   '• Errou? Responda DESFAZER logo depois.',
   '• Para desconectar este WhatsApp: SAIR',
@@ -110,7 +118,7 @@ export async function handleAssistantInbound(ctx: Ctx, data: Record<string, unkn
   if (!digits) return false;
   const id = typeof data.id === 'string' && data.id ? data.id : null;
   const text = String((data.text as { body?: unknown } | undefined)?.body ?? '').trim();
-  const isMedia = ['image', 'audio', 'video', 'document', 'sticker'].some((k) => data[k] !== undefined);
+  const media = mediaOf(data);
   const key = phoneKey(ctx, digits);
   const link = (await ctx.db.query<Link>(`SELECT subscriber_id, last_entry_id, last_entry_at FROM app.assistant_links WHERE phone_hmac = $1`, [key])).rows[0];
 
@@ -134,7 +142,7 @@ export async function handleAssistantInbound(ctx: Ctx, data: Record<string, unkn
   if (!(await firstTime(ctx, id))) return true;
   if (tooMany(key)) return true;
   try {
-    await converse(ctx, digits, link, text, isMedia);
+    await converse(ctx, digits, link, text, media);
   } catch (e) {
     const msg = e instanceof AppError && e.status === 402 ? 'Sua assinatura do Prumo não está ativa. Renove em folego.online/conta para voltar a usar o assistente.' : e instanceof AppError && e.status === 403 ? e.message : 'Não consegui agora. Tente de novo em instantes.';
     await reply(ctx, digits, msg);
@@ -142,14 +150,56 @@ export async function handleAssistantInbound(ctx: Ctx, data: Record<string, unkn
   return true;
 }
 
-async function converse(ctx: Ctx, digits: string, link: Link, text: string, isMedia: boolean): Promise<void> {
+/** Grava o lançamento e responde com o recibo (texto digitado, falado ou lido de uma foto passam por aqui). */
+async function saveEntry(ctx: Ctx, digits: string, person: string, account: string, entry: { date: string; amountCents: number; note: string; category: string }, today: string): Promise<void> {
+  const saved = await addEntries(ctx, account, [{ date: entry.date, amountCents: entry.amountCents, note: entry.note, category: entry.category, source: 'manual' }]);
+  if (saved.ids[0]) await ctx.db.query(`UPDATE app.assistant_links SET last_entry_id = $2, last_entry_at = now() WHERE subscriber_id = $1`, [person, saved.ids[0]]);
+  const spend = entry.amountCents < 0;
+  const v = await monthView(ctx, account, entry.date.slice(0, 7));
+  const total = spend ? v.summary.spendCents : v.summary.incomeCents;
+  const cat = v.summary.byCategory.find((c) => c.category === entry.category);
+  const when = entry.date === today ? 'hoje' : new Date(`${entry.date}T12:00:00`).toLocaleDateString('pt-BR');
+  await reply(ctx, digits, [
+    `Lancei ${spend ? '' : 'entrada de '}${formatBrl(Math.abs(entry.amountCents))}${spend ? ` em ${label(entry.category)}` : ''} (${when}).`,
+    `Em ${monthName(entry.date)} ${spend ? 'você já gastou' : 'já entraram'} ${formatBrl(total)}.`,
+    spend && cat?.over ? `Atenção: você passou do limite de ${label(entry.category)} neste mês.` : '',
+    'Errou? Responda DESFAZER.',
+  ].filter(Boolean).join('\n'));
+}
+
+async function converse(ctx: Ctx, digits: string, link: Link, rawText: string, media: MediaRef | null): Promise<void> {
   const person = link.subscriber_id;
   const account = await effectiveAccountId(ctx, person);
-  const t = fold(text);
   const today = todaySaoPaulo();
   const month = today.slice(0, 7);
+  let text = rawText;
 
-  if (isMedia && !text) return reply(ctx, digits, 'Por enquanto eu só entendo texto por aqui. Escreva assim: "mercado 45".');
+  const env: MediaEnv = {
+    ctx, person, account,
+    say: (m) => reply(ctx, digits, m),
+    record: (entry) => saveEntry(ctx, digits, person, account, entry, today),
+    canWrite: async () => (await memberAccess(ctx, person)) !== 'consulta',
+  };
+
+  if (media) {
+    if (media.kind === 'video' || media.kind === 'sticker') return reply(ctx, digits, 'Por aqui eu entendo texto, áudio, foto de cupom e o PDF da fatura do cartão. Digite AJUDA para ver como.');
+    await requireFeature(ctx, account, 'ledger');
+    if (media.kind === 'image' || media.kind === 'document') {
+      if (!(await env.canWrite())) return reply(ctx, digits, 'Seu acesso a esta conta é só de consulta: quem lança é o titular.');
+      return media.kind === 'image' ? handleImage(env, media, media.caption || rawText) : handleDocument(env, media, media.caption || rawText);
+    }
+    // áudio: vira texto e segue como se tivesse sido digitado
+    const heard = await hearAudio(env, media);
+    if (heard === null) return;
+    text = heard;
+  }
+  const t = fold(text);
+  const pending = await getPending(ctx, person);
+
+  if (pending && /^(cancelar|cancela|nao|descartar|deixa|esquece|deixa pra la)$/.test(t)) {
+    await setPending(ctx, person, null);
+    return reply(ctx, digits, 'Tudo bem, descartei.');
+  }
   if (/^(ajuda|menu|help|oi|ola|bom dia|boa tarde|boa noite|\?)$/.test(t)) return reply(ctx, digits, HELP);
   if (/^(sair|parar|desvincular|desconectar|cancelar)$/.test(t)) {
     await unlink(ctx, person);
@@ -187,21 +237,17 @@ async function converse(ctx: Ctx, digits: string, link: Link, text: string, isMe
     return reply(ctx, digits, (d.rowCount ?? 0) > 0 ? 'Desfeito: apaguei o último lançamento.' : 'Esse lançamento já tinha sido apagado.');
   }
 
+  // Respostas a uma foto ou fatura que acabei de ler.
+  if (pending?.kind === 'invoice') {
+    if (/^(cadastrar|cadastra|cadastrar cartao|sim cadastrar)$/.test(t)) return finishInvoice(env, pending, 'cadastrar');
+    if (/^(lancar|lanca|sim|s|ok|pode|pode lancar|confirmo|isso|isso mesmo)$/.test(t) || /lanc(ar|a).*(fatura|cartao)|(fatura|cartao).*lanc(ar|a)/.test(t)) return finishInvoice(env, pending, 'lancar');
+  }
+  if (pending?.kind === 'receipt' && !/\d/.test(text)) return finishReceipt(env, pending.receipt, text);
+
   // Qualquer outra frase: tenta entender como lançamento.
   const entry = parseQuickEntry(text, today);
   if (!entry) return reply(ctx, digits, 'Não achei o valor. Escreva junto o quanto foi, por exemplo: "mercado 45". Digite AJUDA para ver o que eu entendo.');
-  if ((await memberAccess(ctx, person)) === 'consulta') return reply(ctx, digits, 'Seu acesso a esta conta é só de consulta: quem lança é o titular.');
-  const saved = await addEntries(ctx, account, [{ date: entry.date, amountCents: entry.amountCents, note: entry.note, category: entry.category, source: 'manual' }]);
-  if (saved.ids[0]) await ctx.db.query(`UPDATE app.assistant_links SET last_entry_id = $2, last_entry_at = now() WHERE subscriber_id = $1`, [person, saved.ids[0]]);
-  const spend = entry.amountCents < 0;
-  const v = await monthView(ctx, account, entry.date.slice(0, 7));
-  const total = spend ? v.summary.spendCents : v.summary.incomeCents;
-  const cat = v.summary.byCategory.find((c) => c.category === entry.category);
-  const when = entry.date === today ? 'hoje' : new Date(`${entry.date}T12:00:00`).toLocaleDateString('pt-BR');
-  await reply(ctx, digits, [
-    `Lancei ${spend ? '' : 'entrada de '}${formatBrl(Math.abs(entry.amountCents))}${spend ? ` em ${label(entry.category)}` : ''} (${when}).`,
-    `Em ${monthName(entry.date)} ${spend ? 'você já gastou' : 'já entraram'} ${formatBrl(total)}.`,
-    spend && cat?.over ? `Atenção: você passou do limite de ${label(entry.category)} neste mês.` : '',
-    'Errou? Responda DESFAZER.',
-  ].filter(Boolean).join('\n'));
+  if (!(await env.canWrite())) return reply(ctx, digits, 'Seu acesso a esta conta é só de consulta: quem lança é o titular.');
+  if (pending) await setPending(ctx, person, null); // lançamento novo substitui o que estava esperando
+  await saveEntry(ctx, digits, person, account, entry, today);
 }
