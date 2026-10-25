@@ -16,6 +16,8 @@ export type { ScamVerdict, ScamQuestion, RightsTopic } from './tools.ts';
 export { analyzeCollectionText, buildTranslatorPreview, MAX_TRANSLATOR_CHARS } from './translator.ts';
 export type { TranslatorAnalysis, TranslatorPreview, TranslatorFlag, TranslatorRisk, CollectionKind } from './translator.ts';
 export * from './account.ts';
+export * from './quick.ts';
+export * from './pace.ts';
 export * from './cards.ts';
 export * from './partner-import.ts';
 export { buildStrategies } from './strategies.ts';

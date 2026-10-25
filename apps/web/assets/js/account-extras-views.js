@@ -361,7 +361,7 @@ export function viewFamilia(ctx, locked) {
         toast('Não consegui agora.');
       }
     });
-    return stack(card(el('h2', {}, 'Conta compartilhada'), el('p', {}, 'Você usa a conta de ', el('strong', {}, h.ownerEmail), '. Lançamentos, dívidas, metas e lembretes são os mesmos dela. Só o titular paga, cancela e convida.'), el('div', { class: 'button-row' }, leave)));
+    return stack(card(el('h2', {}, 'Conta compartilhada'), el('p', {}, 'Você usa a conta de ', el('strong', {}, h.ownerEmail), '. Lançamentos, dívidas, metas e lembretes são os mesmos dela. Só o titular paga, cancela e convida. ', h.access === 'consulta' ? 'Seu acesso é só de consulta: você vê tudo, mas quem lança é o titular.' : 'Seu acesso permite ver e lançar.'), el('div', { class: 'button-row' }, leave)));
   }
   const accept = h.invite
     ? (() => {
@@ -374,34 +374,49 @@ export function viewFamilia(ctx, locked) {
           toast(e?.message || 'Não consegui aceitar agora.');
         }
       });
-      return card(el('h2', {}, 'Você recebeu um convite'), el('p', {}, el('strong', {}, h.invite.ownerEmail), ' convidou você para a conta dela(e). Ao aceitar, você passa a usar os dados da conta de lá e deixa de usar a sua.'), el('div', { class: 'button-row' }, b));
+      return card(el('h2', {}, 'Você recebeu um convite'), el('p', {}, el('strong', {}, h.invite.ownerEmail), ` convidou você para a conta dela(e). Ao aceitar, você passa a usar os dados da conta de lá e deixa de usar a sua.${h.invite.access === 'consulta' ? ' Seu acesso será só de consulta.' : ''}`), el('div', { class: 'button-row' }, b));
     })()
     : null;
   if (!h.canInvite) {
     return stack(accept, locked ? locked() : stack(card(el('h2', {}, 'Conta compartilhada'), el('p', { class: 'muted' }, 'Disponível nos planos Ousado e Desbravador.'))));
   }
-  let body;
-  if (h.member) {
-    const rm = el('button', { class: 'btn btn-secondary', type: 'button' }, h.member.status === 'pending' ? 'Cancelar convite' : 'Remover da conta');
-    rm.addEventListener('click', async () => {
-      if (!(await confirmDialog({ title: h.member.status === 'pending' ? 'Cancelar o convite?' : 'Remover ' + h.member.email + '?', text: 'A pessoa deixa de ver os dados da conta. Nada é apagado.', confirmLabel: 'Confirmar' }))) return;
-      try {
-        await ctx.api.removeHouseholdMember();
-        ctx.refresh();
-      } catch {
-        toast('Não consegui agora.');
-      }
-    });
-    body = card(el('h2', {}, 'Quem divide a conta com você'), el('p', {}, el('strong', {}, h.member.email), h.member.status === 'pending' ? ' · convite enviado, aguardando aceite.' : ' · ativa(o).'), el('div', { class: 'button-row' }, rm));
-  } else {
+  const ACCESS = { edita: 'Vê e lança', consulta: 'Só consulta' };
+  const members = h.members ?? [];
+  const list = members.length
+    ? card(
+      el('h2', {}, 'Quem divide a conta com você'),
+      el('p', { class: 'muted' }, `${members.length} de ${h.limit} ${h.limit === 1 ? 'pessoa' : 'pessoas'} no seu plano.`),
+      el('ul', { class: 'entries' }, ...members.map((m) => {
+        const sel = el('select', { class: 'input input-sm', 'aria-label': `Acesso de ${m.email}` }, ...Object.entries(ACCESS).map(([v, label]) => el('option', { value: v }, label)));
+        sel.value = m.access;
+        sel.addEventListener('change', async () => {
+          try { await ctx.api.setHouseholdAccess(m.id, sel.value); toast('Acesso atualizado.'); } catch { sel.value = m.access; toast('Não consegui agora.'); }
+        });
+        const rm = el('button', { class: 'btn btn-secondary btn-sm', type: 'button' }, m.status === 'pending' ? 'Cancelar convite' : 'Remover');
+        rm.addEventListener('click', async () => {
+          if (!(await confirmDialog({ title: m.status === 'pending' ? 'Cancelar o convite?' : `Remover ${m.email}?`, text: 'A pessoa deixa de ver os dados da conta. Nada é apagado.', confirmLabel: 'Confirmar' }))) return;
+          try {
+            await ctx.api.removeHouseholdMember(m.id);
+            ctx.refresh();
+          } catch {
+            toast('Não consegui agora.');
+          }
+        });
+        return el('li', { class: 'entry' }, el('span', { class: 'entry-note' }, el('strong', {}, m.email), m.status === 'pending' ? ' · convite enviado, aguardando aceite' : ' · ativa(o)'), sel, rm);
+      })),
+    )
+    : null;
+  let invite = null;
+  if (h.canInvite) {
     const email = el('input', { class: 'input', id: 'hh-email', type: 'email', autocomplete: 'off', placeholder: 'email@dapessoa.com', required: true });
+    const access = el('select', { class: 'input', id: 'hh-acesso', 'aria-label': 'Acesso da pessoa' }, ...Object.entries(ACCESS).map(([v, label]) => el('option', { value: v }, label)));
     const send = el('button', { class: 'btn btn-primary', type: 'submit' }, 'Enviar convite');
-    const form = el('form', { class: 'entry-form' }, el('div', { class: 'field field-wide' }, el('label', { class: 'label', for: 'hh-email' }, 'E-mail de quem vai dividir a conta'), email), send);
+    const form = el('form', { class: 'entry-form' }, el('div', { class: 'field field-wide' }, el('label', { class: 'label', for: 'hh-email' }, 'E-mail de quem vai dividir a conta'), email), el('div', { class: 'field' }, el('label', { class: 'label', for: 'hh-acesso' }, 'Acesso'), access), send);
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       send.disabled = true;
       try {
-        await ctx.api.inviteHousehold(email.value.trim());
+        await ctx.api.inviteHousehold(email.value.trim(), access.value);
         toast('Convite enviado.');
         ctx.refresh();
       } catch (err) {
@@ -409,7 +424,9 @@ export function viewFamilia(ctx, locked) {
         toast(err?.message || 'Não consegui enviar agora.');
       }
     });
-    body = card(el('h2', {}, 'Convidar pessoa para a conta'), el('p', { class: 'muted' }, 'Ideal para casal ou família que divide as contas de casa. A pessoa entra com o e-mail dela e passa a ver e editar a mesma conta: lançamentos, dívidas, metas e lembretes. Só você paga, cancela e convida. Uma pessoa por conta.'), form);
+    invite = card(el('h2', {}, members.length ? 'Convidar mais uma pessoa' : 'Convidar pessoa para a conta'), el('p', { class: 'muted' }, `Ideal para casal ou família que divide as contas de casa. A pessoa entra com o e-mail dela e vê a mesma conta: lançamentos, dívidas, metas e lembretes. Você escolhe se ela também lança ou só consulta. Só você paga, cancela e convida. ${h.limit === 1 ? 'O plano Ousado inclui uma pessoa; o Desbravador, até três.' : `Seu plano inclui até ${h.limit} pessoas.`}`), form);
+  } else if (members.length) {
+    invite = el('p', { class: 'fine muted' }, h.limit === 1 ? 'Seu plano inclui uma pessoa. Para convidar mais, passe para o plano Desbravador (até três).' : 'Você chegou ao limite de pessoas do seu plano. Remova alguém para convidar outra.');
   }
-  return stack(accept, body);
+  return stack(accept, list, invite);
 }

@@ -288,6 +288,7 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
           [ctx.cards, ctx.wallets, cats] = await Promise.all([ctx.api.getCards(), ctx.api.getWallets().catch(() => null), ctx.api.getCategories().catch(() => null)]);
           ctx.customCategories = cats?.custom ?? [];
         }
+        if (id === 'cofre') ctx.vault = await api.getVault();
         if (id === 'lembretes') ctx.reminders = (await ctx.api.getReminders()).reminders;
         if (id === 'treinador') ctx.coach = await api.getCoach().catch(() => null);
         if (mine !== token) return; // a pessoa já foi para outra aba

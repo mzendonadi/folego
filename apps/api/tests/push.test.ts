@@ -94,7 +94,7 @@ test('inscrição, preferências, aparelho trocado e envio de teste', async () =
 
   assert.equal((await c('PUT', '/api/account/push/prefs', { body: { hour: 5 } })).status, 400, 'antes das 8h não vale');
   assert.equal((await c('PUT', '/api/account/push/prefs', { body: { goals: false, hour: 19 } })).status, 200);
-  assert.deepEqual((await c('GET', '/api/account/push')).json.prefs, { expenses: true, goals: false, bills: true, hour: 19 });
+  assert.deepEqual((await c('GET', '/api/account/push')).json.prefs, { expenses: true, goals: false, bills: true, alerts: true, summary: true, hour: 19 });
 
   const got: PushPayload[] = [];
   setPushTransport(async (_s, payload) => { got.push(payload); });
@@ -141,6 +141,70 @@ test('lembretes: despesas, metas (domingo) e contas a vencer saem na hora certa,
     await c('POST', '/api/account/entries', { body: { entries: [{ date: today, amountCents: -1500, note: 'Café' }] } });
     assert.equal(await sendPushReminders({ db, config } as never, { force: true, now: { hour: 21, weekday: 0 } }), 0);
     assert.equal(got.length, 0);
+  } finally {
+    setPushTransport();
+  }
+});
+
+test('avisos inteligentes: limite de categoria, assinatura que subiu, cobrança repetida e resumo da semana, cada um uma vez', async () => {
+  const c = client();
+  await loginAndPay(c, 'push4@exemplo.com', 'push-sub-00004');
+  await c('POST', '/api/account/push/subscribe', { body: sub(40) });
+  await db.query(`DELETE FROM app.push_devices WHERE endpoint <> $1`, [sub(40).endpoint]);
+  const today = todaySaoPaulo();
+  const ago = (n: number) => new Date(Date.parse(`${today}T00:00:00Z`) - n * 86_400_000).toISOString().slice(0, 10);
+  // Netflix: três cobranças de 39,90 e a última de 49,90 (subiu); a última também foi cobrada duas vezes no mesmo dia.
+  const entries = [
+    { date: ago(90), amountCents: -3990, note: 'NETFLIX.COM' }, { date: ago(60), amountCents: -3990, note: 'NETFLIX.COM' }, { date: ago(30), amountCents: -3990, note: 'NETFLIX.COM' },
+    { date: ago(2), amountCents: -4990, note: 'NETFLIX.COM' }, { date: ago(2), amountCents: -4990, note: 'NETFLIX.COM' },
+    { date: ago(3), amountCents: -9500, note: 'Supermercado', category: 'mercado' },
+  ];
+  assert.equal((await c('POST', '/api/account/entries', { body: { entries } })).status, 200);
+  assert.equal((await c('POST', '/api/account/limits/mercado', { body: { limitCents: 10_000 } })).status, 200);
+
+  const got: PushPayload[] = [];
+  setPushTransport(async (_s, payload) => { got.push(payload); });
+  try {
+    // 9h de uma terça: roda a checagem do dia. No máximo 2 avisos por dia, então o resto fica para o dia seguinte.
+    await sendPushReminders({ db, config } as never, { force: true, now: { hour: 9, weekday: 2 } });
+    const tags = got.map((g) => g.tag);
+    const titles = got.map((g) => g.title);
+    assert.ok(tags.length >= 1 && tags.length <= 2, `no máximo 2 avisos por dia (veio ${tags.join(',')})`);
+    assert.ok(got.every((g) => ['preco', 'duplicada', 'limite-mercado'].includes(g.tag)));
+    assert.ok(got.every((g) => g.url.startsWith('/conta/')));
+
+    // Repetir no mesmo dia não manda de novo; no dia seguinte saem os que sobraram, mas nunca o mesmo duas vezes.
+    got.length = 0;
+    await sendPushReminders({ db, config } as never, { force: true, now: { hour: 10, weekday: 2 } });
+    assert.equal(got.length, 0, 'a checagem do dia já foi feita');
+    const firstTitles = new Set(titles);
+    await db.query(`DELETE FROM app.push_sent WHERE key LIKE 'chk:%'`);
+    await sendPushReminders({ db, config } as never, { force: true, now: { hour: 10, weekday: 2 } });
+    for (const g of got) assert.ok(!firstTitles.has(g.title), `"${g.title}" não repete`);
+    const keys = (await db.query<{ key: string }>(`SELECT key FROM app.push_sent WHERE key NOT LIKE 'chk:%'`)).rows.map((r) => r.key);
+    assert.equal(new Set(keys).size, keys.length);
+    assert.ok(keys.some((k) => k.startsWith('lim90:mercado:')), 'limite a 95% é aviso de 90%');
+    assert.ok(keys.some((k) => k.startsWith('preco:')), 'aumento de preço detectado');
+    assert.ok(keys.some((k) => k.startsWith('dup:')), 'cobrança repetida detectada');
+
+    // Segunda-feira: resumo da semana, uma vez.
+    got.length = 0;
+    await db.query(`DELETE FROM app.push_sent WHERE key LIKE 'chk:%'`);
+    await sendPushReminders({ db, config } as never, { force: true, now: { hour: 9, weekday: 1 } });
+    const resumo = got.find((g) => g.tag === 'resumo');
+    assert.ok(resumo, 'resumo da semana saiu');
+    assert.equal(resumo.url, '/conta/geral');
+    got.length = 0;
+    await db.query(`DELETE FROM app.push_sent WHERE key LIKE 'chk:%'`);
+    await sendPushReminders({ db, config } as never, { force: true, now: { hour: 9, weekday: 1 } });
+    assert.ok(!got.some((g) => g.tag === 'resumo'), 'resumo não repete na mesma semana');
+
+    // Quem desligou os avisos não recebe nenhum.
+    await c('PUT', '/api/account/push/prefs', { body: { alerts: false, summary: false } });
+    await db.query(`DELETE FROM app.push_sent`);
+    got.length = 0;
+    await sendPushReminders({ db, config } as never, { force: true, now: { hour: 9, weekday: 1 } });
+    assert.ok(!got.some((g) => ['preco', 'duplicada', 'resumo'].includes(g.tag) || g.tag.startsWith('limite')));
   } finally {
     setPushTransport();
   }

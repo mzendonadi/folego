@@ -20,6 +20,8 @@ import { registerGestao } from './admin/routes.ts';
 import * as campaigns from './admin/campaigns.ts';
 import * as extras from './account-extras.ts';
 import * as push from './push.ts';
+import * as vault from './vault.ts';
+import * as assistant from './assistant.ts';
 import * as cards from './cards.ts';
 import * as debts from './account-debts.ts';
 import { askPlanner } from './planner.ts';
@@ -47,7 +49,7 @@ import { contactSchema, sendContact } from './contact.ts';
 import * as waPortal from './wa-portal.ts';
 import { handleWebhook as handleWhatsAppWebhook, loadAccount, validSignature } from './whatsapp.ts';
 import type { WebhookBody } from './whatsapp.ts';
-import { cardSchema, cardPatchSchema, cardPurchaseSchema, cardPaymentSchema, cardImportSchema, accessSchema, addEntriesSchema, cancelSchema, contributionSchema, createCaseSchema, entryWalletSchema, accountDebtSchema, accountDebtPatchSchema, debtPaymentSchema, monthLimitSchema, plannerSchema, objectiveSchema, inviteSchema, checkoutSchema, profileSchema, referralLeadSchema, referralInviteSchema, recurringDecisionSchema, reminderPatchSchema, reminderSchema, walletSchema, walletPatchSchema, createOrderSchema, emailLinkSchema, emailOnlySchema, goalSchema, incomeInterviewSchema, leadSchema, loginCodeSchema, newPartnerSchema, partnerLoginSchema, partnerStatusSchema, setCategorySchema, categoryNameSchema, setLimitSchema, simulateSchema, subscriptionOrderSchema, toggleIncomeTaskSchema, translationSchema, guidedSchema, uuidParam, monthParam } from './schemas.ts';
+import { cardSchema, cardPatchSchema, cardPurchaseSchema, cardPaymentSchema, cardImportSchema, accessSchema, addEntriesSchema, cancelSchema, contributionSchema, createCaseSchema, entryWalletSchema, accountDebtSchema, accountDebtPatchSchema, debtPaymentSchema, monthLimitSchema, plannerSchema, objectiveSchema, inviteSchema, memberAccessSchema, checkoutSchema, profileSchema, referralLeadSchema, referralInviteSchema, recurringDecisionSchema, reminderPatchSchema, reminderSchema, walletSchema, walletPatchSchema, createOrderSchema, emailLinkSchema, emailOnlySchema, goalSchema, incomeInterviewSchema, leadSchema, loginCodeSchema, newPartnerSchema, partnerLoginSchema, partnerStatusSchema, setCategorySchema, categoryNameSchema, setLimitSchema, simulateSchema, subscriptionOrderSchema, toggleIncomeTaskSchema, translationSchema, guidedSchema, uuidParam, monthParam } from './schemas.ts';
 import { EngineInputError } from './engine.ts';
 import { GUIDED_KINDS } from './guided.ts';
 import * as openFinance from './openfinance.ts';
@@ -478,7 +480,15 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     return subscriberId;
   };
   /** A conta cujos dados ela usa: a do titular, se ela for membro de uma conta compartilhada. */
-  const requireSubscriber = async (req: FastifyRequest): Promise<string> => household.effectiveAccountId(ctx, await requireSelf(req));
+  const requireSubscriber = async (req: FastifyRequest): Promise<string> => {
+    const self = await requireSelf(req);
+    const account = await household.effectiveAccountId(ctx, self);
+    // Quem só consulta a conta de outra pessoa vê tudo, mas não grava nada (vale para toda rota de dados que não seja GET).
+    if (account !== self && req.method !== 'GET' && (await household.memberAccess(ctx, self)) === 'consulta') {
+      throw new AppError(403, 'read_only', 'Seu acesso a esta conta é só de consulta. Peça ao titular para liberar a edição.');
+    }
+    return account;
+  };
 
   app.post('/api/account/login-code', { config: { rateLimit: { max: 5 * scale, timeWindow: '10 minutes' } } }, async (req) => {
     await verifyTurnstile(config, req.headers['x-turnstile'], clientIp(req));
@@ -660,11 +670,17 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // Conta compartilhada
   app.get('/api/account/household', async (req) => household.householdView(ctx, await requireSelf(req)));
   app.post('/api/account/household/invite', { config: { rateLimit: { max: 6 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => {
-    await household.invite(ctx, await requireSelf(req), inviteSchema.parse(req.body).email);
+    const b = inviteSchema.parse(req.body);
+    await household.invite(ctx, await requireSelf(req), b.email, b.access);
     return reply.status(204).send();
   });
   app.delete('/api/account/household/member', async (req, reply) => {
-    await household.removeMember(ctx, await requireSelf(req));
+    const id = (req.query as { id?: string } | undefined)?.id;
+    await household.removeMember(ctx, await requireSelf(req), id ? idParam(id) : undefined);
+    return reply.status(204).send();
+  });
+  app.put('/api/account/household/member/:id', async (req, reply) => {
+    await household.setAccess(ctx, await requireSelf(req), idParam((req.params as { id: string }).id), memberAccessSchema.parse(req.body).access);
     return reply.status(204).send();
   });
   app.post('/api/account/household/accept', async (req, reply) => {
@@ -764,6 +780,28 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.delete('/api/account/reminders/:id', async (req, reply) => {
     await extras.deleteReminder(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id));
     return reply.status(204).send();
+  });
+  // Assistente do Prumo no WhatsApp: vincular o número (por código), ver o estado e desconectar. O resto acontece pelas mensagens (webhook da Bird).
+  app.get('/api/account/assistant', async (req) => assistant.assistantView(ctx, await requireSelf(req)));
+  app.post('/api/account/assistant/link', { config: { rateLimit: { max: 10 * scale, timeWindow: '10 minutes' } } }, async (req) => assistant.startLink(ctx, await requireSelf(req)));
+  app.delete('/api/account/assistant', async (req, reply) => {
+    await assistant.unlink(ctx, await requireSelf(req));
+    return reply.status(204).send();
+  });
+  // Cofre de acordos e documentos de dívida (arquivo criptografado; busca no servidor)
+  app.get('/api/account/vault', async (req) => vault.listDocs(ctx, await requireSubscriber(req), (req.query as { q?: string } | undefined)?.q?.slice(0, 80)));
+  app.post('/api/account/vault', { bodyLimit: 8 * 1024 * 1024, config: { rateLimit: { max: 20 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => reply.status(201).send(await vault.addDoc(ctx, await requireSubscriber(req), vault.vaultSchema.parse(req.body))));
+  app.put('/api/account/vault/:id', async (req) => {
+    await vault.updateDoc(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id), vault.vaultPatchSchema.parse(req.body));
+    return { ok: true };
+  });
+  app.delete('/api/account/vault/:id', async (req, reply) => {
+    await vault.deleteDoc(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id));
+    return reply.status(204).send();
+  });
+  app.get('/api/account/vault/:id/file', { config: { rateLimit: { max: 60 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => {
+    const f = await vault.getFile(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id));
+    return reply.headers({ ...mediaHeaders({ mime: f.mime, filename: f.filename }), 'cache-control': 'private, no-store' }).send(f.bytes);
   });
   // Notificações no celular (app instalado). O aparelho é da pessoa que entrou (requireSelf), não da conta compartilhada.
   app.get('/api/account/push', async (req) => push.pushView(ctx, await requireSelf(req)));

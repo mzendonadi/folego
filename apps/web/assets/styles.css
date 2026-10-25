@@ -672,6 +672,35 @@ ul, ol { margin: 0; padding: 0; }
 .app-card .row-actions, .app-invite .row-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .app-invite { background: var(--mint); border-color: transparent; box-shadow: none; }
 .app-invite p { margin: 0; }
+
+/* Ritmo do mês e mapa de calor (Visão geral) */
+.pace-chart { width: 100%; height: auto; max-height: 160px; display: block; }
+.pace-axis { stroke: var(--line); stroke-width: 1; }
+.pace-now { stroke: var(--primary); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+.pace-prev { stroke: var(--muted); stroke-width: 2; stroke-dasharray: 5 4; stroke-linejoin: round; }
+.pace-dot { fill: var(--primary); }
+.pace-label { fill: var(--muted); font-size: 10px; font-family: var(--font-body); }
+.pace-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; }
+.pace-key { display: inline-block; width: 22px; height: 0; border-top: 3px solid var(--primary); vertical-align: middle; margin-left: 6px; }
+.pace-key-prev { border-top: 3px dashed var(--muted); }
+.pace-card h3 { margin: var(--s2) 0 0; font-size: 1.0625rem; }
+.heatmap { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; max-width: 420px; }
+.hm-head { text-align: center; font-size: 0.75rem; color: var(--muted); }
+.hm-cell { aspect-ratio: 1; border-radius: 6px; display: grid; place-items: center; font-size: 0.7rem; color: var(--ink-2); background: var(--sunken); }
+.hm-blank { background: transparent; }
+.hm-future { background: transparent; border: 1px dashed var(--line); color: var(--muted); }
+.hm-1 { background: color-mix(in srgb, var(--primary) 22%, var(--sunken)); }
+.hm-2 { background: color-mix(in srgb, var(--primary) 42%, var(--sunken)); }
+.hm-3 { background: color-mix(in srgb, var(--primary) 76%, var(--sunken)); color: var(--primary-ink); }
+.hm-4 { background: var(--primary); color: var(--primary-ink); }
+
+/* Lançar rápido */
+.quick-form { display: grid; gap: 10px; }
+.quick-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.quick-row .input { flex: 1 1 240px; }
+.quick-out:empty { display: none; }
+.quick-draft { border-top: 1px solid var(--line); padding-top: var(--s4); }
+.quick-card .row-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 @media (max-width: 620px) { .entry-row { grid-template-columns: 1fr; gap: 4px; } }
 
 /* =============================================================================

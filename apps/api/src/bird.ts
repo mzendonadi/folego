@@ -8,6 +8,7 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { decryptText, encryptText } from './crypto.ts';
 import { AppError } from './errors.ts';
 import type { Ctx } from './services.ts';
+import { handleAssistantInbound } from './assistant.ts';
 import { inQuietHours, isOptOut, loadAccount, markReadByReply, phoneKey, waPhone } from './whatsapp.ts';
 import { HOUSE_PARTNER_ID, applyBirdStatus, ensureHouseAccount, ingestBirdInbound } from './wa-bird.ts';
 
@@ -312,6 +313,8 @@ export async function handleBirdEvent(ctx: Ctx, event: unknown, opts: { log?: (e
   const type = str(ev.type) ?? '';
   const data = obj(ev.data);
   if (type === 'whatsapp.received') {
+    // Assinante do Prumo falando com o assistente (ou vinculando o número): responde por aqui e NÃO vai para a caixa de entrada do atendimento.
+    if (await handleAssistantInbound(ctx, data).catch(() => false)) return { handled: true };
     // Caixa de entrada do WhatsApp do Fôlego (backoffice): a mensagem vira conversa; falha aqui não impede o tratamento de SAIR abaixo.
     await ingestBirdInbound(ctx, data, opts).catch((e) => opts.log?.({ evento: 'bird_entrada_falhou', erro: e instanceof Error ? e.message.slice(0, 100) : 'erro' }));
     const from = obj(data.from);

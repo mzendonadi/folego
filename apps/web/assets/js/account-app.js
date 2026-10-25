@@ -146,6 +146,8 @@ export function appCard(ctx) {
           el('div', { class: 'field' }, el('label', { class: 'label', for: 'push-hour' }, 'Hora do lembrete de despesas'), hour),
           pref('push-metas', 'Metas', 'Aos domingos, para lembrar do seu próximo aporte.', state.prefs.goals, 'goals'),
           pref('push-contas', 'Contas a vencer', 'Quando uma conta dos Lembretes está perto do vencimento.', state.prefs.bills, 'bills'),
+          pref('push-avisos', 'Avisos de cobrança e limite', 'Assinatura que ficou mais cara, cobrança repetida e categoria perto do limite. No máximo 2 por dia.', state.prefs.alerts, 'alerts'),
+          pref('push-resumo', 'Resumo da semana', 'Segunda de manhã: quanto você gastou e onde.', state.prefs.summary, 'summary'),
           el('div', { class: 'row-actions' }, test, off),
         );
       }

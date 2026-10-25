@@ -1,12 +1,16 @@
-// Notificações no celular (web push) do Prumo instalado como app. Três lembretes, todos opcionais e desligáveis:
-// despesas do dia (no máximo uma por dia, na hora que a pessoa escolheu, e só se ela ainda não lançou nada hoje),
-// metas (domingo, depois das 10h) e contas a vencer (as dos Lembretes). Nunca entre 22h e 8h (Brasília).
+// Notificações no celular (web push) do Prumo instalado como app. Todas opcionais e desligáveis, nunca entre 22h e 8h (Brasília):
+//   despesas do dia (1 por dia, na hora escolhida, só se ainda não lançou nada hoje), metas (domingo), contas a vencer,
+//   avisos inteligentes (assinatura que subiu de preço, cobrança repetida, limite de categoria perto de estourar) e o resumo da semana.
+// Quem usa a conta compartilhada de outra pessoa recebe pelos dados do titular; quem só consulta não recebe o pedido de lançar.
 import webpush from 'web-push';
 import { z } from 'zod';
 import { AppError } from './errors.ts';
 import type { Ctx } from './services.ts';
 import { num, todaySaoPaulo } from './services.ts';
-import { formatBrl } from './engine.ts';
+import { CATEGORY_LABEL, formatBrl } from './engine.ts';
+import { recurringReport } from './insights.ts';
+import { monthView } from './subscriptions.ts';
+import { dueSoon } from './vault.ts';
 
 export interface PushPayload { title: string; body: string; url: string; tag: string }
 type Sub = { endpoint: string; keys: { p256dh: string; auth: string } };
@@ -31,20 +35,21 @@ export const subscribeSchema = z.strictObject({
 });
 export const prefsSchema = z.strictObject({
   expenses: z.boolean().optional(), goals: z.boolean().optional(), bills: z.boolean().optional(),
+  alerts: z.boolean().optional(), summary: z.boolean().optional(),
   hour: z.number().int().min(8).max(21).optional(),
 });
 
-interface PrefRow { push_expenses: boolean; push_goals: boolean; push_bills: boolean; push_hour: number }
+interface PrefRow { push_expenses: boolean; push_goals: boolean; push_bills: boolean; push_alerts: boolean; push_summary: boolean; push_hour: number }
 
-export async function pushView(ctx: Ctx, personId: string): Promise<{ available: boolean; publicKey: string | null; devices: number; prefs: { expenses: boolean; goals: boolean; bills: boolean; hour: number } }> {
+export async function pushView(ctx: Ctx, personId: string): Promise<{ available: boolean; publicKey: string | null; devices: number; prefs: { expenses: boolean; goals: boolean; bills: boolean; alerts: boolean; summary: boolean; hour: number } }> {
   const [p, d] = await Promise.all([
-    ctx.db.query<PrefRow>(`SELECT push_expenses, push_goals, push_bills, push_hour FROM app.subscribers WHERE id = $1`, [personId]),
+    ctx.db.query<PrefRow>(`SELECT push_expenses, push_goals, push_bills, push_alerts, push_summary, push_hour FROM app.subscribers WHERE id = $1`, [personId]),
     ctx.db.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.push_devices WHERE subscriber_id = $1`, [personId]),
   ]);
   const r = p.rows[0];
   return {
     available: ctx.config.push !== null, publicKey: ctx.config.push?.publicKey ?? null, devices: Number(d.rows[0]?.n ?? 0),
-    prefs: { expenses: r?.push_expenses ?? true, goals: r?.push_goals ?? true, bills: r?.push_bills ?? true, hour: Number(r?.push_hour ?? 20) },
+    prefs: { expenses: r?.push_expenses ?? true, goals: r?.push_goals ?? true, bills: r?.push_bills ?? true, alerts: r?.push_alerts ?? true, summary: r?.push_summary ?? true, hour: Number(r?.push_hour ?? 20) },
   };
 }
 
@@ -68,8 +73,9 @@ export async function forgetDevice(ctx: Ctx, personId: string, endpoint: string)
 
 export async function savePrefs(ctx: Ctx, personId: string, prefs: z.infer<typeof prefsSchema>): Promise<void> {
   await ctx.db.query(
-    `UPDATE app.subscribers SET push_expenses = coalesce($2, push_expenses), push_goals = coalesce($3, push_goals), push_bills = coalesce($4, push_bills), push_hour = coalesce($5, push_hour) WHERE id = $1`,
-    [personId, prefs.expenses ?? null, prefs.goals ?? null, prefs.bills ?? null, prefs.hour ?? null],
+    `UPDATE app.subscribers SET push_expenses = coalesce($2, push_expenses), push_goals = coalesce($3, push_goals), push_bills = coalesce($4, push_bills),
+            push_alerts = coalesce($5, push_alerts), push_summary = coalesce($6, push_summary), push_hour = coalesce($7, push_hour) WHERE id = $1`,
+    [personId, prefs.expenses ?? null, prefs.goals ?? null, prefs.bills ?? null, prefs.alerts ?? null, prefs.summary ?? null, prefs.hour ?? null],
   );
 }
 
@@ -108,6 +114,85 @@ const brt = (): { hour: number; weekday: number } => {
   return { hour, weekday };
 };
 const isoDay = (d: unknown): string => new Date(d as string).toISOString().slice(0, 10);
+const addDays = (iso: string, n: number): string => new Date(Date.parse(`${iso}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+const label = (c: string): string => (CATEGORY_LABEL as Record<string, string>)[c] ?? c;
+/** Semana ISO ("2026-W43"): o resumo semanal sai uma vez por semana mesmo que o servidor fique fora na segunda. */
+const isoWeek = (iso: string): string => {
+  const d = new Date(`${iso}T00:00:00Z`);
+  const day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - day);
+  const y0 = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return `${d.getUTCFullYear()}-W${String(Math.ceil(((d.getTime() - y0.getTime()) / 86_400_000 + 1) / 7)).padStart(2, '0')}`;
+};
+
+interface Person {
+  id: string; data_id: string; role: string;
+  push_expenses: boolean; push_goals: boolean; push_bills: boolean; push_alerts: boolean; push_summary: boolean; push_hour: number;
+  push_expenses_last: Date | string | null; push_goals_last: Date | string | null;
+}
+
+const alreadySent = async (ctx: Ctx, id: string, key: string): Promise<boolean> => (await ctx.db.query(`SELECT 1 FROM app.push_sent WHERE subscriber_id = $1 AND key = $2`, [id, key])).rows.length > 0;
+const markSent = (ctx: Ctx, id: string, key: string, today: string) => ctx.db.query(`INSERT INTO app.push_sent(subscriber_id, key, sent_on) VALUES ($1,$2,$3::date) ON CONFLICT DO NOTHING`, [id, key, today]);
+
+/** Avisos que dependem de olhar os números (rodam uma vez por dia por pessoa): preço que subiu, cobrança repetida, limite e resumo da semana. */
+async function smartAlerts(ctx: Ctx, p: Person, today: string, weekday: number): Promise<number> {
+  let sent = 0;
+  let budget = 2; // no máximo 2 avisos por dia, para não virar barulho
+  const send = async (key: string, payload: PushPayload) => {
+    if (budget <= 0 || (await alreadySent(ctx, p.id, key))) return;
+    const n = await sendToPerson(ctx, p.id, payload);
+    if (n > 0) { await markSent(ctx, p.id, key, today); sent += n; budget -= 1; }
+  };
+  if (p.push_alerts) {
+    try {
+      const rep = await recurringReport(ctx, p.data_id);
+      for (const i of rep.items) {
+        if (i.decision === 'cancel') continue; // já decidiu cancelar: não insiste
+        if (i.priceChange) {
+          await send(`preco:${i.key}:${i.priceChange.since}`, { title: `${i.name} ficou mais caro`, body: `De ${formatBrl(i.priceChange.fromCents)} para ${formatBrl(i.priceChange.toCents)} (+${Math.round(i.priceChange.pct)}%). Veja em Cobranças.`, url: '/conta/cobrancas', tag: 'preco' });
+        }
+        if (i.duplicate && i.duplicate.date >= addDays(today, -7)) {
+          await send(`dup:${i.key}:${i.duplicate.date}`, { title: `Cobrança repetida: ${i.name}`, body: `${formatBrl(i.duplicate.cents)} apareceu duas vezes em ${new Date(`${i.duplicate.date}T12:00:00`).toLocaleDateString('pt-BR')}. Vale conferir.`, url: '/conta/cobrancas', tag: 'duplicada' });
+        }
+      }
+    } catch { /* plano sem o detector, ou sem dados: segue */ }
+    try {
+      const month = today.slice(0, 7);
+      const view = await monthView(ctx, p.data_id, month);
+      for (const c of view.summary.byCategory) {
+        if (c.limitCents === null || c.limitCents <= 0) continue;
+        const ratio = c.cents / c.limitCents;
+        if (ratio >= 1) await send(`lim100:${c.category}:${month}`, { title: `Você passou do limite de ${label(c.category)}`, body: `${formatBrl(c.cents)} gastos de ${formatBrl(c.limitCents)} neste mês.`, url: '/conta/orcamento', tag: `limite-${c.category}` });
+        else if (ratio >= 0.9) await send(`lim90:${c.category}:${month}`, { title: `${label(c.category)}: 90% do limite`, body: `${formatBrl(c.cents)} de ${formatBrl(c.limitCents)}. Falta pouco para estourar.`, url: '/conta/orcamento', tag: `limite-${c.category}` });
+      }
+    } catch { /* sem limites ou sem permissão do plano: segue */ }
+  }
+  if (p.push_summary && weekday === 1) {
+    const key = `resumo:${isoWeek(today)}`;
+    if (!(await alreadySent(ctx, p.id, key))) {
+      const sums = await ctx.db.query<{ last: string | null; prev: string | null }>(
+        `SELECT coalesce(sum(-amount_cents) FILTER (WHERE occurred_on >= $2::date - 7 AND occurred_on < $2::date), 0)::text AS last,
+                coalesce(sum(-amount_cents) FILTER (WHERE occurred_on >= $2::date - 14 AND occurred_on < $2::date - 7), 0)::text AS prev
+           FROM app.ledger_entries WHERE subscriber_id = $1 AND amount_cents < 0`,
+        [p.data_id, today],
+      );
+      const last = num(sums.rows[0]?.last ?? '0');
+      const prev = num(sums.rows[0]?.prev ?? '0');
+      if (last === 0 && prev === 0) {
+        await markSent(ctx, p.id, key, today); // semana sem lançamentos: nada a resumir
+      } else {
+        const top = await ctx.db.query<{ category: string; c: string }>(
+          `SELECT category, sum(-amount_cents)::text AS c FROM app.ledger_entries WHERE subscriber_id = $1 AND amount_cents < 0 AND occurred_on >= $2::date - 7 AND occurred_on < $2::date GROUP BY category ORDER BY sum(-amount_cents) DESC LIMIT 1`,
+          [p.data_id, today],
+        );
+        const cmp = prev > 0 ? ` (semana anterior: ${formatBrl(prev)})` : '';
+        const biggest = top.rows[0] ? ` Maior gasto: ${label(top.rows[0].category)}.` : '';
+        await send(key, { title: 'Sua semana no Prumo', body: `Você gastou ${formatBrl(last)}${cmp}.${biggest}`, url: '/conta/geral', tag: 'resumo' });
+      }
+    }
+  }
+  return sent;
+}
 
 let lastRun = 0;
 /** Roda de tempo em tempo (o worker chama a cada volta; aqui só passa de 5 em 5 minutos). Devolve quantas notificações saíram. */
@@ -118,44 +203,71 @@ export async function sendPushReminders(ctx: Ctx, opts: { force?: boolean; now?:
   const { hour, weekday } = opts.now ?? brt();
   if (hour < 8 || hour > 21) return 0; // noite é silêncio
   const today = todaySaoPaulo();
-  const people = await ctx.db.query<{ id: string; push_expenses: boolean; push_goals: boolean; push_bills: boolean; push_hour: number; push_expenses_last: Date | string | null; push_goals_last: Date | string | null }>(
-    `SELECT b.id, b.push_expenses, b.push_goals, b.push_bills, b.push_hour, b.push_expenses_last, b.push_goals_last
+  await ctx.db.query(`DELETE FROM app.push_sent WHERE sent_on < $1::date - 120`, [today]).catch(() => undefined);
+  const people = await ctx.db.query<Person>(
+    `SELECT b.id, coalesce(h.owner_id, b.id) AS data_id, coalesce(h.role, 'edita') AS role,
+            b.push_expenses, b.push_goals, b.push_bills, b.push_alerts, b.push_summary, b.push_hour, b.push_expenses_last, b.push_goals_last
        FROM app.subscribers b
+       LEFT JOIN app.household_members h ON h.member_id = b.id AND h.status = 'active'
       WHERE b.deleted_at IS NULL
         AND EXISTS (SELECT 1 FROM app.push_devices d WHERE d.subscriber_id = b.id)
-        AND EXISTS (SELECT 1 FROM app.subscriptions s WHERE s.subscriber_id = b.id AND s.status = 'active' AND s.current_period_end > now())
+        AND EXISTS (SELECT 1 FROM app.subscriptions s WHERE s.subscriber_id = coalesce(h.owner_id, b.id) AND s.status = 'active' AND s.current_period_end > now())
       LIMIT 500`,
   );
   let sent = 0;
   for (const p of people.rows) {
     try {
-      // 1) Contas a vencer (as dos Lembretes), na mesma antecedência do e-mail, uma vez por vencimento.
+      // 1) Contas a vencer (as dos Lembretes), na mesma antecedência do e-mail, uma vez por vencimento e por pessoa.
       if (p.push_bills) {
         const due = await ctx.db.query<{ id: string; title: string; due_on: Date | string; amount_cents: string | null }>(
           `SELECT id, title, due_on, amount_cents FROM app.reminders
-            WHERE subscriber_id = $1 AND done_at IS NULL AND due_on <= ($2::date + email_days_before) AND due_on >= ($2::date - 3)
-              AND (push_notified_for IS NULL OR push_notified_for <> due_on) ORDER BY due_on LIMIT 5`,
-          [p.id, today],
+            WHERE subscriber_id = $1 AND done_at IS NULL AND due_on <= ($2::date + email_days_before) AND due_on >= ($2::date - 3) ORDER BY due_on LIMIT 8`,
+          [p.data_id, today],
         );
-        if (due.rows.length) {
-          const first = due.rows[0]!;
+        const fresh: typeof due.rows = [];
+        for (const r of due.rows) if (!(await alreadySent(ctx, p.id, `conta:${r.id}:${isoDay(r.due_on)}`))) fresh.push(r);
+        const list = fresh.slice(0, 5);
+        if (list.length) {
+          const first = list[0]!;
           const days = Math.round((Date.parse(`${isoDay(first.due_on)}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000);
           const when = days === 0 ? 'hoje' : days === 1 ? 'amanhã' : days < 0 ? `venceu há ${-days} dia(s)` : `em ${days} dias`;
-          const one = due.rows.length === 1;
+          const one = list.length === 1;
           const n = await sendToPerson(ctx, p.id, {
-            title: one ? `${first.title} vence ${when}` : `${due.rows.length} contas pedem atenção`,
+            title: one ? `${first.title} vence ${when}` : `${list.length} contas pedem atenção`,
             body: one ? `${first.amount_cents ? `${formatBrl(num(first.amount_cents))}. ` : ''}Quando pagar, marque como feito.` : 'Veja o que vence e o que já passou.',
             url: '/conta/lembretes', tag: 'contas',
           });
           if (n > 0) {
-            await ctx.db.query(`UPDATE app.reminders SET push_notified_for = due_on WHERE id = ANY($1::uuid[])`, [due.rows.map((r) => r.id)]);
+            for (const r of list) await markSent(ctx, p.id, `conta:${r.id}:${isoDay(r.due_on)}`, today);
+            sent += n;
+          }
+        }
+      }
+      // 1b) Acordo ou boleto guardado no Cofre que vence nos próximos 3 dias (junto das contas a vencer).
+      if (p.push_bills) {
+        const docs = await dueSoon(ctx, p.data_id, today, 3).catch((): Awaited<ReturnType<typeof dueSoon>> => []);
+        const fresh: typeof docs = [];
+        for (const d of docs) if (!(await alreadySent(ctx, p.id, `cofre:${d.id}:${d.dueOn}`))) fresh.push(d);
+        if (fresh.length) {
+          const first = fresh[0]!;
+          const days = Math.round((Date.parse(`${first.dueOn}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000);
+          const when = days <= 0 ? 'hoje' : days === 1 ? 'amanhã' : `em ${days} dias`;
+          const kind = ({ acordo: 'Acordo', contrato: 'Contrato', boleto: 'Boleto', comprovante: 'Comprovante', extrato: 'Extrato', outro: 'Documento' } as Record<string, string>)[first.kind] ?? 'Documento';
+          const n = await sendToPerson(ctx, p.id, {
+            title: fresh.length === 1 ? `${kind} vence ${when}` : `${fresh.length} documentos do cofre vencem em breve`,
+            body: fresh.length === 1 ? first.title : 'Abra o Cofre para ver quais são.',
+            url: '/conta/cofre', tag: 'cofre',
+          });
+          if (n > 0) {
+            for (const d of fresh) await markSent(ctx, p.id, `cofre:${d.id}:${d.dueOn}`, today);
             sent += n;
           }
         }
       }
       // 2) Despesas do dia: na hora escolhida (ou depois, se o servidor ficou fora), uma vez por dia, só se ainda não lançou nada hoje.
-      if (p.push_expenses && hour >= p.push_hour && (p.push_expenses_last === null || isoDay(p.push_expenses_last) !== today)) {
-        const has = await ctx.db.query(`SELECT 1 FROM app.ledger_entries WHERE subscriber_id = $1 AND occurred_on = $2::date LIMIT 1`, [p.id, today]);
+      //    Quem só consulta a conta de outra pessoa não é chamado a lançar.
+      if (p.push_expenses && p.role !== 'consulta' && hour >= p.push_hour && (p.push_expenses_last === null || isoDay(p.push_expenses_last) !== today)) {
+        const has = await ctx.db.query(`SELECT 1 FROM app.ledger_entries WHERE subscriber_id = $1 AND occurred_on = $2::date LIMIT 1`, [p.data_id, today]);
         if (has.rows.length > 0) {
           await ctx.db.query(`UPDATE app.subscribers SET push_expenses_last = $2::date WHERE id = $1`, [p.id, today]); // já lançou: não incomoda
         } else {
@@ -170,7 +282,7 @@ export async function sendPushReminders(ctx: Ctx, opts: { force?: boolean; now?:
       if (p.push_goals && weekday === 0 && hour >= 10 && (p.push_goals_last === null || isoDay(p.push_goals_last) !== today)) {
         const g = await ctx.db.query<{ name: string; target_cents: string; saved_cents: string }>(
           `SELECT name, target_cents, saved_cents FROM app.goals WHERE subscriber_id = $1 AND saved_cents < target_cents ORDER BY (due_on IS NULL), due_on, created_at LIMIT 1`,
-          [p.id],
+          [p.data_id],
         );
         const goal = g.rows[0];
         if (goal) {
@@ -181,6 +293,11 @@ export async function sendPushReminders(ctx: Ctx, opts: { force?: boolean; now?:
             sent += n;
           }
         }
+      }
+      // 4) Avisos inteligentes e resumo da semana: a partir das 9h, uma checagem por dia.
+      if (hour >= 9 && (p.push_alerts || p.push_summary) && !(await alreadySent(ctx, p.id, `chk:${today}`))) {
+        sent += await smartAlerts(ctx, p, today, weekday);
+        await markSent(ctx, p.id, `chk:${today}`, today);
       }
     } catch (e) {
       opts.log?.({ evento: 'push_lembrete_falhou', erro: e instanceof Error ? e.message.slice(0, 100) : 'erro' });

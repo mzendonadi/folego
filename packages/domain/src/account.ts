@@ -59,7 +59,7 @@ const fold = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCa
 const RULES: [Category, RegExp][] = [
   ['renda', /(salario|pagamento de sal|rendimento|pro.?labore|recebimento|deposito|pix recebido|transferencia recebida|13o|ferias|beneficio inss)/],
   ['moradia', /(aluguel|condominio|iptu|financiamento imob|reforma)/],
-  ['mercado', /(mercado|supermercado|padaria|acougue|hortifruti|atacadao|assai|carrefour|ifood|restaurante|lanchonete|comida)/],
+  ['mercado', /(mercado|supermercado|padaria|acougue|hortifruti|atacadao|assai|carrefour|ifood|restaurante|lanchonete|comida|almoco|jantar|lanche|pizza|hamburg|sorvete|acai|cafeteria|\bcafe\b|churrasco|marmita|sacolao|\bfeira\b)/],
   ['transporte', /(uber|99app|99 |combustivel|posto|gasolina|estacionamento|onibus|metro|bilhete|pedagio|ipva|oficina)/],
   ['saude', /(farmacia|drogaria|droga|consulta|medic|plano de saude|dentista|exame|hospital|academia|smartfit|smart fit|gympass|crossfit|pilates|psicolog|terapia|clinica)/],
   ['contas', /(energia|luz|cemig|enel|copel|agua|sabesp|saneamento|internet|vivo|claro|tim |oi |telefone|gas )/],

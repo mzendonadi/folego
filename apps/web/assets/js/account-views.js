@@ -12,10 +12,13 @@ import { viewCobrancas, viewCenarios } from './account-insight-views.js';
 import { viewContas } from './account-openfinance-views.js';
 import { viewCartoes } from './account-cards-views.js';
 import { partnerPrompt } from './account-map-banner.js';
+import { quickEntryCard } from './account-quick.js';
+import { paceCard } from './account-visual.js';
+import { viewCofre } from './account-vault.js';
 import { NEW_CAT, catLabel, catList, categoryEditor } from './account-categories.js';
 import { PLANS, CATEGORIES, CATEGORY_LABEL, categorize, parseExtract, parsePdfExtract, simulateInvestment } from '../vendor/engine.js';
 
-export const FEATURE_LABEL = { health: 'Nota de saúde financeira', debts: 'Dívidas com plano de quitação', reminders: 'Lembretes de contas por e-mail', ledger: 'Controle de gastos', import: 'Importar extrato', alerts: 'Alertas de limite', coach_limited: 'Treinador (3 dicas)', goals: 'Metas com aportes', coach: 'Treinador completo', simulator: 'Simulador de investimento', planner: 'Planejador com IA', household: 'Conta compartilhada com uma pessoa', recurring: 'Detector de assinaturas e cobranças recorrentes', scenarios: 'Simulador "e se...?" de cenários', ebook: 'eBook de presente no seu e-mail (50+ páginas)', journeys: 'Todas as jornadas do coach', market: 'Cenário econômico (Selic, inflação, CDI)', market_pro: 'Dólar e histórico de 12 meses', cards: 'Cartões de crédito: limite, fatura, vencimento e parcelas', cards_pro: 'Cartões avançado: fatura em PDF, estratégias e custo do rotativo', map_member: 'Mapa da Virada com preço de assinante (Pix, 90 dias)', map_included: 'Mapa da Virada incluso, enquanto a assinatura valer' };
+export const FEATURE_LABEL = { health: 'Nota de saúde financeira', debts: 'Dívidas com plano de quitação', reminders: 'Lembretes de contas por e-mail', ledger: 'Controle de gastos', import: 'Importar extrato', alerts: 'Alertas de limite', coach_limited: 'Treinador (3 dicas)', goals: 'Metas com aportes', coach: 'Treinador completo', simulator: 'Simulador de investimento', planner: 'Planejador com IA', household: 'Conta compartilhada (1 pessoa no Ousado, até 3 no Desbravador)', recurring: 'Detector de assinaturas e cobranças recorrentes', scenarios: 'Simulador "e se...?" de cenários', ebook: 'eBook de presente no seu e-mail (50+ páginas)', journeys: 'Todas as jornadas do coach', market: 'Cenário econômico (Selic, inflação, CDI)', market_pro: 'Dólar e histórico de 12 meses', cards: 'Cartões de crédito: limite, fatura, vencimento e parcelas', cards_pro: 'Cartões avançado: fatura em PDF, estratégias e custo do rotativo', map_member: 'Mapa da Virada com preço de assinante (Pix, 90 dias)', map_included: 'Mapa da Virada incluso, enquanto a assinatura valer' };
 
 /** Abas da conta. `needs` = recurso do plano exigido (a aba aparece sempre; sem o recurso mostra o que o upgrade traz). */
 export const TABS = [
@@ -29,6 +32,7 @@ export const TABS = [
   { id: 'contas', label: 'Contas conectadas', needs: 'market_pro', group: 'Dinheiro' },
   { id: 'lembretes', label: 'Lembretes', group: 'Dinheiro' },
   { id: 'dividas', label: 'Dívidas', group: 'Dívidas e metas' },
+  { id: 'cofre', label: 'Cofre', group: 'Dívidas e metas' },
   { id: 'metas', label: 'Metas', needs: 'goals', group: 'Dívidas e metas' },
   { id: 'planejador', label: 'Planejador', needs: 'planner', group: 'Inteligência' },
   { id: 'cenarios', label: 'E se...?', needs: 'scenarios', group: 'Inteligência' },
@@ -169,6 +173,8 @@ export function viewGeral(ctx) {
         : null,
     ),
   );
+
+  out.push(paceCard(ctx));
 
   const spent = s.byCategory.filter((c) => c.cents > 0);
   if (spent.length > 0) {
@@ -426,6 +432,7 @@ export function viewLancamentos(ctx) {
 
   return el(
     'div', { class: 'acc-stack' },
+    quickEntryCard(ctx),
     card(el('h2', {}, 'Novo lançamento'), form, categoryManager(ctx), importBox),
     card(monthNav(ctx), rows.length > 0 ? el('ul', { class: 'entries' }, ...rows) : empty('Nenhum lançamento neste mês', 'Adicione acima ou importe o extrato do banco.')),
   );
@@ -756,7 +763,7 @@ export function viewPlanejador(ctx) {
 }
 
 export function viewCompartilhar(ctx) {
-  return viewFamilia(ctx, () => locked(ctx, { title: 'Conta compartilhada', feature: 'household', blurb: 'Divida o controle do dinheiro de casa com quem divide as contas com você.', bullets: ['Convide uma pessoa pelo e-mail', 'Vocês veem e editam a mesma conta', 'Só o titular paga e cancela'] }));
+  return viewFamilia(ctx, () => locked(ctx, { title: 'Conta compartilhada', feature: 'household', blurb: 'Divida o controle do dinheiro de casa com quem divide as contas com você.', bullets: ['Convide pelo e-mail: 1 pessoa no Ousado, até 3 no Desbravador', 'Vocês veem a mesma conta; você escolhe quem também lança e quem só consulta', 'Só o titular paga e cancela'] }));
 }
 
 export function viewCenariosTab(ctx) {
@@ -773,6 +780,6 @@ export function viewContasTab(ctx) {
   return viewContas(ctx);
 }
 
-export const VIEWS = { contas: viewContasTab, cobrancas: viewCobrancas, cenarios: viewCenariosTab, indicar: viewIndicar, perfil: viewPerfil, familia: viewCompartilhar, coach: viewCoach, mercado: viewMercado, geral: viewGeral, lancamentos: viewLancamentos, orcamento: viewOrcamento, dividas: viewDividas, carteiras: viewCarteiras, cartoes: viewCartoes, lembretes: viewLembretes, metas: viewMetas, treinador: viewTreinador, simulador: viewSimulador, planejador: viewPlanejador, plano: viewPlano };
+export const VIEWS = { cofre: viewCofre, contas: viewContasTab, cobrancas: viewCobrancas, cenarios: viewCenariosTab, indicar: viewIndicar, perfil: viewPerfil, familia: viewCompartilhar, coach: viewCoach, mercado: viewMercado, geral: viewGeral, lancamentos: viewLancamentos, orcamento: viewOrcamento, dividas: viewDividas, carteiras: viewCarteiras, cartoes: viewCartoes, lembretes: viewLembretes, metas: viewMetas, treinador: viewTreinador, simulador: viewSimulador, planejador: viewPlanejador, plano: viewPlano };
 export const NEEDS_MONTH = new Set(['geral', 'lancamentos', 'orcamento', 'metas']);
 export { monthNow };

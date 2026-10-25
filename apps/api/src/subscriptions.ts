@@ -2,7 +2,7 @@
 // Pagamento é Pix mensal (sem cartão, sem débito automático): a assinatura vale por 30 dias por pagamento, o cancelamento
 // é um clique (só deixa de renovar) e nunca há cobrança sem a pessoa pagar. Os avulsos continuam sem cadastro.
 import { randomInt } from 'node:crypto';
-import { PLANS, buildAlerts, categorize, coachInsights, monthOf, planByCode, planHas, simulateInvestment, summarizeMonth, CATEGORIES } from './engine.ts';
+import { PLANS, buildAlerts, buildPace, categorize, coachInsights, monthOf, planByCode, planHas, simulateInvestment, summarizeMonth, CATEGORIES } from './engine.ts';
 import type { Feature, Goal, LedgerEntry, PlanCode } from './engine.ts';
 import { hmac, safeEqual } from './crypto.ts';
 import { layout } from './email.ts';
@@ -252,12 +252,13 @@ export interface NewEntry {
   walletId?: string | null | undefined;
 }
 
-export async function addEntries(ctx: Ctx, subscriberId: string, entries: NewEntry[]): Promise<{ added: number; duplicates: number }> {
+export async function addEntries(ctx: Ctx, subscriberId: string, entries: NewEntry[]): Promise<{ added: number; duplicates: number; ids: string[] }> {
   await requireFeature(ctx, subscriberId, 'ledger');
   if (entries.length > MAX_ENTRIES_PER_CALL) throw new AppError(422, 'too_many', `Envie até ${MAX_ENTRIES_PER_CALL} lançamentos por vez.`);
   if (entries.some((e) => e.source === 'import')) await requireFeature(ctx, subscriberId, 'import');
   let added = 0;
   let duplicates = 0;
+  const ids: string[] = [];
   await ctx.db.tx(async (q) => {
     for (const e of entries) {
       const category = e.category && (await isAllowedCategory(q, subscriberId, e.category)) ? e.category : categorize(e.note, e.amountCents);
@@ -269,11 +270,12 @@ export async function addEntries(ctx: Ctx, subscriberId: string, entries: NewEnt
         }
       }
       const walletId = e.walletId ? await ownedWalletId({ ...ctx, db: q as never }, subscriberId, e.walletId) : null;
-      await q.query(`INSERT INTO app.ledger_entries(subscriber_id, occurred_on, amount_cents, category, note, source, wallet_id) VALUES ($1,$2,$3,$4,$5,$6,$7)`, [subscriberId, e.date, e.amountCents, category, e.note.slice(0, 120), e.source ?? 'manual', walletId]);
+      const ins = await q.query<{ id: string }>(`INSERT INTO app.ledger_entries(subscriber_id, occurred_on, amount_cents, category, note, source, wallet_id) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`, [subscriberId, e.date, e.amountCents, category, e.note.slice(0, 120), e.source ?? 'manual', walletId]);
+      if (ins.rows[0]) ids.push(ins.rows[0].id);
       added += 1;
     }
   });
-  return { added, duplicates };
+  return { added, duplicates, ids };
 }
 
 export async function deleteEntry(ctx: Ctx, subscriberId: string, id: string): Promise<void> {
@@ -388,6 +390,7 @@ export async function monthView(ctx: Ctx, subscriberId: string, month: string) {
       return { ...e, walletId: m?.wallet_id ?? null, cardId: m?.card_id ?? null, cardName: m?.card_name ?? null, installmentNo: m?.installment_no ?? null, installmentTotal: m?.installment_total ?? null };
     }),
     summary: summarizeMonth(entries, limits, month),
+    pace: buildPace(entries, month, today), // ritmo do mês, mapa de calor e maior gasto (Visão geral)
     limits,
     customCategories: await customCategories(ctx.db, subscriberId),
     goals,

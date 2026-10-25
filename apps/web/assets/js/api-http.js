@@ -326,11 +326,14 @@ export async function getGoalTemplates() {
 export async function getHousehold() {
   return request('GET', '/account/household');
 }
-export async function inviteHousehold(email) {
-  return request('POST', '/account/household/invite', { body: { email } });
+export async function inviteHousehold(email, access = 'edita') {
+  return request('POST', '/account/household/invite', { body: { email, access } });
 }
-export async function removeHouseholdMember() {
-  return request('DELETE', '/account/household/member');
+export async function removeHouseholdMember(id) {
+  return request('DELETE', `/account/household/member${id ? `?id=${encodeURIComponent(id)}` : ''}`);
+}
+export async function setHouseholdAccess(id, access) {
+  return request('PUT', `/account/household/member/${encodeURIComponent(id)}`, { body: { access } });
 }
 export async function acceptHousehold() {
   return request('POST', '/account/household/accept');
@@ -357,6 +360,32 @@ export async function downloadExportXlsx() {
 }
 export async function updateProfile(body) {
   return request('PUT', '/account/profile', { body });
+}
+export async function getAssistant() {
+  return request('GET', '/account/assistant');
+}
+export async function startAssistantLink() {
+  return request('POST', '/account/assistant/link', { body: {} });
+}
+export async function unlinkAssistant() {
+  return request('DELETE', '/account/assistant');
+}
+export async function getVault(q) {
+  return request('GET', `/account/vault${q ? `?q=${encodeURIComponent(q)}` : ''}`);
+}
+export async function addVaultDoc(body) {
+  return request('POST', '/account/vault', { body });
+}
+export async function updateVaultDoc(id, body) {
+  return request('PUT', `/account/vault/${encodeURIComponent(id)}`, { body });
+}
+export async function deleteVaultDoc(id) {
+  return request('DELETE', `/account/vault/${encodeURIComponent(id)}`);
+}
+export async function downloadVaultFile(id) {
+  const res = await fetch(`${API_BASE}/account/vault/${encodeURIComponent(id)}/file`, { credentials: 'same-origin', headers: { 'x-folego': '1' } });
+  if (!res.ok) throw new ApiError('Não foi possível abrir o arquivo', res.status);
+  return res.blob();
 }
 export async function getPush() {
   return request('GET', '/account/push');
