@@ -81,7 +81,12 @@ export async function computeAlerts(ctx: Ctx, a: AdminUser): Promise<BoAlert[]> 
          FROM app.wa_messages m JOIN app.partners p ON p.id = m.partner_id WHERE p.internal AND m.status = 'falhou' AND m.created_at >= now() - interval '24 hours' AND coalesce(m.error, '') NOT LIKE 'Repetida:%' AND coalesce(m.error, '') !~ '130472'`,
     ).then((r) => ({ n: Number(r.rows[0]?.n ?? 0), last: r.rows[0]?.last ?? null })).catch(() => ({ n: 0, last: null }));
     if (houseFail.n) out.push({ key: 'wa:folego', severity: 'atencao', title: houseFail.n === 1 ? '1 mensagem do WhatsApp do Fôlego não saiu' : `${houseFail.n} mensagens do WhatsApp do Fôlego não saíram`, detail: `Últimas 24 horas. Motivo mais recente: ${houseFail.last ?? 'sem detalhe'}`.slice(0, 300), count: houseFail.n, route: 'whatsapp' });
-    const waQueue = await one(ctx, `SELECT count(*)::text AS n FROM app.wa_messages WHERE status = 'fila' AND created_at < now() - interval '30 minutes'`);
+    // Modelo esperando o fim do horário de silêncio (20h–8h) é o esperado, não uma fila parada: fica fora do alerta.
+    const waQueue = await one(ctx, `SELECT count(*)::text AS n FROM app.wa_messages m LEFT JOIN app.wa_accounts a ON a.partner_id = m.partner_id
+      WHERE m.status = 'fila' AND m.created_at < now() - interval '30 minutes'
+        AND NOT (m.kind = 'template' AND a.quiet_start IS NOT NULL AND a.quiet_start <> a.quiet_end AND coalesce(a.quiet_override_until, now()) <= now()
+                 AND (CASE WHEN a.quiet_start < a.quiet_end THEN extract(hour FROM now() AT TIME ZONE 'America/Sao_Paulo') >= a.quiet_start AND extract(hour FROM now() AT TIME ZONE 'America/Sao_Paulo') < a.quiet_end
+                           ELSE extract(hour FROM now() AT TIME ZONE 'America/Sao_Paulo') >= a.quiet_start OR extract(hour FROM now() AT TIME ZONE 'America/Sao_Paulo') < a.quiet_end END))`);
     if (waQueue) out.push({ key: 'parc:fila-whatsapp', severity: 'atencao', title: 'Fila de WhatsApp parada', detail: `${waQueue} mensagem(ns) esperando há mais de 30 minutos.`, count: waQueue, route: 'parcerias' });
   }
 

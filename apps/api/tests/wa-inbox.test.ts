@@ -429,6 +429,30 @@ test('Bird clássica: foto, PDF e voz que o cliente envia viram arquivo na conve
   assert.equal(calls[1]!.auth, null, 'a chave não vai para endereço que não é da Bird');
 });
 
+test('alerta "fila parada": modelo esperando o fim do silêncio das 20h às 8h não alerta; fora do silêncio, alerta', async () => {
+  const { computeAlerts } = await import('../src/admin/alerts.ts');
+  const { toAdminUser } = await import('../src/admin/auth.ts');
+  const { ensureThread, queueMessage } = await import('../src/whatsapp.ts');
+  const adm = await db.query<{ id: string }>(`INSERT INTO app.admin_users(email, name, role, permissions) VALUES ('fila@folego.test','Fila','owner','{}') RETURNING id`);
+  const a = toAdminUser({ id: adm.rows[0]!.id, email: 'fila@folego.test', name: 'Fila', role: 'owner', permissions: [], active: true, last_login_at: null, password_hash: null, must_change_password: false } as never);
+  const ctx = { db, config } as unknown as import('../src/services.ts').Ctx;
+  const thread = (await ensureThread(ctx, HOUSE_PARTNER_ID, '+5511977770012', { name: 'Teste fila' })).id;
+  const q = await queueMessage(ctx, { partnerId: HOUSE_PARTNER_ID, threadId: thread, author: 'sistema', kind: 'template', text: 'x' });
+  const id = typeof q === 'string' ? q : (q as { id: string }).id;
+  await db.query(`UPDATE app.wa_messages SET created_at = now() - interval '2 hours' WHERE id = $1`, [id]);
+  const hour = Number((await db.query<{ h: string }>(`SELECT extract(hour FROM now() AT TIME ZONE 'America/Sao_Paulo')::int::text AS h`)).rows[0]!.h);
+  const setQuiet = (s: number, e: number) => db.query(`UPDATE app.wa_accounts SET quiet_start = $2, quiet_end = $3, quiet_override_until = NULL WHERE partner_id = $1`, [HOUSE_PARTNER_ID, s, e]);
+  try {
+    await setQuiet(hour, (hour + 1) % 24); // agora é horário de silêncio
+    assert.ok(!(await computeAlerts(ctx, a)).some((x) => x.key === 'parc:fila-whatsapp'), 'em horário de silêncio a espera é normal');
+    await setQuiet((hour + 2) % 24, (hour + 3) % 24); // agora não é
+    assert.ok((await computeAlerts(ctx, a)).some((x) => x.key === 'parc:fila-whatsapp'), 'fora do silêncio, parada de verdade');
+  } finally {
+    await db.query(`DELETE FROM app.wa_messages WHERE id = $1`, [id]);
+    await setQuiet(20, 8);
+  }
+});
+
 test('quem respondeu, leu: só as mensagens nossas anteriores à resposta viram "lida"', async () => {
   const { ensureThread, markReadByReply } = await import('../src/whatsapp.ts');
   const ctx = { db, config } as unknown as import('../src/services.ts').Ctx;
