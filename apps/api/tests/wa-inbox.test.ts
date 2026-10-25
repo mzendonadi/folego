@@ -453,6 +453,24 @@ test('alerta "fila parada": modelo esperando o fim do silêncio das 20h às 8h n
   }
 });
 
+test('sino: cliente que respondeu no WhatsApp do Fôlego acende o alerta, conta as mensagens e some quando a conversa é lida', async () => {
+  const { computeAlerts } = await import('../src/admin/alerts.ts');
+  const { toAdminUser } = await import('../src/admin/auth.ts');
+  const { ensureThread } = await import('../src/whatsapp.ts');
+  const adm = await db.query<{ id: string }>(`INSERT INTO app.admin_users(email, name, role, permissions) VALUES ('resp@folego.test','Resp','owner','{}') RETURNING id`);
+  const a = toAdminUser({ id: adm.rows[0]!.id, email: 'resp@folego.test', name: 'Resp', role: 'owner', permissions: [], active: true, last_login_at: null, password_hash: null, must_change_password: false } as never);
+  const ctx = { db, config } as unknown as import('../src/services.ts').Ctx;
+  const thread = (await ensureThread(ctx, HOUSE_PARTNER_ID, '+5511977770013', { name: 'Teste sino' })).id;
+  const find = async () => (await computeAlerts(ctx, a)).find((x) => x.key === 'wa:respostas');
+  await db.query(`UPDATE app.wa_threads SET unread_n = 0 WHERE partner_id = $1`, [HOUSE_PARTNER_ID]);
+  assert.equal(await find(), undefined, 'sem resposta pendente, sem alerta');
+  await db.query(`UPDATE app.wa_threads SET unread_n = 3 WHERE id = $1`, [thread]);
+  const al = await find();
+  assert.ok(al && al.count === 3 && /1 cliente respondeu/.test(al.title) && al.route === 'whatsapp');
+  await db.query(`UPDATE app.wa_threads SET unread_n = 0 WHERE id = $1`, [thread]);
+  assert.equal(await find(), undefined, 'conversa lida tira o alerta');
+});
+
 test('quem respondeu, leu: só as mensagens nossas anteriores à resposta viram "lida"', async () => {
   const { ensureThread, markReadByReply } = await import('../src/whatsapp.ts');
   const ctx = { db, config } as unknown as import('../src/services.ts').Ctx;

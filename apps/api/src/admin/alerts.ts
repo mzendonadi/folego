@@ -90,6 +90,16 @@ export async function computeAlerts(ctx: Ctx, a: AdminUser): Promise<BoAlert[]> 
     if (waQueue) out.push({ key: 'parc:fila-whatsapp', severity: 'atencao', title: 'Fila de WhatsApp parada', detail: `${waQueue} mensagem(ns) esperando há mais de 30 minutos.`, count: waQueue, route: 'parcerias' });
   }
 
+  if (allowed('whatsapp')) {
+    // Cliente que respondeu no WhatsApp do Fôlego e ainda não foi lido por ninguém. Sai do sino quando a conversa é aberta.
+    const r = await ctx.db.query<{ conversas: string; mensagens: string }>(
+      `SELECT count(*)::text AS conversas, coalesce(sum(unread_n), 0)::text AS mensagens FROM app.wa_threads t JOIN app.partners p ON p.id = t.partner_id WHERE p.internal AND t.unread_n > 0`,
+    ).then((x) => x.rows[0]).catch(() => undefined);
+    const conversas = Number(r?.conversas ?? 0);
+    const mensagens = Number(r?.mensagens ?? 0);
+    if (conversas) out.push({ key: 'wa:respostas', severity: 'atencao', title: conversas === 1 ? '1 cliente respondeu no WhatsApp' : `${conversas} clientes responderam no WhatsApp`, detail: `${mensagens} ${mensagens === 1 ? 'mensagem' : 'mensagens'} sem leitura. Responda em até 24 h: depois disso só com modelo aprovado.`, count: mensagens, route: 'whatsapp' });
+  }
+
   if (allowed('chatbot')) {
     const novos = await one(ctx, `SELECT count(*)::text AS n FROM app.chat_leads WHERE status = 'novo'`);
     if (novos) out.push({ key: 'chat:novos', severity: 'info', title: novos === 1 ? '1 pessoa chamou o chatbot e espera contato' : `${novos} pessoas chamaram o chatbot e esperam contato`, detail: 'Retome o contato pelo WhatsApp ou e-mail na tela Chatbot.', count: novos, route: 'chatbot' });
