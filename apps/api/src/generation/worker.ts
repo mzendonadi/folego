@@ -2,6 +2,7 @@ import type { Ctx } from '../services.ts';
 import { deliverPendingLeads } from '../leads.ts';
 import { processWhatsAppQueue } from '../whatsapp.ts';
 import { processBirdQueue, syncBirdStatuses } from '../bird.ts';
+import { sendPushReminders } from '../push.ts';
 import { maintenance } from '../subscriptions.ts';
 import { refreshRuntime } from '../runtime.ts';
 import { workerBeat } from '../health.ts';
@@ -253,6 +254,7 @@ export async function runWorker(ctx: Ctx, opts: WorkerOptions, control: { stoppe
       ['whatsapp_status', () => syncBirdStatuses(ctx)],
       ['campanhas', () => dispatchCampaigns(ctx, log)],
       ['lembretes', () => sendDueReminders(ctx, log)],
+      ['notificacoes_celular', () => sendPushReminders(ctx, log)],
       ['resumo_semanal', () => sendWeeklyDigests(ctx, log)],
       ['expurgo_cancelados', () => purgeCanceledExpired(ctx, log)],
       ['ebook_presente', () => sendEbookGifts(ctx, log)],

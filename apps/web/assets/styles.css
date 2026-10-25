@@ -664,6 +664,14 @@ ul, ol { margin: 0; padding: 0; }
 .legend strong.over { color: var(--danger-ink, #b3261e); }
 .goal { display: flex; justify-content: space-between; align-items: center; gap: var(--s3); padding: 10px 0; border-bottom: 1px solid var(--line); }
 .input-sm { padding: 6px 10px; font-size: 0.875rem; }
+
+/* Prumo no celular: instalar como app e receber lembretes (aba Perfil e convite no topo de Coach/Visão geral) */
+.stack { display: grid; gap: var(--s4); }
+.app-steps ol { margin: 6px 0 0; padding-left: 1.25rem; display: grid; gap: 4px; }
+.app-card h3 { margin: var(--s2) 0 0; font-size: 1.0625rem; }
+.app-card .row-actions, .app-invite .row-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.app-invite { background: var(--mint); border-color: transparent; box-shadow: none; }
+.app-invite p { margin: 0; }
 @media (max-width: 620px) { .entry-row { grid-template-columns: 1fr; gap: 4px; } }
 
 /* =============================================================================

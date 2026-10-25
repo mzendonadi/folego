@@ -358,6 +358,21 @@ export async function downloadExportXlsx() {
 export async function updateProfile(body) {
   return request('PUT', '/account/profile', { body });
 }
+export async function getPush() {
+  return request('GET', '/account/push');
+}
+export async function subscribePush(body) {
+  return request('POST', '/account/push/subscribe', { body });
+}
+export async function unsubscribePush(body) {
+  return request('POST', '/account/push/unsubscribe', { body });
+}
+export async function savePushPrefs(body) {
+  return request('PUT', '/account/push/prefs', { body });
+}
+export async function testPush() {
+  return request('POST', '/account/push/test');
+}
 export async function inviteLeadFriend({ friendEmail, yourName }) {
   return request('POST', '/referrals/lead', { body: { friendEmail, yourName } });
 }

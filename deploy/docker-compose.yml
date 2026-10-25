@@ -49,6 +49,8 @@ x-api-env: &api-env
   BIRD_WEBHOOK_SECRET: ${BIRD_WEBHOOK_SECRET:-}
   BIRD_TEMPLATE_INDICACAO: ${BIRD_TEMPLATE_INDICACAO:-}
   BIRD_BASE_URL: ${BIRD_BASE_URL:-}
+  # Notificações no celular (web push). Sem VAPID_PRIVATE_KEY o app instala normalmente, mas não pede permissão de notificação.
+  VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
   BIRD_TEMPLATE_LANGUAGE: ${BIRD_TEMPLATE_LANGUAGE:-}
 
 services:

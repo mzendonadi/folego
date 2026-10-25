@@ -4,6 +4,7 @@ import { el, icon, toast } from './dom.js';
 import { brl } from './format.js';
 import { PLANS } from '../vendor/engine.js';
 import { confirmDialog } from './confirm.js';
+import { appCard } from './account-app.js';
 
 const card = (...c) => el('section', { class: 'card d-section' }, ...c.filter(Boolean));
 const dateBr = (ms) => new Date(ms).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
@@ -342,7 +343,7 @@ export function viewPerfil(ctx) {
     }
     btn.disabled = false;
   });
-  return card(el('h2', {}, 'Perfil e notificações'), form);
+  return el('div', { class: 'stack' }, appCard(ctx), card(el('h2', {}, 'Perfil e notificações'), form));
 }
 
 export { PLANS };

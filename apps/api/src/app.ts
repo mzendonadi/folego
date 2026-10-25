@@ -19,6 +19,7 @@ import * as sub from './subscriptions.ts';
 import { registerGestao } from './admin/routes.ts';
 import * as campaigns from './admin/campaigns.ts';
 import * as extras from './account-extras.ts';
+import * as push from './push.ts';
 import * as cards from './cards.ts';
 import * as debts from './account-debts.ts';
 import { askPlanner } from './planner.ts';
@@ -764,6 +765,21 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     await extras.deleteReminder(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id));
     return reply.status(204).send();
   });
+  // Notificações no celular (app instalado). O aparelho é da pessoa que entrou (requireSelf), não da conta compartilhada.
+  app.get('/api/account/push', async (req) => push.pushView(ctx, await requireSelf(req)));
+  app.post('/api/account/push/subscribe', { config: { rateLimit: { max: 20 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => {
+    await push.subscribeDevice(ctx, await requireSelf(req), push.subscribeSchema.parse(req.body), req.headers['user-agent']);
+    return reply.status(201).send({ ok: true });
+  });
+  app.post('/api/account/push/unsubscribe', async (req) => {
+    await push.forgetDevice(ctx, await requireSelf(req), z.strictObject({ endpoint: z.string().max(1000) }).parse(req.body).endpoint);
+    return { ok: true };
+  });
+  app.put('/api/account/push/prefs', async (req) => {
+    await push.savePrefs(ctx, await requireSelf(req), push.prefsSchema.parse(req.body));
+    return { ok: true };
+  });
+  app.post('/api/account/push/test', { config: { rateLimit: { max: 4 * scale, timeWindow: '10 minutes' } } }, async (req) => ({ sent: await push.sendTest(ctx, await requireSelf(req)) }));
   app.get('/api/account/coach', async (req) => sub.coach(ctx, await requireSubscriber(req)));
   app.post('/api/account/simulate', async (req) => sub.simulate(ctx, await requireSubscriber(req), simulateSchema.parse(req.body)));
 

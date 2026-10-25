@@ -6,6 +6,7 @@ import { brl } from './format.js';
 import { PLANS } from '../vendor/engine.js';
 import { FEATURE_LABEL, TABS, VIEWS, NEEDS_MONTH, monthNow } from './account-views.js';
 import { drawCardCheckout, billingHeader, cancelNotice } from './account-billing.js';
+import { installBanner, registerWorker } from './account-app.js';
 
 const card = (...c) => el('section', { class: 'card d-section' }, ...c.filter(Boolean));
 const TAB_IDS = TABS.map((t) => t.id);
@@ -22,6 +23,7 @@ function rememberAccount(on) {
 }
 
 export function renderAccount(root, { api, tab: initialTab = null }) {
+  registerWorker(); // necessário para instalar o Prumo no celular e receber notificações
   let month = monthNow();
   let wantedTab = TAB_IDS.includes(initialTab) ? initialTab : 'coach';
 
@@ -289,7 +291,9 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
         if (id === 'lembretes') ctx.reminders = (await ctx.api.getReminders()).reminders;
         if (id === 'treinador') ctx.coach = await api.getCoach().catch(() => null);
         if (mine !== token) return; // a pessoa já foi para outra aba
-        panel.replaceChildren(VIEWS[id](ctx));
+        const view = VIEWS[id](ctx);
+        const invite = id === 'coach' || id === 'geral' ? installBanner(showTab) : null; // convite para instalar o app (some ao instalar ou dispensar)
+        panel.replaceChildren(...[invite, view].filter(Boolean));
       } catch (error) {
         if (mine !== token) return;
         if (error?.status === 402 || error?.status === 401) return boot(); // plano venceu ou sessão caiu

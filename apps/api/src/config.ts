@@ -1,3 +1,18 @@
+import { createECDH } from 'node:crypto';
+
+/** Chaves VAPID do web push: só a privada é segredo (32 bytes em base64url); a pública (65 bytes) sai dela. Inválida = notificações desligadas. */
+export function vapidFrom(privateKey: string | undefined): { privateKey: string; publicKey: string } | null {
+  const raw = (privateKey ?? '').trim();
+  if (!/^[A-Za-z0-9_-]{43}$/.test(raw)) return null;
+  try {
+    const ecdh = createECDH('prime256v1');
+    ecdh.setPrivateKey(Buffer.from(raw, 'base64url'));
+    return { privateKey: raw, publicKey: ecdh.getPublicKey().toString('base64url') };
+  } catch {
+    return null;
+  }
+}
+
 export interface AsaasConfig {
   apiKey: string;
   baseUrl: string;
@@ -59,6 +74,8 @@ export interface Config {
   /** Programa de indicações (convites por e-mail e desconto para assinantes). */
   referralEnabled: boolean;
   /** WhatsApp do Fôlego pela Bird (convite de indicação do Prumo). Sem a chave e o número, o convite por WhatsApp fica desligado e só o link de compartilhar funciona. */
+  /** Notificações no celular (web push). Ausente = desligado: o app instala, mas não pede permissão. */
+  push: { privateKey: string; publicKey: string; subject: string } | null;
   bird: { apiKey: string; from: string; baseUrl: string; template: string; language: string; webhookSecret: string | null; classic: boolean; workspaceId: string; channelId: string; inviteProjectId: string; inviteVersion: string } | null;
   /** Agregador de Open Finance (Pluggy). Sem as duas chaves, as contas conectadas ficam desligadas. */
   openFinance: { clientId: string; clientSecret: string; baseUrl: string } | null;
@@ -176,6 +193,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
           webhookSecret: env.BIRD_WEBHOOK_SECRET && env.BIRD_WEBHOOK_SECRET.trim().length >= 16 ? env.BIRD_WEBHOOK_SECRET.trim() : null,
         }
       : null,
+    push: ((v) => (v ? { ...v, subject: env.VAPID_SUBJECT?.trim() || 'mailto:contato@folego.online' } : null))(vapidFrom(env.VAPID_PRIVATE_KEY)),
     turnstileSiteKey: env.TURNSTILE_SITE_KEY ? env.TURNSTILE_SITE_KEY : null,
     turnstileSecret: env.TURNSTILE_SECRET ? env.TURNSTILE_SECRET : null,
     metaCapiToken: env.META_CAPI_TOKEN ? env.META_CAPI_TOKEN : null,

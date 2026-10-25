@@ -149,6 +149,7 @@ jobs:
           BIRD_WEBHOOK_SECRET: ${{ secrets.BIRD_WEBHOOK_SECRET }}
           BIRD_WHATSAPP_FROM: ${{ secrets.BIRD_WHATSAPP_FROM }}
           BIRD_TEMPLATE_INDICACAO: ${{ secrets.BIRD_TEMPLATE_INDICACAO }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
         run: |
           out="$RUNNER_TEMP/prod.env"; : > "$out"; chmod 600 "$out"
           # Meta Conversions API (decisão do dono em 2026-10-11): pixel certo e PageView anônimo ligado. Não são segredos.
@@ -170,6 +171,8 @@ jobs:
             [ -n "$BIRD_TEMPLATE_INDICACAO" ] && printf 'BIRD_TEMPLATE_INDICACAO=%s\n' "$BIRD_TEMPLATE_INDICACAO" >> "$out"
             echo "Bird: chave presente, o convite por WhatsApp será ligado."
           fi
+          # Notificações no celular do Prumo instalado (web push): só liga com a chave privada VAPID; a pública o servidor calcula a partir dela.
+          [ -n "$VAPID_PRIVATE_KEY" ] && printf 'VAPID_PRIVATE_KEY=%s\n' "$(printf '%s' "$VAPID_PRIVATE_KEY" | tr -d '[:space:]')" >> "$out"
           # Open Finance (Pluggy): só liga com as DUAS chaves; o segredo dos avisos e o endereço do widget são opcionais.
           if [ -n "$PLUGGY_CLIENT_ID" ] && [ -n "$PLUGGY_CLIENT_SECRET" ]; then
             printf 'PLUGGY_CLIENT_ID=%s\n' "$PLUGGY_CLIENT_ID" >> "$out"
