@@ -12,10 +12,26 @@ window.addEventListener('beforeinstallprompt', (e) => {
 });
 window.addEventListener('appinstalled', () => {
   deferredPrompt = null;
+  markInstalled();
   listeners.forEach((f) => f());
 });
 
 export const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+
+// "Já instalei o app neste aparelho": guardado no próprio navegador, então vale para cada aparelho separadamente.
+// Quem instalou e abre o site no navegador comum continua sem ver o convite de instalação.
+const INSTALLED_KEY = 'prumo_app_instalado';
+export const wasInstalled = () => { try { return localStorage.getItem(INSTALLED_KEY) === '1'; } catch { return false; } };
+function markInstalled() { try { localStorage.setItem(INSTALLED_KEY, '1'); } catch { /* sem armazenamento: o convite pode voltar */ } }
+if (isStandalone()) markInstalled(); // aberto pelo ícone: com certeza está instalado aqui
+/** Instalado neste aparelho? Usa o que ficou guardado e, no Chrome do Android, pergunta ao navegador (o manifesto lista o próprio app). */
+export async function detectInstalled() {
+  if (isStandalone() || wasInstalled()) return true;
+  try {
+    if (typeof navigator.getInstalledRelatedApps === 'function' && (await navigator.getInstalledRelatedApps()).length > 0) { markInstalled(); return true; }
+  } catch { /* navegador sem suporte: segue sem saber */ }
+  return false;
+}
 const isIos = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const pushSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
 
@@ -65,13 +81,14 @@ export function appCard(ctx) {
     if (drawn && !box.isConnected) { listeners.delete(redraw); return; } // a pessoa saiu da aba
     drawn = true;
     const standalone = isStandalone();
+    const installed = standalone || (await detectInstalled());
     const state = await ctx.api.getPush().catch(() => null);
     const local = await currentSubscription();
     const parts = [el('h2', {}, 'Prumo no seu celular'), el('p', { class: 'muted' }, 'Instale o Prumo como um app, sem loja: ele ganha um ícone na tela inicial e abre direto na sua conta.')];
 
     // ---- instalar ----
-    if (standalone) {
-      parts.push(el('p', { class: 'note note-ok' }, icon('check'), el('span', {}, 'O Prumo já está instalado neste aparelho.')));
+    if (installed) {
+      parts.push(el('p', { class: 'note note-ok' }, icon('check'), el('span', {}, standalone ? 'O Prumo já está instalado neste aparelho.' : 'O Prumo já está instalado neste aparelho. Abra pelo ícone na tela inicial para receber as notificações.')));
     } else if (deferredPrompt) {
       const b = el('button', { class: 'btn btn-primary', type: 'button' }, 'Instalar no celular');
       b.addEventListener('click', async () => {
@@ -162,7 +179,7 @@ export function appCard(ctx) {
 export function installBanner(goTab) {
   let dismissed = false;
   try { dismissed = localStorage.getItem('prumo_app_convite') === '1'; } catch { dismissed = false; }
-  if (dismissed || isStandalone()) return null;
+  if (dismissed || isStandalone() || wasInstalled()) return null;
   const mobile = window.matchMedia('(max-width: 900px)').matches || navigator.maxTouchPoints > 0;
   if (!mobile) return null;
   const go = el('button', { class: 'btn btn-primary btn-sm', type: 'button' }, 'Instalar no celular');
@@ -179,6 +196,7 @@ export function installBanner(goTab) {
       goTab('perfil');
     }
   });
+  detectInstalled().then((ok) => { if (ok) box.remove(); }); // instalou depois (ou o Chrome avisa que já está instalado): o convite some
   x.addEventListener('click', () => {
     try { localStorage.setItem('prumo_app_convite', '1'); } catch { /* sem armazenamento: o convite volta na próxima visita */ }
     box.remove();

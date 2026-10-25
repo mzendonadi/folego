@@ -2,6 +2,7 @@
 // O vínculo é feito mandando "VINCULAR <código>" do próprio aparelho para o WhatsApp do Fôlego; isso prova que o número é da pessoa.
 import { el, icon, toast } from './dom.js';
 import { confirmDialog } from './confirm.js';
+import { waLinks, platformOf } from './wa-links.js';
 
 export function assistantCard(ctx) {
   const box = el('section', { class: 'card d-section assistant-card' });
@@ -29,10 +30,22 @@ export function assistantCard(ctx) {
         off,
       );
     } else if (s.pending) {
+      // Quem tem o WhatsApp e o WhatsApp Business no mesmo celular escolhe em qual conectar (o link comum sempre cai em um só).
+      const message = `VINCULAR ${s.pending.code}`;
+      const links = waLinks(s.number, message);
+      const platform = platformOf();
+      const open = (href, text) => el('a', { class: 'btn btn-primary', href, ...(platform === 'outro' ? { target: '_blank', rel: 'noopener' } : {}) }, text);
+      const choices = platform === 'outro'
+        ? [open(links.web, 'Abrir o WhatsApp')]
+        : [open(links[platform].normal, 'WhatsApp'), open(links[platform].business, 'WhatsApp Business')];
+      const copy = el('button', { class: 'btn btn-secondary', type: 'button' }, 'Copiar a mensagem');
+      copy.addEventListener('click', async () => {
+        try { await navigator.clipboard.writeText(message); toast(`Copiado. Cole no WhatsApp e envie para ${s.number}.`); } catch { toast(`Escreva ${message} e envie para ${s.number}.`); }
+      });
       parts.push(
-        el('p', {}, 'Toque no botão e envie a mensagem que já vem pronta. Se preferir, mande ', el('strong', {}, `VINCULAR ${s.pending.code}`), ` para ${s.number}, do número que você quer conectar.`),
-        el('a', { class: 'btn btn-primary', href: s.pending.link, target: '_blank', rel: 'noopener' }, 'Abrir o WhatsApp e enviar o código'),
-        el('p', { class: 'fine muted' }, 'O código vale por 30 minutos. Esta tela atualiza sozinha quando o WhatsApp for conectado.'),
+        el('p', {}, el('strong', {}, platform === 'outro' ? 'Abra o WhatsApp com a mensagem pronta e envie.' : 'Em qual WhatsApp você quer conectar?')),
+        el('div', { class: 'row-actions' }, ...choices, copy),
+        el('p', { class: 'fine muted' }, `Prefere fazer à mão? Mande ${message} para ${s.number}, do número que você quer conectar. O código vale por 30 minutos e esta tela atualiza sozinha quando conectar.`),
       );
       poll = setInterval(draw, 4000);
     } else {

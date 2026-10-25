@@ -223,10 +223,11 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
     panel.id = 'acc-panel';
 
     const bar = el(
-      'header', { class: 'acc-bar' },
-      el('div', {}, el('span', { class: `pill tone-${head.tone === 'ok' ? 'ok' : 'attention'}` }, head.pill), acc.demo ? el('span', { class: 'pill tone-attention demo-pill', title: 'Conta de teste ligada pelo dono: nada é cobrado, nem aqui nem nos produtos avulsos.' }, 'Conta de teste · nada é cobrado') : null, el('p', { class: 'muted acc-mail' }, acc.profile?.displayName ? `${acc.profile.displayName} · ${acc.email}` : acc.email)),
+      // No celular o plano, o nome, o e-mail e a renovação saem do topo (ficam em "Plano e dados"); o resto do cabeçalho só aparece se tiver aviso (conta de teste, conta compartilhada).
+      'header', { class: 'acc-bar', ...(acc.demo || acc.role === 'member' ? { 'data-keep': '' } : {}) },
+      el('div', {}, el('span', { class: `pill tone-${head.tone === 'ok' ? 'ok' : 'attention'} acc-hide-mobile` }, head.pill), acc.demo ? el('span', { class: 'pill tone-attention demo-pill', title: 'Conta de teste ligada pelo dono: nada é cobrado, nem aqui nem nos produtos avulsos.' }, 'Conta de teste · nada é cobrado') : null, el('p', { class: 'muted acc-mail acc-hide-mobile' }, acc.profile?.displayName ? `${acc.profile.displayName} · ${acc.email}` : acc.email)),
       acc.role === 'member' ? el('p', { class: 'fine muted' }, 'Conta compartilhada de ' + acc.ownerEmail) : null,
-      el('p', { class: 'muted acc-until' }, head.line),
+      el('p', { class: 'muted acc-until acc-hide-mobile' }, head.line),
     );
     const cancelBanner = acc.billing?.status === 'canceled'
       ? el('div', { class: 'note note-amber no-print' }, icon('alert'), el('div', { class: 'warn-row' }, el('span', {}, cancelNotice(new Date(acc.subscription.periodEnd).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })))))

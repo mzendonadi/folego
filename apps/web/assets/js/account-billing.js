@@ -308,7 +308,7 @@ export function viewPlano(ctx, FEATURE_LABEL) {
       el('p', { class: 'muted' }, 'Tudo o que você lançou é seu. Baixe quando quiser, em planilha (abre no Excel e no Google Planilhas) ou em PDF. Se cancelar, o download continua liberado até o fim do mês já pago.'),
       exportButtons(ctx.api),
     ),
-    card(el('h2', {}, 'Conta'), el('p', { class: 'muted' }, acc.email), el('p', { class: 'fine' }, 'Precisa de ajuda? Escreva para ', el('a', { class: 'link', href: 'mailto:suporte@folego.online' }, 'suporte@folego.online'), '.'), el('div', { class: 'button-row no-print' }, logoutBtn, deleteBtn)),
+    card(el('h2', {}, 'Conta'), el('p', { class: 'muted' }, acc.profile?.displayName ? `${acc.profile.displayName} · ${acc.email}` : acc.email), el('p', { class: 'fine' }, 'Precisa de ajuda? Escreva para ', el('a', { class: 'link', href: 'mailto:suporte@folego.online' }, 'suporte@folego.online'), '.'), el('div', { class: 'button-row no-print' }, logoutBtn, deleteBtn)),
   );
 }
 
