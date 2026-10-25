@@ -7,6 +7,7 @@ import { PLANS } from '../vendor/engine.js';
 import { FEATURE_LABEL, TABS, VIEWS, NEEDS_MONTH, monthNow } from './account-views.js';
 import { drawCardCheckout, billingHeader, cancelNotice } from './account-billing.js';
 import { installBanner, registerWorker } from './account-app.js';
+import { hideHeaderAvatar, showHeaderAvatar } from './account-avatar.js';
 
 const card = (...c) => el('section', { class: 'card d-section' }, ...c.filter(Boolean));
 const TAB_IDS = TABS.map((t) => t.id);
@@ -51,6 +52,7 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
   }
 
   async function boot() {
+    hideHeaderAvatar(); // só quem está dentro do Prumo (com assinatura) vê o ícone de perfil
     let acc;
     try {
       acc = await api.getAccount();
@@ -209,14 +211,16 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
     const groups = [...new Set(TABS.map((t) => t.group))];
     const tabbar = el(
       'div', { class: 'acc-tabs no-print', role: 'tablist', 'aria-label': 'Áreas do Prumo' },
-      ...groups.map((g) => el('div', { class: 'acc-group', role: 'presentation' }, el('span', { class: 'acc-group-label', 'aria-hidden': 'true' }, g), ...tabButtons.filter((b) => TABS.find((t) => t.id === b.dataset.tab).group === g))),
+      // "Perfil" não é aba da barra: abre pelo ícone do topo (a rota /conta/perfil continua valendo).
+      ...groups.map((g) => el('div', { class: 'acc-group', role: 'presentation' }, el('span', { class: 'acc-group-label', 'aria-hidden': 'true' }, g), ...tabButtons.filter((b) => b.dataset.tab !== 'perfil' && TABS.find((t) => t.id === b.dataset.tab).group === g))),
     );
+    const NAV_IDS = TAB_IDS.filter((id) => id !== 'perfil');
     tabbar.addEventListener('keydown', (e) => {
-      const i = TAB_IDS.indexOf(current);
-      const next = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: TAB_IDS.length - 1 }[e.key];
+      const i = Math.max(NAV_IDS.indexOf(current), 0);
+      const next = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: NAV_IDS.length - 1 }[e.key];
       if (next === undefined) return;
       e.preventDefault();
-      const id = TAB_IDS[(next + TAB_IDS.length) % TAB_IDS.length];
+      const id = NAV_IDS[(next + NAV_IDS.length) % NAV_IDS.length];
       showTab(id);
       root.querySelector(`#acc-tab-${id}`)?.focus();
     });
@@ -266,7 +270,8 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
         b.tabIndex = on ? 0 : -1;
         if (on && !window.matchMedia('(min-width: 960px)').matches) tabbar.scrollTo({ left: Math.max(0, b.offsetLeft - 24), behavior: 'smooth' });
       });
-      panel.setAttribute('aria-labelledby', `acc-tab-${id}`);
+      panel.setAttribute('aria-labelledby', id === 'perfil' ? 'acc-profile-btn' : `acc-tab-${id}`);
+      document.getElementById('acc-profile-btn')?.toggleAttribute('data-active', id === 'perfil');
       if (location.pathname.startsWith('/conta')) history.replaceState(history.state, '', hashFor(id));
       panel.replaceChildren(el('p', { class: 'muted acc-loading', role: 'status' }, 'Carregando…'));
       try {
@@ -307,6 +312,7 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
 
     // replaceChildren() é API nativa: diferente do nosso el(), não ignora null — por isso o filter.
     root.replaceChildren(...[bar, cancelBanner, el('div', { class: 'acc-shell' }, tabbar, panel)].filter(Boolean));
+    showHeaderAvatar(acc, () => showTab('perfil')); // ícone de perfil na linha da marca, no topo
     showTab(current);
   }
 

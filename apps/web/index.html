@@ -499,10 +499,14 @@
     <!-- ============================ CONTA / ASSINATURA ============================ -->
     <section id="view-account" data-view="account" hidden aria-labelledby="account-title">
       <div class="wrap tools-wrap">
-        <header class="view-head">
-          <button class="btn btn-quiet btn-sm back-link" type="button" data-nav="landing"><svg class="icon" aria-hidden="true"><use href="#i-arrow-left"/></svg>Início</button>
-          <p class="eyebrow">Fôlego · app de finanças</p>
-          <h1 id="account-title" tabindex="-1"><svg class="prumo-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><path d="M11.5 6V21.5M11.5 6H17.2A6.2 6.2 0 0 1 17.2 18.4H11.5" class="pm-ink" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M11.5 21.5V25.4" class="pm-ink" stroke-width="1.3" stroke-linecap="round" fill="none"/><circle cx="11.5" cy="28.2" r="2.6" class="pm-bob"/><circle cx="24.6" cy="4.4" r="1.5" class="pm-accent"/></svg>Prumo</h1>
+        <header class="view-head acc-head">
+          <div class="acc-head-row">
+            <div class="acc-brand">
+              <h1 id="account-title" tabindex="-1"><svg class="prumo-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><path d="M11.5 6V21.5M11.5 6H17.2A6.2 6.2 0 0 1 17.2 18.4H11.5" class="pm-ink" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M11.5 21.5V25.4" class="pm-ink" stroke-width="1.3" stroke-linecap="round" fill="none"/><circle cx="11.5" cy="28.2" r="2.6" class="pm-bob"/><circle cx="24.6" cy="4.4" r="1.5" class="pm-accent"/></svg>Prumo</h1>
+              <p class="eyebrow acc-tagline">Seu app de finanças</p>
+            </div>
+            <button id="acc-profile-btn" class="acc-avatar" type="button" aria-label="Meu perfil" hidden></button>
+          </div>
         </header>
         <div class="tools-layout" id="account-root"></div>
       </div>

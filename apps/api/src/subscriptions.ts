@@ -90,13 +90,13 @@ export interface AccountView {
   subscription: { plan: PlanCode; active: boolean; periodEnd: number; cancelAtPeriodEnd: boolean } | null;
   /** Assinatura mensal no cartão (mensal, renova em…, cancelada, acesso até…). Nulo para quem ainda não assinou desse jeito. */
   billing: BillingView | null;
-  profile: { displayName: string | null; notifyDigest: boolean; notifyReminders: boolean; marketing: boolean };
+  profile: { displayName: string | null; notifyDigest: boolean; notifyReminders: boolean; marketing: boolean; avatarAt: string | null };
   /** Conta de teste ligada pelo dono: nada é cobrado (o Prumo mostra um aviso). */
   demo: boolean;
 }
 
 export async function accountView(ctx: Ctx, subscriberId: string): Promise<AccountView> {
-  const s = await ctx.db.query<{ email: string; display_name: string | null; notify_digest: boolean; notify_reminders: boolean; opted_out: boolean }>(`SELECT email, display_name, notify_digest, notify_reminders, (marketing_opt_out_at IS NOT NULL) AS opted_out FROM app.subscribers WHERE id = $1 AND deleted_at IS NULL`, [subscriberId]);
+  const s = await ctx.db.query<{ email: string; display_name: string | null; notify_digest: boolean; notify_reminders: boolean; opted_out: boolean; avatar_at: Date | string | null }>(`SELECT email, display_name, notify_digest, notify_reminders, (marketing_opt_out_at IS NOT NULL) AS opted_out, avatar_at FROM app.subscribers WHERE id = $1 AND deleted_at IS NULL`, [subscriberId]);
   if (!s.rows[0]) throw notFound();
   const sub = await ctx.db.query<{ plan: PlanCode; status: string; current_period_end: Date | string; cancel_at_period_end: boolean }>(
     `SELECT plan, status, current_period_end, cancel_at_period_end FROM app.subscriptions WHERE subscriber_id = $1`,
@@ -112,7 +112,7 @@ export async function accountView(ctx: Ctx, subscriberId: string): Promise<Accou
     email: p.email,
     subscription: row ? { plan: row.plan, active: row.status === 'active' && end + grace > Date.now(), periodEnd: end, cancelAtPeriodEnd: row.cancel_at_period_end } : null,
     billing,
-    profile: { displayName: p.display_name, notifyDigest: p.notify_digest, notifyReminders: p.notify_reminders, marketing: !p.opted_out },
+    profile: { displayName: p.display_name, notifyDigest: p.notify_digest, notifyReminders: p.notify_reminders, marketing: !p.opted_out, avatarAt: p.avatar_at ? new Date(p.avatar_at).toISOString() : null },
     demo: await isDemoSubscriber(ctx, subscriberId),
   };
 }

@@ -361,6 +361,12 @@ export async function downloadExportXlsx() {
 export async function updateProfile(body) {
   return request('PUT', '/account/profile', { body });
 }
+export async function saveAvatar(body) {
+  return request('PUT', '/account/avatar', { body });
+}
+export async function deleteAvatar() {
+  return request('DELETE', '/account/avatar');
+}
 export async function getAssistant() {
   return request('GET', '/account/assistant');
 }

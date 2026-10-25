@@ -5,6 +5,7 @@ import { brl } from './format.js';
 import { PLANS } from '../vendor/engine.js';
 import { confirmDialog } from './confirm.js';
 import { appCard } from './account-app.js';
+import { avatarCard } from './account-avatar.js';
 import { assistantCard } from './account-assistant.js';
 
 const card = (...c) => el('section', { class: 'card d-section' }, ...c.filter(Boolean));
@@ -344,7 +345,7 @@ export function viewPerfil(ctx) {
     }
     btn.disabled = false;
   });
-  return el('div', { class: 'stack' }, appCard(ctx), assistantCard(ctx), card(el('h2', {}, 'Perfil e notificações'), form));
+  return el('div', { class: 'stack' }, avatarCard(ctx, () => ctx.goTab('perfil')), appCard(ctx), assistantCard(ctx), card(el('h2', {}, 'Perfil e notificações'), form));
 }
 
 export { PLANS };

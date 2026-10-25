@@ -219,7 +219,7 @@ test('perfil e preferências: nome, resumo semanal, lembretes e novidades', asyn
   assert.equal((await c('GET', '/api/account')).json.profile.notifyDigest, true);
   const r = await c('PUT', '/api/account/profile', { body: { displayName: 'Ana', notifyDigest: false, notifyReminders: false, marketing: false } });
   assert.equal(r.status, 200);
-  assert.deepEqual(r.json, { displayName: 'Ana', notifyDigest: false, notifyReminders: false, marketing: false });
+  assert.deepEqual(r.json, { displayName: 'Ana', notifyDigest: false, notifyReminders: false, marketing: false, avatarAt: null });
   assert.equal((await c('PUT', '/api/account/profile', { body: { marketing: true } })).json.marketing, true);
 });
 

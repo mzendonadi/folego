@@ -22,6 +22,7 @@ import * as extras from './account-extras.ts';
 import * as push from './push.ts';
 import * as vault from './vault.ts';
 import * as assistant from './assistant.ts';
+import * as avatar from './avatar.ts';
 import * as cards from './cards.ts';
 import * as debts from './account-debts.ts';
 import { askPlanner } from './planner.ts';
@@ -779,6 +780,16 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
   app.delete('/api/account/reminders/:id', async (req, reply) => {
     await extras.deleteReminder(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id));
+    return reply.status(204).send();
+  });
+  // Foto de perfil (ícone no topo do Prumo). O ?v=<data> da tela só serve para o navegador renovar a imagem quando ela muda.
+  app.get('/api/account/avatar', async (req, reply) => {
+    const f = await avatar.getAvatar(ctx, await requireSelf(req));
+    return reply.headers({ 'content-type': f.mime, 'cache-control': 'private, max-age=86400', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'none'; sandbox" }).send(f.bytes);
+  });
+  app.put('/api/account/avatar', { config: { rateLimit: { max: 20 * scale, timeWindow: '10 minutes' } } }, async (req) => avatar.saveAvatar(ctx, await requireSelf(req), avatar.avatarSchema.parse(req.body)));
+  app.delete('/api/account/avatar', async (req, reply) => {
+    await avatar.deleteAvatar(ctx, await requireSelf(req));
     return reply.status(204).send();
   });
   // Assistente do Prumo no WhatsApp: vincular o número (por código), ver o estado e desconectar. O resto acontece pelas mensagens (webhook da Bird).

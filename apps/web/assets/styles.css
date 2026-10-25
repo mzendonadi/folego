@@ -712,11 +712,28 @@ ul, ol { margin: 0; padding: 0; }
 .acc-bar { display: flex; justify-content: space-between; align-items: center; gap: var(--s3); flex-wrap: wrap; }
 .acc-bar .acc-mail { margin-top: 6px; overflow-wrap: anywhere; }
 .acc-until { font-weight: 700; }
-/* Celular: os dados do plano ficam só na aba "Plano e dados"; o cabeçalho some, salvo se tiver aviso (conta de teste ou compartilhada). */
-@media (max-width: 959px) {
-  .acc-bar:not([data-keep]) { display: none; }
-  .acc-bar[data-keep] .acc-hide-mobile { display: none; }
-}
+/* Os dados do plano (pílula, nome, e-mail, valor e renovação) ficam só na aba "Plano e dados", no celular e no computador.
+   O cabeçalho só aparece se tiver aviso (conta de teste ou compartilhada). */
+.acc-bar:not([data-keep]) { display: none; }
+.acc-bar[data-keep] .acc-hide-mobile { display: none; }
+
+/* Topo do Prumo: marca à esquerda e ícone de perfil à direita, na mesma linha (rolam juntos com a página). */
+.acc-head-row { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); }
+.acc-brand h1 { margin: 0; }
+.acc-tagline { margin: 4px 0 0; }
+.acc-avatar { flex: none; width: 48px; height: 48px; padding: 0; border-radius: 50%; border: 2px solid var(--line); background: var(--sunken); display: grid; place-items: center; overflow: hidden; cursor: pointer; transition: border-color 0.2s var(--ease), transform 0.2s var(--ease), box-shadow 0.2s var(--ease); }
+.acc-avatar[hidden] { display: none; }
+.acc-avatar:hover { border-color: var(--primary); }
+.acc-avatar:active { transform: scale(0.96); }
+.acc-avatar[data-active] { border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 25%, transparent); }
+.acc-avatar:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.avatar-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.avatar-initial { display: grid; place-items: center; font-family: var(--font-display); font-size: 1.25rem; font-weight: 600; color: var(--primary-ink); background: var(--primary); }
+.avatar-row { display: flex; align-items: center; gap: var(--s4); flex-wrap: wrap; }
+.avatar-big { width: 88px; height: 88px; border-radius: 50%; overflow: hidden; border: 2px solid var(--line); display: block; flex: none; }
+.avatar-big .avatar-initial { font-size: 2.25rem; }
+.avatar-card .row-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+@media (prefers-reduced-motion: reduce) { .acc-avatar { transition: none; } }
 .warn-row { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); flex-wrap: wrap; flex: 1; }
 .acc-tabs { position: sticky; top: 68px; z-index: 20; display: flex; gap: 8px; overflow-x: auto; padding: 10px 2px; margin-inline: -2px; background: color-mix(in srgb, var(--paper) 92%, transparent); backdrop-filter: blur(8px); scrollbar-width: none; }
 .acc-tabs::-webkit-scrollbar { display: none; }
