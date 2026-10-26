@@ -73,7 +73,7 @@ export async function anchorWallet(ctx: Ctx, subscriberId: string, id: string, a
     if (!w.rows[0]) throw notFound();
     if (w.rows[0].kind !== 'conta') throw new AppError(422, 'invalid_kind', 'Só uma conta bancária pode ser ajustada pelo extrato.');
     // lançamentos da conta que estavam sem carteira (compras no cartão ficam de fora: não mexem na conta)
-    await q.query(`UPDATE app.ledger_entries SET wallet_id = $2 WHERE subscriber_id = $1 AND wallet_id IS NULL AND card_id IS NULL`, [subscriberId, id]);
+    await q.query(`UPDATE app.ledger_entries SET wallet_id = $2 WHERE subscriber_id = $1 AND wallet_id IS NULL AND card_id IS NULL AND note NOT LIKE 'Juros do parcelamento da fatura%'`, [subscriberId, id]);
     const sum = await q.query<{ s: string; later: string }>(
       `SELECT (coalesce((SELECT sum(amount_cents) FROM app.ledger_entries WHERE wallet_id = $1 AND occurred_on <= $2::date), 0)
                 - coalesce((SELECT sum(amount_cents) FROM app.card_payments WHERE wallet_id = $1 AND paid_on <= $2::date), 0))::text AS s,
