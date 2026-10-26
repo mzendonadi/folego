@@ -13,6 +13,7 @@ import { leadsSection } from './leads.js';
 import { referralCard } from './referral.js';
 import { CATALOG, priceLabel, daysOf } from './catalog.js';
 import { accessBanner } from './access-banner.js';
+import { FORGOTTEN_DIRECTORY } from '../vendor/engine.js';
 
 // ---------- componentes ----------
 export function gauge(score, band, { small = false } = {}) {
@@ -360,6 +361,7 @@ export function renderDelivery(root, { input, diagnosis: d, items, generated, ex
   const dinheiro = section(
     'dinheiro', 'Dinheiro esquecido',
     el('p', { class: 'section-sub' }, 'Antes de quitar dívida, vale conferir se existe dinheiro seu parado em bancos, FGTS, PIS/Pasep ou imposto. O guia monta o roteiro de onde procurar para o seu caso, com o passo a passo de cada fonte oficial.'),
+    el('ul', { class: 'official-links' }, ...FORGOTTEN_DIRECTORY.map((s) => el('li', {}, el('strong', {}, s.name), el('span', { class: 'muted' }, ` ${s.covers} `), el('a', { href: s.link, target: '_blank', rel: 'noopener noreferrer' }, s.linkLabel)))),
     forgotten?.active
       ? el('div', { class: 'd-actions no-print' }, el('a', { class: 'btn btn-primary', href: '/guia/forgotten' }, 'Ver o guia (prévia grátis)', icon('arrow-right')), el('span', { class: 'fine' }, `${priceLabel('guide_forgotten')} por Pix, só se você gostar da prévia.`))
       : null,

@@ -221,6 +221,7 @@ export async function deleteAccount(ctx: Ctx, sessionId: string, subscriberId: s
     const maps = await q.query<{ id: string }>(`SELECT id FROM app.cases WHERE owner_subscriber_id = $1 AND status <> 'purged'`, [subscriberId]);
     for (const m of maps.rows) await wipeCase(q, m.id); // o Mapa de quem apaga a conta vai junto
     await q.query(`DELETE FROM app.ledger_entries WHERE subscriber_id = $1`, [subscriberId]);
+    await q.query(`DELETE FROM app.trips WHERE subscriber_id = $1`, [subscriberId]);
     await q.query(`DELETE FROM app.budget_limits WHERE subscriber_id = $1`, [subscriberId]);
     await q.query(`DELETE FROM app.goals WHERE subscriber_id = $1`, [subscriberId]);
     await q.query(`DELETE FROM app.subscriptions WHERE subscriber_id = $1`, [subscriberId]);

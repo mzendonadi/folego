@@ -312,4 +312,23 @@ export const cardImportSchema = z.strictObject({
   }).optional(),
 });
 
+/** Planejar férias: o formulário simples da viagem. */
+export const tripSchema = z.strictObject({
+  name: z.string().trim().min(1).max(60),
+  destination: z.string().trim().min(1).max(80),
+  origin: z.string().trim().max(80).default(''),
+  startDate: isoDate,
+  endDate: isoDate,
+  kind: z.enum(['carro', 'aviao', 'onibus', 'motorhome', 'navio']),
+  adults: z.number().int().min(1).max(12),
+  children: z.number().int().min(0).max(12).default(0),
+  seniors: z.boolean().default(false),
+  pets: z.boolean().default(false),
+  lodging: z.enum(['hotel', 'casa', 'camping', 'familia']),
+  international: z.boolean().default(false),
+  budgetCents: z.number().int().min(0).max(100_000_000).nullable().default(null),
+  notes: z.string().trim().max(500).default(''),
+});
+export const tripCheckSchema = z.strictObject({ itemId: z.string().trim().min(1).max(40), done: z.boolean() });
+
 export type CreateCaseInput = z.infer<typeof createCaseSchema>;

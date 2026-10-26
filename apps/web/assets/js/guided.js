@@ -290,7 +290,7 @@ const PREVIEWS = {
   forgotten: (p) => ({
     title: p.headline,
     items: [`Por onde começar: ${p.firstSourceName}.`, p.hasHeirPath ? 'Inclui o caminho para herdeiros (valores de pessoa falecida).' : 'Roteiro montado só com o que combina com as suas respostas.', 'Não prometemos valor: só dizemos onde procurar, em ordem, e como evitar golpe.'],
-    locked: ['A lista dos lugares oficiais, com o link de cada um', 'O passo a passo e os documentos de cada consulta', 'A lista de golpes mais comuns e como reconhecê-los', 'Um quadro para marcar o que você já consultou'],
+    locked: ['Os lugares certos para o seu caso, na ordem em que vale procurar, com o motivo de cada um', 'O passo a passo e os documentos de cada consulta', 'A lista de golpes mais comuns e como reconhecê-los', 'Um quadro para marcar o que você já consultou'],
   }),
   resume: (p) => ({
     title: p.headline,

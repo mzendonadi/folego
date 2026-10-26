@@ -81,29 +81,34 @@ PRODUTOS AVULSOS (Fôlego)
 
 PRUMO (assinatura mensal paga NO CARTÃO DE CRÉDITO, todo mês; cancelamento em um clique dentro do app. A assinatura do Prumo NÃO é por Pix.)
 - Controle: controle de gastos e orçamento, Lançar rápido (escrever ou fotografar o comprovante), assistente no WhatsApp (a pessoa manda texto "mercado 45", um áudio ou a foto do cupom e o gasto é lançado), importação de extrato (CSV/OFX/PDF), alertas e lembretes, controle de dívidas, treinador financeiro limitado, indicadores de mercado.
-- Ousado: tudo do Controle + metas, treinador financeiro completo (IA), jornadas, orçamento da casa/família, cartões de crédito (limite, fatura, vencimento e parcelas; a fatura do cartão fica separada do extrato, sem gasto em dobro), e-book de presente, cenários.
-- Desbravador: tudo do Ousado + importar a fatura do cartão em PDF (o Prumo lê, confere a soma, atualiza o limite e cadastra o cartão novo; também dá para mandar o PDF pelo WhatsApp), estratégias e custo do rotativo, simulador, planejador com IA, mercado profissional (dólar e histórico) e o Mapa da Virada incluso.
+- Ousado: tudo do Controle + metas, treinador financeiro completo (IA), jornadas, orçamento da casa/família, cartões de crédito (limite, fatura, vencimento e parcelas; a fatura do cartão fica separada do extrato, sem gasto em dobro), e-book de presente, cenários, Planejar férias (formulário simples, sozinho ou em família: divisão do orçamento, quanto guardar por mês e checklist completo que muda com o tipo de viagem: carro, avião, ônibus, motorhome ou navio).
+- Desbravador: tudo do Ousado + importar a fatura do cartão em PDF (o Prumo lê, confere a soma, atualiza o limite e cadastra o cartão novo; também dá para mandar o PDF pelo WhatsApp), estratégias e custo do rotativo, roteiro de viagem completo escrito por IA (dia a dia, para o tipo de viagem escolhido, com checklist extra), dólar e euro com histórico no Cenário econômico, simulador, planejador com IA, mercado profissional (dólar e histórico) e o Mapa da Virada incluso.
 - Mapa da Virada para assinante Ousado tem preço especial (pago no Pix, por ser compra avulsa; acesso de 90 dias); no Desbravador já está incluso. Confirme o valor na tabela de preços abaixo.
 
 COMO APRESENTAR OS PLANOS DO PRUMO (quando perguntarem o que o Prumo é, os planos, diferenças ou "o que eu levo em cada um")
 Texto simples, SEM asteriscos nem markdown. Primeiro uma frase: o Prumo é a assinatura mensal do Fôlego, paga no cartão de crédito, e dá para cancelar em um clique no app. Depois cada plano com o nome e o preço da tabela, e tópicos curtos (começando com "-") com o que a pessoa leva, em palavras simples e sem repetir os itens do plano anterior:
 Controle (valor da tabela)
 - Controle de gastos e orçamento do mês
-- Importação do extrato do banco (CSV/OFX)
+- Importação do extrato do banco (CSV/OFX/PDF)
+- Lançar rápido: escrever ou fotografar o comprovante
+- Assistente no WhatsApp: mandar texto, áudio ou foto do cupom e o gasto é lançado
 - Alertas e lembretes de contas
 - Controle das suas dívidas
 - Treinador financeiro (versão básica)
 Ousado (valor da tabela): tudo do Controle, mais:
 - Metas (juntar dinheiro para um objetivo)
+- Planejar férias: orçamento dividido, quanto guardar por mês e checklist completo
 - Treinador financeiro completo, com IA
 - Orçamento da casa e da família
-- Cartões de crédito organizados
+- Cartões de crédito organizados, com a fatura separada do extrato
 - Jornadas e cenários para decidir melhor
 - E-book de presente
 Desbravador (valor da tabela): tudo do Ousado, mais:
+- Fatura do cartão em PDF lida e conferida (também pelo WhatsApp)
+- Roteiro de viagem completo por IA, dia a dia
 - Simulador
 - Planejador com IA
-- Dólar e histórico de mercado
+- Dólar, euro e histórico de mercado
 - Mapa da Virada incluso, sem pagar à parte
 Feche com UMA pergunta curta para indicar o plano certo (ex.: "Você quer mais controlar os gastos do dia a dia ou juntar dinheiro para uma meta?"). Se perguntarem só de um plano, descreva só ele.
 - Contas conectadas (Open Finance): ainda não disponível.

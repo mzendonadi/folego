@@ -2016,6 +2016,26 @@ body[data-route="partner"] .fl-chat, body[data-route="unsubscribe"] .fl-chat, bo
   body[data-route="intake"] .fl-chat-tip { display: none; }
   body[data-route="intake"] .fl-chat-fab { height: 48px; min-width: 48px; padding: 0 11px; }
 }
+/* Planejar férias e lista de sites oficiais do dinheiro esquecido */
+.trip-row { grid-template-columns: 1fr auto auto; }
+.trip-hint { display: block; }
+.trip-group { margin-top: var(--s4); }
+.trip-group h4 { margin: 0 0 var(--s2); }
+.trip-day { border-top: 1px solid var(--line); padding-top: var(--s3); margin-top: var(--s3); }
+.trip-day h4 { margin: 0 0 var(--s2); }
+.trip-day-body { display: grid; grid-template-columns: max-content 1fr; gap: 4px var(--s3); margin: 0 0 var(--s2); }
+.trip-day-body dt { font-weight: 600; }
+.trip-day-body dd { margin: 0; }
+.trip-form textarea { resize: vertical; }
+.official-links { list-style: none; padding: 0; margin: var(--s3) 0; display: grid; gap: var(--s3); }
+.official-links li { border-left: 3px solid var(--line); padding-left: var(--s3); }
+.official-links a { display: inline-block; margin-top: 2px; overflow-wrap: anywhere; }
+@media (max-width: 559px) {
+  .trip-row { grid-template-columns: 1fr; }
+  .trip-day-body { grid-template-columns: 1fr; }
+  .trip-day-body dt { margin-top: var(--s2); }
+}
+
 @media (max-width: 559px) {
   /* No celular o rótulo pode ocupar duas linhas; a linha é reservada em todos os cartões, então os números seguem alinhados. */
   :is(.bo-kpi-label, .stat dt, .indicator:not(.is-locked) > :first-child, .cc-stat-label, .pt-metric-label, .pt-mini-label):not(#c) {

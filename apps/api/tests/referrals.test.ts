@@ -447,7 +447,7 @@ test('indicadores do Banco Central: se a consulta "últimos N" for recusada usa 
     return new Response(JSON.stringify([{ data: '01/10/2026', valor: '14,75' }]), { status: 200 });
   }) as unknown as typeof fetch;
   const saved = await refreshMarket(ctx(), { fetchFn, force: true });
-  assert.equal(saved, 3, 'três séries entraram pelo plano B');
+  assert.equal(saved, 4, 'quatro séries entraram pelo plano B (Selic, IPCA, CDI e euro; o dólar falhou de propósito)');
   assert.ok(seen.some((u) => u.includes('dataInicial=')));
   const owner = await ownerClient();
   const st = (await owner('GET', '/api/gestao/mercado')).json;

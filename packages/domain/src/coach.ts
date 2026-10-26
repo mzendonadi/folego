@@ -214,10 +214,13 @@ export interface Indicators {
   ipca12Pct: number | null; // IPCA acumulado em 12 meses
   cdiPct: number | null; // CDI, % ao ano
   usdBrl: number | null;
+  /** Euro em reais (Desbravador, como o dólar). */
+  eurBrl?: number | null;
   /** Variação em relação a ~3 meses antes (mesma unidade). */
   selicTrend: number | null;
   ipcaTrend: number | null;
   usdTrend: number | null;
+  eurTrend?: number | null;
 }
 export interface MarketInsight {
   id: string;
@@ -245,6 +248,7 @@ export function marketInsights(ind: Indicators, f: CoachFacts, openDebtRatesBps:
     out.push({ id: 'divida_vs_cdi', title: 'Sua dívida mais cara versus o mercado', tone: 'warn', minPlan: 'ousado', text: `Sua dívida de ${worst.toLocaleString('pt-BR')}% ao mês equivale a cerca de ${Math.round(yr)}% ao ano, contra ${ind.cdiPct.toLocaleString('pt-BR')}% do CDI. Cada real usado para quitá-la rende, na prática, ${(yr / ind.cdiPct).toFixed(1)} vezes mais do que qualquer aplicação segura.` });
   }
   if (ind.usdBrl !== null) out.push({ id: 'dolar', title: `Dólar a R$ ${ind.usdBrl.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, tone: 'info', minPlan: 'desbravador', text: `${ind.usdTrend !== null && ind.usdTrend > 0 ? 'O dólar subiu nos últimos meses: ' : ''}pesa em combustível, eletrônicos e viagens. Se você tem gastos em dólar (assinaturas, compras internacionais), coloque um limite próprio para eles no orçamento.` });
+  if (ind.eurBrl !== null && ind.eurBrl !== undefined) out.push({ id: 'euro', title: `Euro a R$ ${ind.eurBrl.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, tone: 'info', minPlan: 'desbravador', text: `${ind.eurTrend !== null && ind.eurTrend !== undefined && ind.eurTrend > 0 ? 'O euro subiu nos últimos meses: ' : ''}pesa em viagens à Europa, anúncios e compras no exterior. A fatura do cartão converte pelo câmbio do dia da compra e soma o IOF: deixe uma folga no orçamento para esses gastos.` });
   if (f.expensiveDebtsOpen > 0 && ind.selicTrend !== null && ind.selicTrend < 0) out.push({ id: 'renegociar', title: 'Juros caindo: hora de renegociar', tone: 'good', minPlan: 'ousado', text: 'Com a Selic em queda, peça redução de taxa ou portabilidade das dívidas caras: o banco tem menos desculpa para manter o juro alto.' });
   return out;
 }

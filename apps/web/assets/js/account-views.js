@@ -11,6 +11,7 @@ import { viewIndicar } from './referral.js';
 import { viewCobrancas, viewCenarios } from './account-insight-views.js';
 import { viewContas } from './account-openfinance-views.js';
 import { viewCartoes } from './account-cards-views.js';
+import { viewFerias } from './account-trips-views.js';
 import { partnerPrompt } from './account-map-banner.js';
 import { quickEntryCard } from './account-quick.js';
 import { paceCard } from './account-visual.js';
@@ -18,7 +19,7 @@ import { viewCofre } from './account-vault.js';
 import { NEW_CAT, catLabel, catList, categoryEditor } from './account-categories.js';
 import { PLANS, CATEGORIES, CATEGORY_LABEL, cardPaymentHint, categorize, detectDocumentKind, parseExtract, parsePdfExtract, simulateInvestment } from '../vendor/engine.js';
 
-export const FEATURE_LABEL = { health: 'Nota de saúde financeira', debts: 'Dívidas com plano de quitação', reminders: 'Lembretes de contas por e-mail', ledger: 'Controle de gastos, com Lançar rápido (texto, voz ou foto) e assistente no WhatsApp', import: 'Importar extrato (CSV, OFX ou PDF), com o pagamento da fatura fora dos gastos', alerts: 'Alertas de limite', coach_limited: 'Treinador (3 dicas)', goals: 'Metas com aportes', coach: 'Treinador completo', simulator: 'Simulador de investimento', planner: 'Planejador com IA', household: 'Conta compartilhada (1 pessoa no Ousado, até 3 no Desbravador)', recurring: 'Detector de assinaturas e cobranças recorrentes', scenarios: 'Simulador "e se...?" de cenários', ebook: 'eBook de presente no seu e-mail (50+ páginas)', journeys: 'Todas as jornadas do coach', market: 'Cenário econômico (Selic, inflação, CDI)', market_pro: 'Dólar e histórico de 12 meses', cards: 'Cartões de crédito: limite, fatura, vencimento e parcelas, sem misturar com o extrato', cards_pro: 'Cartões avançado: fatura em PDF lida e conferida (também pelo WhatsApp), cartão novo cadastrado na hora, estratégias e custo do rotativo', map_member: 'Mapa da Virada com preço de assinante (Pix, 90 dias)', map_included: 'Mapa da Virada incluso, enquanto a assinatura valer' };
+export const FEATURE_LABEL = { health: 'Nota de saúde financeira', debts: 'Dívidas com plano de quitação', reminders: 'Lembretes de contas por e-mail', ledger: 'Controle de gastos, com Lançar rápido (texto, voz ou foto) e assistente no WhatsApp', import: 'Importar extrato (CSV, OFX ou PDF), com o pagamento da fatura fora dos gastos', alerts: 'Alertas de limite', coach_limited: 'Treinador (3 dicas)', goals: 'Metas com aportes', coach: 'Treinador completo', simulator: 'Simulador de investimento', planner: 'Planejador com IA', household: 'Conta compartilhada (1 pessoa no Ousado, até 3 no Desbravador)', recurring: 'Detector de assinaturas e cobranças recorrentes', scenarios: 'Simulador "e se...?" de cenários', ebook: 'eBook de presente no seu e-mail (50+ páginas)', journeys: 'Todas as jornadas do coach', market: 'Cenário econômico (Selic, inflação, CDI)', market_pro: 'Dólar e histórico de 12 meses', cards: 'Cartões de crédito: limite, fatura, vencimento e parcelas, sem misturar com o extrato', cards_pro: 'Cartões avançado: fatura em PDF lida e conferida (também pelo WhatsApp), cartão novo cadastrado na hora, estratégias e custo do rotativo', trips: 'Planejar férias: orçamento, quanto guardar por mês e checklist completo (carro, avião, ônibus, motorhome, navio)', trips_ai: 'Roteiro de viagem completo por IA, dia a dia, para o tipo de viagem escolhido', map_member: 'Mapa da Virada com preço de assinante (Pix, 90 dias)', map_included: 'Mapa da Virada incluso, enquanto a assinatura valer' };
 
 /** Abas da conta. `needs` = recurso do plano exigido (a aba aparece sempre; sem o recurso mostra o que o upgrade traz). */
 export const TABS = [
@@ -34,6 +35,7 @@ export const TABS = [
   { id: 'dividas', label: 'Dívidas', group: 'Dívidas e metas' },
   { id: 'cofre', label: 'Cofre', group: 'Dívidas e metas' },
   { id: 'metas', label: 'Metas', needs: 'goals', group: 'Dívidas e metas' },
+  { id: 'ferias', label: 'Férias', needs: 'trips', group: 'Dívidas e metas' },
   { id: 'planejador', label: 'Planejador', needs: 'planner', group: 'Inteligência' },
   { id: 'cenarios', label: 'E se...?', needs: 'scenarios', group: 'Inteligência' },
   { id: 'mercado', label: 'Mercado', group: 'Inteligência' },
@@ -799,6 +801,11 @@ export function viewContasTab(ctx) {
   return viewContas(ctx);
 }
 
-export const VIEWS = { cofre: viewCofre, contas: viewContasTab, cobrancas: viewCobrancas, cenarios: viewCenariosTab, indicar: viewIndicar, perfil: viewPerfil, familia: viewCompartilhar, coach: viewCoach, mercado: viewMercado, geral: viewGeral, lancamentos: viewLancamentos, orcamento: viewOrcamento, dividas: viewDividas, carteiras: viewCarteiras, cartoes: viewCartoes, lembretes: viewLembretes, metas: viewMetas, treinador: viewTreinador, simulador: viewSimulador, planejador: viewPlanejador, plano: viewPlano };
+export function viewFeriasTab(ctx) {
+  if (ctx.has('trips')) return viewFerias(ctx);
+  return locked(ctx, { title: 'Planejar férias', feature: 'trips', blurb: 'Conte para onde vão, quando e com quem, e receba o orçamento dividido, quanto guardar por mês e o checklist completo da viagem.', bullets: ['Formulário simples: sozinho ou em família, com crianças, idosos e bichos de estimação', 'Checklist que muda com o tipo de viagem: carro, avião, ônibus, motorhome ou navio', 'No Desbravador, a IA escreve o roteiro completo dia a dia'] });
+}
+
+export const VIEWS = { ferias: viewFeriasTab, cofre: viewCofre, contas: viewContasTab, cobrancas: viewCobrancas, cenarios: viewCenariosTab, indicar: viewIndicar, perfil: viewPerfil, familia: viewCompartilhar, coach: viewCoach, mercado: viewMercado, geral: viewGeral, lancamentos: viewLancamentos, orcamento: viewOrcamento, dividas: viewDividas, carteiras: viewCarteiras, cartoes: viewCartoes, lembretes: viewLembretes, metas: viewMetas, treinador: viewTreinador, simulador: viewSimulador, planejador: viewPlanejador, plano: viewPlano };
 export const NEEDS_MONTH = new Set(['geral', 'lancamentos', 'orcamento', 'metas']);
 export { monthNow };

@@ -169,6 +169,7 @@ export function viewMercado(ctx) {
     tile('Inflação (IPCA 12 meses)', pct(i.ipca12Pct), trendText(i.ipcaTrend, ' p.p.'), m.history?.ipca12),
     tile('CDI (ao ano)', pct(i.cdiPct), 'rendimento base da renda fixa', m.history?.cdi),
     i.usdBrl !== null ? tile('Dólar', `R$ ${i.usdBrl.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, trendText(i.usdTrend, ' R$'), m.history?.usd) : el('div', { class: 'indicator is-locked' }, icon('lock', 'icon icon-lock'), el('span', { class: 'fine' }, 'Dólar e histórico de 12 meses no plano Desbravador')),
+    i.eurBrl !== null && i.eurBrl !== undefined ? tile('Euro', `R$ ${i.eurBrl.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, trendText(i.eurTrend ?? null, ' R$'), m.history?.eur) : (i.usdBrl === null ? el('div', { class: 'indicator is-locked' }, icon('lock', 'icon icon-lock'), el('span', { class: 'fine' }, 'Euro e histórico de 12 meses no plano Desbravador')) : null),
   );
   const insights = m.insights.map((x) => x.locked
     ? el('li', { class: 'insight is-locked' }, icon('lock', 'icon icon-lock'), el('strong', {}, x.title), el('span', { class: 'pill' }, `Plano ${PLAN_NAME[x.minPlan]}`))

@@ -201,6 +201,12 @@ const SOURCES: Record<SourceId, Omit<ForgottenSource, 'why'>> = {
   },
 };
 
+/** Os lugares oficiais onde procurar, com o endereço de cada um (mostrados de graça no Mapa; o guia personaliza a ordem e o passo a passo). */
+export const FORGOTTEN_DIRECTORY: { id: SourceId; name: string; covers: string; link: string; linkLabel: string }[] = (Object.values(SOURCES) as Omit<ForgottenSource, 'why'>[])
+  .filter((s) => s.id !== 'herdeiros') // mesmo endereço do Valores a Receber
+  .sort((a, b) => b.weight - a.weight)
+  .map((s) => ({ id: s.id, name: s.name, covers: s.covers, link: s.link, linkLabel: s.linkLabel }));
+
 export class ForgottenInputError extends Error {
   readonly issues: string[];
   constructor(issues: string[]) {

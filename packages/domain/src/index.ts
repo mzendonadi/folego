@@ -19,6 +19,7 @@ export * from './account.ts';
 export * from './quick.ts';
 export * from './pace.ts';
 export * from './invoice.ts';
+export * from './trip.ts';
 export * from './cards.ts';
 export * from './partner-import.ts';
 export { buildStrategies } from './strategies.ts';
@@ -39,7 +40,7 @@ export { compareFinancing, buildFinancingPreview, installments, monthlyIrr, vali
 export type { FinancingInput, FinancingOffer, FinancingResult, FinancingPreview, OfferResult, OfferFlag, FinancingKind, AmortSystem } from './financing.ts';
 export { buildHouseBillPlan, buildHouseBillPreview, validateHouseBill, HouseBillInputError, BILL_LABEL } from './housebills.ts';
 export type { HouseBillInput, HouseBillPlan, HouseBillPreview, BillKind, CutStatus, LowIncome } from './housebills.ts';
-export { buildForgottenGuide, buildForgottenPreview, validateForgotten, ForgottenInputError } from './forgotten.ts';
+export { buildForgottenGuide, buildForgottenPreview, validateForgotten, ForgottenInputError, FORGOTTEN_DIRECTORY } from './forgotten.ts';
 export type { ForgottenInput, ForgottenGuide, ForgottenPreview, ForgottenSource, SourceId } from './forgotten.ts';
 export { buildResume, buildResumePreview, validateResume, ResumeInputError, MAX_JOB_CHARS } from './resume.ts';
 export type { ResumeInput, ResumeResult, ResumePreview, ResumeExperience, TailoredResume, Keyword, Level } from './resume.ts';

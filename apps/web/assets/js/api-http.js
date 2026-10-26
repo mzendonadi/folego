@@ -277,6 +277,28 @@ export async function getCardRevolving(id, fixedCents = 0) {
 export async function importCardInvoice(id, body) {
   return request('POST', `/account/cards/${id}/import`, { body });
 }
+/** Planejar férias (Ousado) e roteiro com IA (Desbravador). */
+export async function getTrips() {
+  return request('GET', '/account/trips');
+}
+export async function getTrip(id) {
+  return request('GET', `/account/trips/${id}`);
+}
+export async function createTrip(body) {
+  return request('POST', '/account/trips', { body });
+}
+export async function updateTrip(id, body) {
+  return request('PUT', `/account/trips/${id}`, { body });
+}
+export async function deleteTrip(id) {
+  return request('DELETE', `/account/trips/${id}`);
+}
+export async function checkTripItem(id, itemId, done) {
+  return request('POST', `/account/trips/${id}/check`, { body: { itemId, done } });
+}
+export async function generateTripItinerary(id) {
+  return request('POST', `/account/trips/${id}/itinerary`, { body: {} });
+}
 /** Mapa da Virada para quem assina: oferta do Ousado, uso incluso do Desbravador ou o Mapa já ativo. */
 export async function getMapOffer() {
   return request('GET', '/account/map-offer');
