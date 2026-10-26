@@ -741,7 +741,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     await trips.checkTripItem(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id), b.itemId, b.done);
     return { ok: true };
   });
-  app.post('/api/account/trips/:id/itinerary', { config: { rateLimit: { max: 8 * scale, timeWindow: '10 minutes' } } }, async (req) => ({ itinerary: await trips.generateItinerary(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id)) }));
+  app.post('/api/account/trips/:id/itinerary', { config: { rateLimit: { max: 8 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => reply.status(202).send(await trips.generateItinerary(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id))));
 
   app.get('/api/account/cards', async (req) => cards.listCards(ctx, await requireSubscriber(req)));
   app.post('/api/account/cards', async (req, reply) => reply.status(201).send({ id: await cards.createCard(ctx, await requireSubscriber(req), cardSchema.parse(req.body)) }));

@@ -144,14 +144,25 @@ test('férias: no máximo 12 viagens por conta', async () => {
   assert.equal(extra.json.error, 'too_many');
 });
 
+/** O roteiro é escrito em segundo plano: espera a viagem sair do estado "running". */
+async function terminou(c: Client, id: string) {
+  for (let i = 0; i < 100; i += 1) {
+    const t = (await c('GET', `/api/account/trips/${id}`)).json;
+    if (t.ai.status !== 'running') return t;
+    await new Promise((r) => setTimeout(r, 30));
+  }
+  throw new Error('o roteiro não terminou');
+}
+
 test('roteiro com IA: um item por dia, vira checklist extra, respeita o tipo de viagem e o limite do dia', async () => {
   const c = await assinante('ferias-desb@exemplo.com', 'desbravador');
   const id = (await c('POST', '/api/account/trips', { body: viagem({ kind: 'motorhome', lodging: 'camping', pets: false }) })).json.id as string;
   answers = [roteiro(7)];
   askedFor = [];
   const r = await c('POST', `/api/account/trips/${id}/itinerary`);
-  assert.equal(r.status, 200, JSON.stringify(r.json));
-  assert.equal(r.json.itinerary.days.length, 7);
+  assert.equal(r.status, 202, JSON.stringify(r.json));
+  assert.equal(r.json.status, 'running');
+  assert.equal((await terminou(c, id)).itinerary.days.length, 7);
   assert.match(askedFor[0]!, /motorhome ou trailer/i, 'o pedido leva o tipo de viagem');
   assert.match(askedFor[0]!, /campings ou pontos de apoio/, 'e as regras dele');
   const t = (await c('GET', `/api/account/trips/${id}`)).json;
@@ -166,19 +177,24 @@ test('roteiro com IA: um item por dia, vira checklist extra, respeita o tipo de 
   // a IA citou link: reprovado e tenta de novo; a segunda resposta passa (valores em reais e nomes de lugares são permitidos)
   answers = [roteiro(7, { summary: 'Reserve em https://exemplo.com com antecedência.' }), roteiro(7)];
   const ok = await c('POST', `/api/account/trips/${id}/itinerary`);
-  assert.equal(ok.status, 200);
+  assert.equal(ok.status, 202);
+  const feito = await terminou(c, id);
+  assert.equal(feito.ai.status, null);
+  assert.ok(feito.itinerary);
   assert.equal(answers.length, 0, 'usou as duas respostas');
 
   // número de dias errado nas duas tentativas: falha com mensagem clara e sem estragar o que existia
   answers = [roteiro(3), roteiro(3)];
-  const falha = await c('POST', `/api/account/trips/${id}/itinerary`);
-  assert.equal(falha.status, 502);
-  assert.equal(falha.json.error, 'ai_failed');
-  assert.ok((await c('GET', `/api/account/trips/${id}`)).json.itinerary, 'o roteiro anterior continua');
+  assert.equal((await c('POST', `/api/account/trips/${id}/itinerary`)).status, 202);
+  const falha = await terminou(c, id);
+  assert.equal(falha.ai.status, 'failed');
+  assert.match(falha.ai.error, /Não consegui montar/);
+  assert.ok(falha.itinerary, 'o roteiro anterior continua');
 
   // IA fora do ar
   answers = [];
-  assert.equal((await c('POST', `/api/account/trips/${id}/itinerary`)).status, 502);
+  assert.equal((await c('POST', `/api/account/trips/${id}/itinerary`)).status, 202);
+  assert.equal((await terminou(c, id)).ai.status, 'failed');
 
   // limite diário
   const sub = (await db.query<{ id: string }>(`SELECT id FROM app.subscribers WHERE email = 'ferias-desb@exemplo.com'`)).rows[0]!.id;

@@ -32,7 +32,7 @@ export interface Itinerary {
   source: 'ia';
 }
 
-interface Row { id: string; input: TripInput; checked: Record<string, boolean>; itinerary: Itinerary | null; itinerary_at: Date | string | null; created_at: Date | string }
+interface Row { id: string; input: TripInput; checked: Record<string, boolean>; itinerary: Itinerary | null; itinerary_at: Date | string | null; created_at: Date | string; ai_status?: string | null; ai_error?: string | null; ai_started_at?: Date | string | null }
 
 const planOf = (input: TripInput): TripPlan => buildTripPlan(input, todaySaoPaulo());
 
@@ -42,7 +42,7 @@ function explain(e: unknown): never {
 }
 
 async function loadRow(ctx: Ctx, subscriberId: string, id: string): Promise<Row> {
-  const r = await ctx.db.query<Row>(`SELECT id, input, checked, itinerary, itinerary_at, created_at FROM app.trips WHERE id = $1 AND subscriber_id = $2`, [id, subscriberId]);
+  const r = await ctx.db.query<Row>(`SELECT id, input, checked, itinerary, itinerary_at, created_at, ai_status, ai_error, ai_started_at FROM app.trips WHERE id = $1 AND subscriber_id = $2`, [id, subscriberId]);
   if (!r.rows[0]) throw notFound();
   return r.rows[0];
 }
@@ -105,7 +105,12 @@ export async function getTrip(ctx: Ctx, subscriberId: string, id: string) {
     checked: t.checked,
     itinerary: t.itinerary,
     itineraryAt: t.itinerary_at ? new Date(t.itinerary_at).toISOString() : null,
-    ai: { available: Boolean(ctx.config.anthropicApiKey), usedToday: num(used.rows[0]?.n ?? 0), perDay: AI_PER_DAY, maxDays: AI_MAX_DAYS },
+    ai: {
+      available: Boolean(ctx.config.anthropicApiKey), usedToday: num(used.rows[0]?.n ?? 0), perDay: AI_PER_DAY, maxDays: AI_MAX_DAYS,
+      // "running" some sozinho depois de 5 minutos (se o servidor reiniciou no meio, a pessoa pode gerar de novo)
+      status: t.ai_status === 'running' && t.ai_started_at && Date.now() - new Date(t.ai_started_at).getTime() > 5 * 60_000 ? null : (t.ai_status ?? null),
+      error: t.ai_status === 'failed' ? (t.ai_error ?? null) : null,
+    },
   };
 }
 
@@ -269,7 +274,7 @@ export function cleanItinerary(raw: Record<string, unknown>, days: number): { ok
   return issues.length ? { ok: false, issues: [...new Set(issues)].slice(0, 6) } : { ok: true, itinerary };
 }
 
-export async function generateItinerary(ctx: Ctx, subscriberId: string, id: string): Promise<Itinerary> {
+export async function generateItinerary(ctx: Ctx, subscriberId: string, id: string): Promise<{ status: 'running' }> {
   await requireFeature(ctx, subscriberId, 'trips_ai');
   const t = await loadRow(ctx, subscriberId, id);
   let plan: TripPlan;
@@ -278,23 +283,38 @@ export async function generateItinerary(ctx: Ctx, subscriberId: string, id: stri
   if (!ctx.config.anthropicApiKey) throw new AppError(503, 'ai_off', 'O roteiro com IA ainda não está ligado. O checklist e o orçamento continuam valendo.');
   const used = await ctx.db.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.trip_ai_log WHERE subscriber_id = $1 AND created_at > now() - interval '24 hours'`, [subscriberId]);
   if (num(used.rows[0]?.n ?? 0) >= AI_PER_DAY) throw new AppError(429, 'trip_ai_limit', `Você usou os ${AI_PER_DAY} roteiros de hoje. Volte amanhã.`);
+  // Já tem um roteiro sendo escrito para esta viagem: não gasta outro (o plano completo leva mais de um minuto e o Cloudflare corta a conexão aos 100 s).
+  const busy = await ctx.db.query(`SELECT 1 FROM app.trips WHERE id = $1 AND subscriber_id = $2 AND ai_status = 'running' AND ai_started_at > now() - interval '5 minutes'`, [id, subscriberId]);
+  if (busy.rows.length > 0) return { status: 'running' };
   await ctx.db.query(`INSERT INTO app.trip_ai_log(subscriber_id) VALUES ($1)`, [subscriberId]);
-  let feedback: string[] = [];
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    let raw: Record<string, unknown>;
-    try {
-      raw = await askClaude(ctx, t.input, plan, feedback);
-    } catch {
-      break;
+  await ctx.db.query(`UPDATE app.trips SET ai_status = 'running', ai_error = NULL, ai_started_at = now() WHERE id = $1 AND subscriber_id = $2`, [id, subscriberId]);
+  // A IA trabalha em segundo plano; a tela consulta a viagem até o status sair de "running".
+  void writeItinerary(ctx, subscriberId, id, t, plan);
+  return { status: 'running' };
+}
+
+async function writeItinerary(ctx: Ctx, subscriberId: string, id: string, t: Row, plan: TripPlan): Promise<void> {
+  const fail = (msg: string) => ctx.db.query(`UPDATE app.trips SET ai_status = 'failed', ai_error = $3 WHERE id = $1 AND subscriber_id = $2`, [id, subscriberId, msg]).catch(() => undefined);
+  try {
+    let feedback: string[] = [];
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      let raw: Record<string, unknown>;
+      try {
+        raw = await askClaude(ctx, t.input, plan, feedback);
+      } catch {
+        break;
+      }
+      const checked = cleanItinerary(raw, plan.days);
+      if (checked.ok) {
+        // os itens extras da IA são trocados por novos: as marcações do roteiro anterior (ai-N) saem, as do checklist do plano ficam
+        const kept = Object.fromEntries(Object.entries(t.checked).filter(([k, v]) => v && !k.startsWith('ai-')));
+        await ctx.db.query(`UPDATE app.trips SET itinerary = $3::jsonb, itinerary_at = now(), checked = $4::jsonb, ai_status = NULL, ai_error = NULL, updated_at = now() WHERE id = $1 AND subscriber_id = $2`, [id, subscriberId, JSON.stringify(checked.itinerary), JSON.stringify(kept)]);
+        return;
+      }
+      feedback = checked.issues;
     }
-    const checked = cleanItinerary(raw, plan.days);
-    if (checked.ok) {
-      // os itens extras da IA são trocados por novos: as marcações do roteiro anterior (ai-N) saem, as do checklist do plano ficam
-      const kept = Object.fromEntries(Object.entries(t.checked).filter(([k, v]) => v && !k.startsWith('ai-')));
-      await ctx.db.query(`UPDATE app.trips SET itinerary = $3::jsonb, itinerary_at = now(), checked = $4::jsonb, updated_at = now() WHERE id = $1 AND subscriber_id = $2`, [id, subscriberId, JSON.stringify(checked.itinerary), JSON.stringify(kept)]);
-      return checked.itinerary;
-    }
-    feedback = checked.issues;
+    await fail('Não consegui montar o roteiro agora. Tente de novo em instantes; o checklist e o orçamento continuam valendo.');
+  } catch {
+    await fail('Não consegui salvar o roteiro agora. Tente de novo em instantes.');
   }
-  throw new AppError(502, 'ai_failed', 'Não consegui montar o roteiro agora. Tente de novo em instantes; o checklist e o orçamento continuam valendo.');
 }

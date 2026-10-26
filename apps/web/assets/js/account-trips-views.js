@@ -179,6 +179,20 @@ export function viewFerias(ctx) {
     root.replaceChildren(...[head, budget, itineraryCard(t, id), checklist].filter(Boolean));
   }
 
+  /** O roteiro é escrito em segundo plano (leva mais de um minuto): consulta a viagem até ficar pronto ou falhar. */
+  async function waitItinerary(id, status) {
+    for (let i = 0; i < 70; i += 1) {
+      await new Promise((r) => setTimeout(r, 4000));
+      if (!root.isConnected || !status.isConnected) return; // a pessoa saiu da tela; o roteiro fica salvo do mesmo jeito
+      const cur = await ctx.api.getTrip(id).catch(() => null);
+      if (!cur || cur.ai.status === 'running') continue;
+      if (cur.ai.status === 'failed') throw new Error(cur.ai.error || 'Não consegui montar o roteiro agora.');
+      toast('Roteiro pronto.');
+      return showTrip(id);
+    }
+    throw new Error('O roteiro está demorando mais que o normal. Volte a esta viagem em alguns minutos: ele aparece sozinho quando ficar pronto.');
+  }
+
   function itineraryCard(t, id) {
     if (!ai) {
       const go = el('button', { class: 'btn btn-primary', type: 'button' }, 'Ver o plano Desbravador', icon('arrow-right'));
@@ -194,16 +208,23 @@ export function viewFerias(ctx) {
     gen.addEventListener('click', async () => {
       if (it && !(await confirmDialog({ title: 'Gerar outro roteiro?', text: 'O roteiro atual é substituído e as marcações dos itens extras dele saem.', confirmLabel: 'Gerar outro' }))) return;
       gen.disabled = true;
-      status.textContent = 'Montando o roteiro… isso leva cerca de um minuto.';
+      status.textContent = 'Montando o plano completo… leva até 2 minutos. Pode ficar nesta tela.';
       try {
         await ctx.api.generateTripItinerary(id);
-        toast('Roteiro pronto.');
-        showTrip(id);
+        await waitItinerary(id, status);
       } catch (err) {
         gen.disabled = false;
         status.textContent = err?.message || 'Não consegui montar o roteiro agora. Tente de novo em instantes.';
       }
     });
+    if (t.ai.status === 'running') {
+      // a página foi aberta com um roteiro ainda sendo escrito: continua esperando por ele
+      gen.disabled = true;
+      status.textContent = 'O plano completo está sendo montado… leva até 2 minutos.';
+      waitItinerary(id, status).catch((err) => { gen.disabled = false; status.textContent = err?.message || 'Não consegui montar o roteiro agora.'; });
+    } else if (t.ai.status === 'failed' && t.ai.error) {
+      status.textContent = t.ai.error;
+    }
     const days = it ? it.days.map((d) => el('article', { class: 'trip-day' },
       el('h4', {}, `Dia ${d.day}: ${d.title}`),
       el('dl', { class: 'trip-day-body' },
