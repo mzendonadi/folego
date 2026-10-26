@@ -161,3 +161,23 @@ test('fatura: formato antigo (só entries e credits) continua funcionando', asyn
   assert.equal(imp.status, 200);
   assert.equal(imp.json.added, 1);
 });
+
+test('fatura: parcelas "do futuro" lançadas com data do passado são corrigidas pela fatura e o plano volta a ter as parcelas que faltam', async () => {
+  const c = await assinante('fatura-cinco@exemplo.com', 'desbravador');
+  const id = (await c('POST', '/api/account/cards', { body: cartao })).json.id as string;
+  const sub = (await db.query<{ id: string }>(`SELECT id FROM app.subscribers WHERE email = 'fatura-cinco@exemplo.com'`)).rows[0]!.id;
+  const plan = (await db.query<{ id: string }>(
+    `INSERT INTO app.card_installments(subscriber_id, card_id, note, category, per_cents, total_n, posted_n, first_on) VALUES ($1,$2,'COMPRA LONGA',$3,30000,6,6,'2026-03-27') RETURNING id`, [sub, id, 'outros'])).rows[0]!.id;
+  for (const [no, date] of [[5, '2026-07-27'], [6, '2026-08-27']] as const) {
+    await db.query(`INSERT INTO app.ledger_entries(subscriber_id, occurred_on, amount_cents, category, note, source, card_id, installment_no, installment_total, installment_plan) VALUES ($1,$2,-30000,'outros','COMPRA LONGA','import',$3,$4,6,$5)`, [sub, date, id, no, plan]);
+  }
+  const imp = await c('POST', `/api/account/cards/${id}/import`, { body: { entries: [{ date: '2026-09-27', amountCents: 30_000, note: 'COMPRA LONGA', installmentNo: 4, installmentTotal: 6 }], credits: [] } });
+  assert.equal(imp.status, 200, JSON.stringify(imp.json));
+  assert.equal(imp.json.added, 1);
+  const left = await db.query<{ n: number }>(`SELECT installment_no AS n FROM app.ledger_entries WHERE installment_plan = $1 ORDER BY 1`, [plan]);
+  assert.deepEqual(left.rows.map((r) => r.n), [4], 'as parcelas 5 e 6 com data anterior à 4 não existem');
+  const p = (await db.query<{ posted_n: number }>(`SELECT posted_n FROM app.card_installments WHERE id = $1`, [plan])).rows[0]!;
+  assert.equal(p.posted_n, 4);
+  const card = (await c('GET', '/api/account/cards')).json.cards[0];
+  assert.equal(card.summary.futureInstallmentsCents, 60_000, 'faltam duas parcelas de R$ 300,00');
+});

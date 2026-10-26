@@ -435,7 +435,9 @@ export async function importInvoice(ctx: Ctx, subscriberId: string, cardId: stri
         const found = await q.query<{ id: string }>(`SELECT id FROM app.card_installments WHERE card_id = $1 AND subscriber_id = $2 AND lower(note) = lower($3) AND per_cents = $4 AND total_n = $5 LIMIT 1`, [cardId, subscriberId, note, e.amountCents, total]);
         if (found.rows[0]) {
           planId = found.rows[0].id;
-          const dupNo = await q.query(`SELECT 1 FROM app.ledger_entries WHERE installment_plan = $1 AND installment_no = $2 LIMIT 1`, [planId, no]);
+          // A fatura é a verdade: parcela de número MAIOR com data ANTERIOR a esta é impossível (o leitor antigo lançava parcelas futuras com data do passado).
+          await q.query(`DELETE FROM app.ledger_entries WHERE installment_plan = $1 AND installment_no > $2 AND occurred_on <= $3::date`, [planId, no, e.date]);
+          const dupNo =await q.query(`SELECT 1 FROM app.ledger_entries WHERE installment_plan = $1 AND installment_no = $2 LIMIT 1`, [planId, no]);
           if (dupNo.rows.length > 0) {
             // já estava lançada: só garante que sabe de qual fatura é
             if (key) await q.query(`UPDATE app.ledger_entries SET invoice_key = $3 WHERE installment_plan = $1 AND installment_no = $2 AND invoice_key IS NULL`, [planId, no, key]);
@@ -478,6 +480,12 @@ export async function importInvoice(ctx: Ctx, subscriberId: string, cardId: stri
         [subscriberId, e.date, -e.amountCents, category, note, cardId, no, total, planId, key],
       );
       added += 1;
+      if (planId) {
+        // o plano passa a refletir o que de fato foi lançado: quantas parcelas já saíram e quando começou (as que faltam seguem a partir daí)
+        const top = await q.query<{ no: number; d: Date | string }>(`SELECT installment_no AS no, occurred_on AS d FROM app.ledger_entries WHERE installment_plan = $1 ORDER BY installment_no DESC LIMIT 1`, [planId]);
+        const t = top.rows[0];
+        if (t) await q.query(`UPDATE app.card_installments SET posted_n = $2, first_on = $3 WHERE id = $1`, [planId, t.no, addMonthsIso(new Date(t.d).toISOString().slice(0, 10), -(t.no - 1))]);
+      }
     }
 
     // 4) estornos e créditos desta fatura
