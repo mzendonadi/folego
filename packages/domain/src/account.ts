@@ -257,6 +257,56 @@ const PDF_SECTION_END = /^(saldos? por per[ií]odo|comprovantes? de pagamento|co
 
 const centsOf = (s: string): number => Math.round(Number(PDF_NUM.exec(s)![0].replace(/\./g, '').replace(',', '.')) * 100);
 
+const BLOCK_DATE = /^(\d{2})\/(\d{2})\/(20\d{2})$/;
+const BLOCK_AMOUNT = /^(-?)\s?R\$\s?(\d{1,3}(?:\.\d{3})*,\d{2})\s+(-?)\s?R\$\s?(\d{1,3}(?:\.\d{3})*,\d{2})$/;
+const BLOCK_NOISE = /^(\d+\/\d+|detalhe dos movimentos|data\s+descri[cç][aã]o.*|(segunda|ter[cç]a|quarta|quinta|sexta|s[aá]bado|domingo)(-feira)?,\s*\d{1,2} de [a-zç]+ de 20\d{2})$/i;
+const blockMoney = (neg: string, v: string): number => (neg ? -1 : 1) * Math.round(Number(v.replace(/\./g, '').replace(',', '.')) * 100);
+
+/**
+ * Extrato em blocos (um lançamento = data completa, descrição, "valor saldo" e, às vezes, o nome da outra parte; os dias vêm com
+ * um título "Sexta, 23 de outubro de 2026" que NÃO é lançamento). A data de cada lançamento é a da própria linha; a conferência
+ * usa o saldo inicial e o final do cabeçalho e a corrente de saldos (cada saldo = o de baixo + o valor).
+ */
+export function parseMovementBlocks(text: string): { entries: ImportedEntry[]; skipped: number; check: PdfExtractCheck | null } | null {
+  const lines = text.split(/\r?\n/).map((l) => l.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  const entries: ImportedEntry[] = [];
+  const balances: number[] = [];
+  let skipped = 0;
+  for (let i = 0; i < lines.length; i += 1) {
+    const d = BLOCK_DATE.exec(lines[i]!);
+    if (!d) continue;
+    const date = isoOk(Number(d[3]), Number(d[2]), Number(d[1]));
+    const desc = lines[i + 1];
+    const amt = lines[i + 2] ? BLOCK_AMOUNT.exec(lines[i + 2]!) : null;
+    if (!date || !desc || !amt || BLOCK_DATE.test(desc)) { skipped += 1; continue; }
+    // a outra parte (quem enviou ou recebeu) vem na linha seguinte, se ela não for outro lançamento nem ruído de página
+    let who = '';
+    const next = lines[i + 3];
+    if (next && !BLOCK_DATE.test(next) && !BLOCK_NOISE.test(next) && !BLOCK_AMOUNT.test(next) && !/^(saldo|entradas|sa[ií]das|extrato|ag[eê]ncia|per[ií]odo|titular)\b/i.test(next)) who = next;
+    const note = [desc, who].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim().slice(0, 120);
+    entries.push({ date, amountCents: blockMoney(amt[1]!, amt[2]!), note });
+    balances.push(blockMoney(amt[3]!, amt[4]!));
+  }
+  if (entries.length < 3) return null;
+  const header = (label: RegExp): number | null => {
+    const at = lines.findIndex((l) => label.test(l));
+    const v = at >= 0 ? /^(-?)\s?R\$\s?(\d{1,3}(?:\.\d{3})*,\d{2})$/.exec(lines[at + 1] ?? '') : null;
+    return v ? blockMoney(v[1]!, v[2]!) : null;
+  };
+  const start = header(/^saldo inicial$/i);
+  const end = header(/^saldo final$/i);
+  const parsed = entries.reduce((s, e) => s + e.amountCents, 0);
+  // a corrente de saldos precisa fechar linha a linha (a lista vem do mais novo para o mais antigo)
+  let chain = true;
+  for (let i = 0; i < balances.length - 1; i += 1) if (balances[i + 1]! + entries[i]!.amountCents !== balances[i]!) chain = false;
+  const check: PdfExtractCheck | null = start !== null && end !== null
+    ? { ok: end - start === parsed && chain, source: 'saldo', expectedCents: end - start, parsedCents: parsed }
+    : null;
+  // do mais antigo para o mais novo, como o resto do importador
+  entries.reverse();
+  return { entries, skipped, check };
+}
+
 /**
  * Lê o texto de um extrato em PDF. Funciona com extratos de uma linha por lançamento ("12/03 PIX ... -45,90") e com os que
  * quebram o lançamento em várias linhas e só mostram a data uma vez por dia (ex.: Santander: descrição numa linha, valor em
@@ -264,6 +314,8 @@ const centsOf = (s: string): number => Math.round(Number(PDF_NUM.exec(s)![0].rep
  * CONFERE o resultado: soma dos lançamentos x saldo anterior/final (ou totais de créditos/débitos) que o próprio extrato traz.
  */
 export function parsePdfExtract(text: string, now: Date = new Date()): { entries: ImportedEntry[]; skipped: number; check: PdfExtractCheck | null } {
+  const blocks = parseMovementBlocks(text);
+  if (blocks) return blocks;
   const all = text.split(/\r?\n/).map((l) => l.replace(/\s+/g, ' ').trim()).filter(Boolean);
   // Ano do extrato: o "setembro/2026" do cabeçalho vale mais; senão, o ano que mais aparece nas datas completas (uma data solta
   // do rodapé, como a versão do modelo do extrato, não decide)

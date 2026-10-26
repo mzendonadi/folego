@@ -30,7 +30,7 @@ export function detectDocumentKind(text: string): DocumentKind {
 /** A linha do extrato da conta é pagamento de fatura de cartão? "forte" = o texto diz; "possivel" = só diz que pagou boleto a um banco (confirmar pelo valor). */
 export function cardPaymentHint(note: string): 'forte' | 'possivel' | null {
   const t = squash(note);
-  if (/(pagamento|pgto|pag\.?)\s*(de\s*)?(da\s*)?fatura|fatura\s*(do\s*)?(cartao|cc|master|visa|elo)|(cartao|cartoes)\s*de\s*credito|pagto?\s*cartao|pgto\s*cart|debito\s*automatico\s*fatura/.test(t)) return 'forte';
+  if (/(pagamento|pgto|pag\.?)\s*(de\s*)?(da\s*)?fatura|fatura\s*(do\s*)?(cartao|cc|master|visa|elo)|(cartao|cartoes)\s*de\s*credito|pagto?\s*cartao|pagamento\s*(de\s*)?cartao|pgto\s*cart|debito\s*automatico\s*fatura/.test(t)) return 'forte';
   if (/pagamento de boleto.*(banco|santander|itau|bradesco|nubank|inter\b|caixa|c6|xp\b|porto|next|original|safra|btg|mercado pago)/.test(t)) return 'possivel';
   return null;
 }

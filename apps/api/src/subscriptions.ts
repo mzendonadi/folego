@@ -269,7 +269,7 @@ export async function addEntries(ctx: Ctx, subscriberId: string, entries: NewEnt
     for (const [i, e] of entries.entries()) {
       const category = e.category && (await isAllowedCategory(q, subscriberId, e.category)) ? e.category : categorize(e.note, e.amountCents);
       if (e.source === 'import') {
-        const dup = await q.query(`SELECT 1 FROM app.ledger_entries WHERE subscriber_id = $1 AND occurred_on = $2 AND amount_cents = $3 AND note = $4 LIMIT 1`, [subscriberId, e.date, e.amountCents, e.note]);
+        const dup = await q.query(`SELECT 1 FROM app.ledger_entries WHERE subscriber_id = $1 AND occurred_on = $2 AND amount_cents = $3 AND lower(note) = lower($4) LIMIT 1`, [subscriberId, e.date, e.amountCents, e.note.slice(0, 120)]);
         if (dup.rows.length > 0) {
           duplicates += 1;
           continue;
