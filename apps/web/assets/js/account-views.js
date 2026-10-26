@@ -151,9 +151,9 @@ export function viewGeral(ctx) {
   const s = d.summary;
   const out = [];
 
-  if (d.alerts.length > 0) {
-    out.push(card(el('h2', {}, 'Atenção'), ...d.alerts.map((a) => el('p', { class: a.level === 'warn' ? 'note note-amber' : 'note' }, icon(a.level === 'warn' ? 'alert' : 'info'), el('span', {}, el('strong', {}, a.title), ' — ', a.detail)))));
-  }
+  const alertsCard = d.alerts.length > 0
+    ? card(el('h2', {}, 'Atenção'), ...d.alerts.map((a) => el('p', { class: a.level === 'warn' ? 'note note-amber' : 'note' }, icon(a.level === 'warn' ? 'alert' : 'info'), el('span', {}, el('strong', {}, a.title), ' — ', a.detail))))
+    : null;
 
   const hasData = d.entries.length > 0;
   out.push(
@@ -177,6 +177,8 @@ export function viewGeral(ctx) {
         : null,
     ),
   );
+  // o saldo do mês vem primeiro; os alertas logo depois
+  if (alertsCard) out.push(alertsCard);
 
   out.push(paceCard(ctx));
 
