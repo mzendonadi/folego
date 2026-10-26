@@ -181,3 +181,15 @@ test('fatura: parcelas "do futuro" lançadas com data do passado são corrigidas
   const card = (await c('GET', '/api/account/cards')).json.cards[0];
   assert.equal(card.summary.futureInstallmentsCents, 60_000, 'faltam duas parcelas de R$ 300,00');
 });
+
+test('extrato: o mesmo lançamento com o nome mais curto (ou em outra caixa) não entra de novo', async () => {
+  const c = await assinante('fatura-seis@exemplo.com', 'ousado');
+  const a = await c('POST', '/api/account/entries', { body: { entries: [{ date: '2026-09-28', amountCents: -65_000, note: 'PIX ENVIADO Fulano de Tal Servicos Ltda', source: 'import' }] } });
+  assert.equal(a.json.added, 1);
+  const b = await c('POST', '/api/account/entries', { body: { entries: [
+    { date: '2026-09-28', amountCents: -65_000, note: 'Pix enviado Fulano de Tal Servic', source: 'import' },
+    { date: '2026-09-28', amountCents: -65_000, note: 'Pix enviado Beltrano da Silva Souza', source: 'import' },
+  ] } });
+  assert.equal(b.json.duplicates, 1, 'o mesmo Pix com nome cortado é repetição');
+  assert.equal(b.json.added, 1, 'outro Pix de mesmo valor para outra pessoa é lançamento diferente');
+});
