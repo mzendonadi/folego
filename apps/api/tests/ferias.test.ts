@@ -74,6 +74,11 @@ const viagem = (extra: Record<string, unknown> = {}) => ({
 });
 const roteiro = (dias: number, extra: Record<string, unknown> = {}) => ({
   summary: 'Uma viagem tranquila de carro, com paradas para descansar e praias calmas.',
+  best_season: 'Janeiro é alta temporada: reserve com antecedência. Sem fuso diferente.',
+  food: [{ name: 'Mercado Público', kind: 'comida de rua e frutos do mar', why: 'Tradicional e bom para a família' }, { name: 'Pizzaria de bairro', kind: 'casual', why: 'Agrada as crianças' }],
+  lodging: [{ name: 'Pousada na Lagoa', area: 'Lagoa da Conceição', why: 'Bom custo-benefício e perto de tudo' }],
+  insider: ['Evite comprar passeios de barco de ambulantes na praia.'],
+  costs: [{ item: 'Combustível e pedágios', estimate: 'R$ 900 a R$ 1.200 para o grupo' }, { item: 'Hospedagem', estimate: 'R$ 3.000 a R$ 4.000 para o grupo' }, { item: 'Alimentação', estimate: 'R$ 1.800 a R$ 2.500 para o grupo' }],
   route_notes: ['Saia cedo para fazer o trecho mais longo com luz do dia.'],
   days: Array.from({ length: dias }, (_, i) => ({ day: i + 1, title: `Dia ${i + 1}`, morning: 'Café sem pressa e saída.', afternoon: 'Passeio curto perto da hospedagem.', evening: 'Jantar leve e descanso.', stay: 'Casa de temporada na região.', tip: 'Confira horários antes de sair.' })),
   extra_checklist: [{ group: 'Do roteiro', text: 'Baixar o mapa offline da região' }],
@@ -158,8 +163,8 @@ test('roteiro com IA: um item por dia, vira checklist extra, respeita o tipo de 
   await c('PUT', `/api/account/trips/${id}`, { body: viagem({ kind: 'motorhome', lodging: 'camping', pets: false, destination: 'Gramado' }) });
   assert.equal((await c('GET', `/api/account/trips/${id}`)).json.itinerary, null);
 
-  // a IA citou preço: reprovado e tenta de novo; a segunda resposta passa
-  answers = [roteiro(7, { summary: 'Viagem por R$ 5.000,00 no total, tranquila.' }), roteiro(7)];
+  // a IA citou link: reprovado e tenta de novo; a segunda resposta passa (valores em reais e nomes de lugares são permitidos)
+  answers = [roteiro(7, { summary: 'Reserve em https://exemplo.com com antecedência.' }), roteiro(7)];
   const ok = await c('POST', `/api/account/trips/${id}/itinerary`);
   assert.equal(ok.status, 200);
   assert.equal(answers.length, 0, 'usou as duas respostas');
@@ -203,10 +208,15 @@ test('roteiro com IA: a conferência recusa dia faltando, link e telefone e devo
   assert.equal(cleanItinerary(roteiro(2) as never, 3).ok, false);
   const link = cleanItinerary(roteiro(2, { warnings: ['Veja em https://exemplo.com para detalhes'] }) as never, 2);
   assert.equal(link.ok, false);
-  const bom = cleanItinerary(roteiro(2, { summary: '  Resumo   com espaços  ' }) as never, 2);
-  assert.ok(bom.ok);
+  const bom = cleanItinerary(roteiro(2, { summary: '  Resumo   com espaços e custo de R$ 5.000 ' }) as never, 2);
+  assert.ok(bom.ok, 'valor em reais é permitido');
+  const semCustos = cleanItinerary(roteiro(2, { costs: [] }) as never, 2);
+  assert.equal(semCustos.ok, false, 'a estimativa de custos é obrigatória');
+  assert.equal(cleanItinerary(roteiro(2, { warnings: ['Ligue para (34) 99837-5296'] }) as never, 2).ok, false);
   if (bom.ok) {
-    assert.equal(bom.itinerary.summary, 'Resumo com espaços');
+    assert.equal(bom.itinerary.summary, 'Resumo com espaços e custo de R$ 5.000');
+    assert.equal(bom.itinerary.lodging?.length, 1);
+    assert.equal(bom.itinerary.costs?.length, 3);
     assert.deepEqual(bom.itinerary.days.map((d) => d.day), [1, 2]);
   }
 });

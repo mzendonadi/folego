@@ -210,14 +210,20 @@ export function viewFerias(ctx) {
         el('dt', {}, 'Manhã'), el('dd', {}, d.morning), el('dt', {}, 'Tarde'), el('dd', {}, d.afternoon), el('dt', {}, 'Noite'), el('dd', {}, d.evening),
         d.stay ? el('dt', {}, 'Onde ficar') : null, d.stay ? el('dd', {}, d.stay) : null),
       d.tip ? el('p', { class: 'fine' }, `Dica: ${d.tip}`) : null)) : [];
+    const section = (title, ...children) => el('div', { class: 'trip-group' }, el('h4', {}, title), ...children);
     return card(
       el('h3', {}, 'Roteiro completo com IA'),
-      it ? el('p', {}, it.summary) : el('p', { class: 'muted' }, `A IA escreve o roteiro dia a dia para ${kindLabel(t.input.kind).toLowerCase()}, com o seu grupo e o seu ritmo. Ela não cita preços nem nomes de lugares: confira horários e valores antes de reservar.`),
+      it ? section('Resumo do destino', el('p', {}, it.summary), it.bestSeason ? el('p', { class: 'muted' }, it.bestSeason) : null) : el('p', { class: 'muted' }, `A IA monta o plano completo para ${kindLabel(t.input.kind).toLowerCase()}: resumo do destino, roteiro dia a dia, onde comer e ficar, dicas de quem conhece e uma estimativa de custos próxima da realidade. Valores e lugares são sugestões: confirme antes de reservar.`),
       it?.routeNotes?.length ? el('ul', { class: 'tick-list left' }, ...it.routeNotes.map((x) => el('li', {}, icon('check'), x))) : null,
+      it ? section('Roteiro dia a dia') : null,
       ...days,
+      it?.food?.length ? section('Sugestões gastronômicas', el('ul', { class: 'official-links' }, ...it.food.map((f) => el('li', {}, el('strong', {}, f.name), el('span', { class: 'muted' }, ` ${f.kind}. `), f.why)))) : null,
+      it?.lodging?.length ? section('Hospedagem recomendada', el('ul', { class: 'official-links' }, ...it.lodging.map((l) => el('li', {}, el('strong', {}, l.name), el('span', { class: 'muted' }, ` ${l.area}. `), l.why)))) : null,
+      it?.insider?.length ? section('Dicas de quem conhece', el('ul', { class: 'tick-list left' }, ...it.insider.map((x) => el('li', {}, icon('info'), x)))) : null,
+      it?.costs?.length ? section('Estimativa de custos', el('table', { class: 'cc-table' }, el('thead', {}, el('tr', {}, el('th', { scope: 'col' }, 'Item'), el('th', { scope: 'col' }, 'Estimativa'))), el('tbody', {}, ...it.costs.map((c) => el('tr', {}, el('td', {}, c.item), el('td', {}, c.estimate)))))) : null,
       it?.warnings?.length ? el('div', { class: 'note note-amber' }, icon('alert'), el('div', {}, ...it.warnings.map((w) => el('p', {}, w)))) : null,
       el('div', { class: 'button-row' }, gen), status,
-      it ? el('p', { class: 'fine muted' }, 'Roteiro escrito por IA como sugestão: confirme horários, estradas e reservas antes de sair.') : null,
+      it ? el('p', { class: 'fine muted' }, 'Roteiro, lugares e valores escritos por IA como sugestão e estimativa: confirme preços, horários, estradas e disponibilidade antes de reservar.') : null,
     );
   }
 

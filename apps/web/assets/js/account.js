@@ -247,7 +247,8 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
       data: null,
       coach: null,
       goTab: (id) => showTab(id),
-      refresh: () => showTab(current),
+      // Depois de editar, apagar ou marcar algo, a tela recarrega no mesmo lugar: o conteúdo antigo fica à vista até o novo chegar e a rolagem volta para onde estava.
+      refresh: () => showTab(current, { keepScroll: true }),
       setMonth: (m) => {
         month = m;
         showTab(current);
@@ -259,7 +260,8 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
       },
     };
 
-    async function showTab(id) {
+    async function showTab(id, { keepScroll = false } = {}) {
+      const keepY = keepScroll && id === current ? window.scrollY : null;
       stopPix();
       current = id;
       wantedTab = id;
@@ -273,7 +275,7 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
       panel.setAttribute('aria-labelledby', id === 'perfil' ? 'acc-profile-btn' : `acc-tab-${id}`);
       document.getElementById('acc-profile-btn')?.toggleAttribute('data-active', id === 'perfil');
       if (location.pathname.startsWith('/conta')) history.replaceState(history.state, '', hashFor(id));
-      panel.replaceChildren(el('p', { class: 'muted acc-loading', role: 'status' }, 'Carregando…'));
+      if (keepY === null) panel.replaceChildren(el('p', { class: 'muted acc-loading', role: 'status' }, 'Carregando…'));
       try {
         if (ctx.leadsOn === undefined) ctx.leadsOn = Boolean((await api.getFeatures().catch(() => ({}))).leads); // convite a parceiros só se o recurso está ligado
         if (NEEDS_MONTH.has(id)) ctx.data = await api.getMonth(month);
@@ -301,6 +303,7 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
         const view = VIEWS[id](ctx);
         const invite = id === 'coach' || id === 'geral' ? installBanner(showTab) : null; // convite para instalar o app (some ao instalar ou dispensar)
         panel.replaceChildren(...[invite, view].filter(Boolean));
+        if (keepY !== null) window.scrollTo({ top: keepY, behavior: 'instant' });
       } catch (error) {
         if (mine !== token) return;
         if (error?.status === 402 || error?.status === 401) return boot(); // plano venceu ou sessão caiu
