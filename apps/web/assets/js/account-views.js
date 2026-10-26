@@ -165,6 +165,8 @@ export function viewGeral(ctx) {
         el('div', { class: 'stat' }, el('dt', {}, 'Entrou'), el('dd', { class: 'pos' }, brl(s.incomeCents))),
         el('div', { class: 'stat' }, el('dt', {}, 'Saiu'), el('dd', {}, brl(s.spendCents))),
       ),
+      d.account ? el('div', { class: 'balance balance-account' }, el('span', { class: 'muted' }, `Saldo da conta${d.account.name ? ` (${d.account.name})` : ''} no fim do mês`), el('strong', { class: `balance-num ${d.account.endCents < 0 ? 'neg' : 'pos'}` }, brl(d.account.endCents)),
+        el('p', { class: 'fine muted' }, `Começou o mês em ${brl(d.account.startCents)}${d.account.endCents < 0 && d.account.limitCents ? `, usando ${brl(-d.account.endCents)} do limite de ${brl(d.account.limitCents)}` : ''}. O saldo do mês acima é só o que entrou menos o que saiu; este já conta o que a conta tinha antes.`)) : null,
       s.savingsRate !== null ? el('p', { class: 'muted' }, s.savingsRate >= 0 ? `Você guardou ${Math.round(s.savingsRate * 100)}% do que entrou neste mês.` : 'Neste mês saiu mais do que entrou.') : null,
       !hasData
         ? empty('Nada lançado neste mês ainda', 'Comece por um gasto ou por um extrato do banco: em poucos minutos você vê para onde vai o dinheiro.', (() => {
@@ -297,7 +299,7 @@ export function viewLancamentos(ctx) {
       for (const x of list) n.set(x.date.slice(0, 7), (n.get(x.date.slice(0, 7)) ?? 0) + 1);
       return [...n.entries()].sort((p, q) => q[1] - p[1])[0]?.[0] ?? null;
     };
-    async function doImport(parsed, skipped) {
+    async function doImport(parsed, skipped, anchor = null) {
       try {
         let added = 0;
         let duplicates = 0;
@@ -307,6 +309,14 @@ export function viewLancamentos(ctx) {
           added += res.added;
           duplicates += res.duplicates ?? 0;
           transfers += res.transfers ?? 0;
+        }
+        // o saldo que o extrato informa vira o saldo da carteira (é ele que compõe o "Saldo da conta" na Visão geral)
+        if (anchor?.walletId) {
+          try {
+            await ctx.api.anchorWallet(anchor.walletId, { asOf: anchor.on, balanceCents: anchor.cents });
+          } catch {
+            toast('Importei, mas não consegui acertar o saldo da carteira.');
+          }
         }
         const month = dominantMonth(parsed);
         if (added > 0 && month) ctx.month = month;
@@ -348,10 +358,15 @@ export function viewLancamentos(ctx) {
           : el('p', { class: 'error' }, icon('alert'), el('span', {}, `Atenção: a soma dos lançamentos lidos (${brl(check.parsedCents)}) não bate com o que o extrato informa (${brl(check.expectedCents)}). Pode ter ficado linha de fora ou sido lida errada: confira antes de importar.`))
         : el('p', { class: 'fine' }, 'O PDF não traz saldos nem totais para conferir a soma. Confira as linhas antes de importar.');
       const no = el('button', { class: 'btn btn-quiet btn-sm', type: 'button' }, 'Cancelar');
+      const eb = check?.ok ? check.endBalance : null;
+      const anchorBox = eb ? el('input', { type: 'checkbox', checked: Boolean(walletSel?.value), disabled: !walletSel?.value }) : null;
+      const anchorRow = eb
+        ? el('label', { class: 'fine pay-tag' }, anchorBox, ` Acertar o saldo da carteira para o saldo do extrato (${brl(eb.cents)} em ${fmtDay(eb.on)})${walletSel?.value ? '' : ' — escolha a carteira acima para usar isso'}`)
+        : null;
       ok.addEventListener('click', async () => {
         ok.disabled = true;
         previewBox.hidden = true;
-        await doImport(parsed.filter((_, i) => chosen.has(i)), skipped);
+        await doImport(parsed.filter((_, i) => chosen.has(i)), skipped, eb && anchorBox.checked && walletSel?.value ? { walletId: walletSel.value, cents: eb.cents, on: eb.on } : null);
       });
       no.addEventListener('click', () => {
         previewBox.hidden = true;
@@ -361,6 +376,7 @@ export function viewLancamentos(ctx) {
       previewBox.replaceChildren(
         el('p', { class: 'fine' }, `Li ${parsed.length} lançamentos no PDF${skipped ? ` (${skipped} linhas não reconhecidas)` : ''}. Desmarque o que não quiser importar.`),
         verdict,
+        anchorRow,
         el('ul', { class: 'entry-list', style: 'max-height: 360px; overflow: auto' }, ...rows),
         el('div', { class: 'button-row' }, ok, no),
       );

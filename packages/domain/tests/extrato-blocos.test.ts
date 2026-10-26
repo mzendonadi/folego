@@ -56,7 +56,7 @@ test('extrato em blocos: cada lançamento fica na data dele, com descrição e o
     ['2026-10-20', -70_000, 'Pagamento cartao credito bce Banco Exemplo (br)'],
     ['2026-10-20', -5_000, 'Pix enviado Maria Exemplo'],
   ]);
-  assert.deepEqual(r.check, { ok: true, source: 'saldo', expectedCents: 43_450, parsedCents: 43_450 });
+  assert.deepEqual(r.check, { ok: true, source: 'saldo', expectedCents: 43_450, parsedCents: 43_450, endBalance: { cents: 33_450, on: '2026-10-20' } });
   assert.equal(r.skipped, 0);
 });
 

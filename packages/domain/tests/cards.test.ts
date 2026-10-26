@@ -1,7 +1,7 @@
 // Cartões de crédito: ciclo da fatura, limite usado, parcelas, rotativo, estratégias e leitor de fatura em PDF.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cardStrategies, dueInstallments, floatDays, installmentCommitments, invoiceDates, invoiceKeyOf, limitLevel, parseCardInvoice, revolvingOptions, summarizeCard } from '../src/index.ts';
+import { cardStrategies, dueInstallments, floatDays, installmentCommitments, installmentRatePct, invoiceDates, invoiceKeyOf, limitLevel, parseCardInvoice, revolvingOptions, summarizeCard } from '../src/index.ts';
 
 const card = { closingDay: 5, dueDay: 12, limitCents: 500_000 };
 
@@ -15,6 +15,26 @@ test('fatura: compra antes do fechamento fica na fatura do mês; no dia do fecha
   // fechamento no dia 31 vale o último dia de meses curtos
   assert.equal(invoiceDates('2026-02', { closingDay: 31, dueDay: 10 }).closingOn, '2026-02-28');
   assert.equal(invoiceKeyOf('2026-02-28', { closingDay: 31, dueDay: 10 }), '2026-03');
+});
+
+test('fatura parcelada: o que foi para parcelas sai do saldo a pagar e a fatura deixa de ficar vencida', () => {
+  const charges = [{ date: '2026-09-10', amountCents: 830_878 }];
+  const pays = [{ date: '2026-10-09', amountCents: 250_000 }, { date: '2026-10-09', amountCents: 17_922 }];
+  const official = [{ key: '2026-10', closingOn: '2026-10-05', dueOn: '2026-10-12', totalCents: 830_878, paidCents: null, financedCents: 562_956 }];
+  const s = summarizeCard(card, charges, pays, [], '2026-10-25', official);
+  const inv = s.invoices.find((i) => i.key === '2026-10')!;
+  assert.equal(inv.financedCents, 562_956);
+  assert.equal(inv.remainingCents, 0);
+  assert.equal(inv.status, 'financed');
+  // sem o parcelamento registrado, a mesma fatura continua vencida
+  const none = summarizeCard(card, charges, pays, [], '2026-10-25', [{ ...official[0]!, financedCents: undefined }]);
+  assert.equal(none.invoices.find((i) => i.key === '2026-10')?.status, 'overdue');
+});
+
+test('taxa do parcelamento: 4 x 2.160,92 sobre 5.629,56 dá cerca de 19,7% ao mês', () => {
+  const r = installmentRatePct(562_956, 216_092, 4);
+  assert.ok(r > 19 && r < 20.5, String(r));
+  assert.equal(installmentRatePct(100_000, 25_000, 4), 0, 'parcelas sem juros');
 });
 
 test('prazo: comprar logo depois do fechamento dá o maior prazo até vencer', () => {

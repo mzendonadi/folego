@@ -17,7 +17,7 @@ const monthShort = (ym) => cap(new Date(`${ym}-01T12:00:00`).toLocaleDateString(
 const catLabel = (c) => CATEGORY_LABEL[c] ?? c;
 const BRAND = { visa: 'Visa', mastercard: 'Mastercard', elo: 'Elo', amex: 'Amex', hipercard: 'Hipercard', outra: 'Outra bandeira' };
 const METER = { none: '', ok: '', attention: 'lis-high', high: 'lis-over', over: 'lis-over' };
-const STATUS = { open: ['Aberta', 'tone-ok'], closed: ['Fechada', 'tone-attention'], overdue: ['Vencida', 'tone-critical'], paid: ['Paga', 'tone-ok'] };
+const STATUS = { open: ['Aberta', 'tone-ok'], closed: ['Fechada', 'tone-attention'], overdue: ['Vencida', 'tone-critical'], paid: ['Paga', 'tone-ok'], financed: ['Parcelada', 'tone-ok'] };
 const parcelOptions = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15, 18, 21, 24, 36, 48, 60];
 const field = (label, input, hint) => el('div', { class: 'field' }, el('label', { class: 'label', for: input.id }, label), input, hint ? el('p', { class: 'fine' }, hint) : null);
 const select = (id, label, options, value) => el('select', { class: 'input', id, 'aria-label': label }, ...options.map(([v, l]) => el('option', { value: String(v), ...(String(v) === String(value) ? { selected: true } : {}) }, l)));
@@ -196,7 +196,8 @@ function invoicesPanel(ctx, c) {
             delta !== null ? el('p', { class: 'fine' }, `${delta === 0 ? 'Igual' : delta > 0 ? `${delta}% a mais` : `${-delta}% a menos`} que a fatura anterior (${brl(d.previous.totalCents)}).`) : null,
             el('ul', { class: 'cc-cats' }, ...d.byCategory.filter((x) => x.cents > 0 || x.previousCents > 0).map((x) => el('li', {}, el('span', {}, catLabel(x.category)), el('strong', {}, brl(x.cents)), el('span', { class: `fine ${x.cents > x.previousCents ? 'neg' : 'muted'}` }, x.previousCents ? `antes ${brl(x.previousCents)}` : 'novo')))));
         }
-        body.replaceChildren(list, ...extra.filter(Boolean));
+        const fin = (inv.status === 'closed' || inv.status === 'overdue') && inv.remainingCents > 0 ? financeForm(ctx, c, inv, d) : d.financedCents > 0 ? el('p', { class: 'note' }, icon('info'), `Esta fatura foi parcelada: ${brl(d.financedCents)} viraram parcelas nas próximas faturas.`) : null;
+        body.replaceChildren(list, ...extra.filter(Boolean), fin);
       } catch {
         loaded = false;
         body.replaceChildren(el('p', { class: 'muted' }, 'Não consegui carregar agora.'));
@@ -204,6 +205,43 @@ function invoicesPanel(ctx, c) {
     });
     return det;
   }));
+}
+
+/** "Paguei uma parte e parcelei o resto": liga os pagamentos à fatura e cria as parcelas nas faturas seguintes. */
+function financeForm(ctx, c, inv, d) {
+  const count = el('input', { class: 'input', id: `fc-n-${inv.key}`, type: 'number', min: '1', max: '48', inputmode: 'numeric', value: '4' });
+  const per = moneyInput({ id: `fc-p-${inv.key}`, ariaLabel: 'Valor de cada parcela' });
+  const principal = moneyInput({ id: `fc-v-${inv.key}`, ariaLabel: 'Valor parcelado' });
+  principal.input.value = (inv.remainingCents / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+  const picks = d.unlinkedPayments.map((p) => {
+    const cb = el('input', { type: 'checkbox', checked: true });
+    return { id: p.id, cb, row: el('label', { class: 'check' }, cb, ` ${brl(p.amountCents)} em ${dayBr(p.paidOn)}${p.note ? ` · ${p.note}` : ''}`) };
+  });
+  const go = el('button', { class: 'btn btn-primary btn-sm', type: 'button' }, 'Registrar parcelamento');
+  go.addEventListener('click', async () => {
+    const n = Number(count.value);
+    const pc = per.cents();
+    if (!(n >= 1) || !pc) return toast('Informe quantas parcelas e o valor de cada uma.');
+    const pr = principal.cents();
+    go.disabled = true;
+    try {
+      const r = await ctx.api.financeCardInvoice(c.id, inv.key, { count: n, perCents: pc, ...(pr ? { principalCents: pr } : {}), paymentIds: picks.filter((x) => x.cb.checked).map((x) => x.id) });
+      toast(r.interestCents > 0 ? `Parcelado. Juros de ${brl(r.interestCents)} (cerca de ${String(r.monthlyRatePct).replace('.', ',')}% ao mês).` : 'Parcelado.');
+      ctx.refresh();
+    } catch (err) {
+      toast(err?.status === 422 && err.message ? err.message : 'Não consegui registrar agora.');
+      go.disabled = false;
+    }
+  });
+  return el('div', { class: 'cc-finance' },
+    el('h4', {}, 'Parcelei o restante'),
+    el('p', { class: 'muted fine' }, `Falta ${brl(inv.remainingCents)} nesta fatura. Se você pagou uma parte e parcelou o resto no banco, marque o pagamento e diga as parcelas: elas passam a aparecer nas próximas faturas e os juros entram como gasto.`),
+    picks.length ? el('fieldset', {}, el('legend', { class: 'label' }, 'Pagamentos desta fatura'), ...picks.map((x) => x.row)) : null,
+    el('div', { class: 'button-row' },
+      el('div', { class: 'field' }, el('label', { class: 'label', for: count.id }, 'Parcelas'), count),
+      el('div', { class: 'field' }, el('label', { class: 'label', for: per.input.id }, 'Valor de cada parcela (R$)'), per.input),
+      el('div', { class: 'field' }, el('label', { class: 'label', for: principal.input.id }, 'Valor parcelado (R$)'), principal.input)),
+    go);
 }
 
 function installmentsBlock(ctx, c) {

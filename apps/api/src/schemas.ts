@@ -331,4 +331,16 @@ export const tripSchema = z.strictObject({
 });
 export const tripCheckSchema = z.strictObject({ itemId: z.string().trim().min(1).max(40), done: z.boolean() });
 
+/** Saldo da conta que o extrato do banco informa, e o dia a que ele se refere. */
+export const walletAnchorSchema = z.strictObject({ asOf: isoDate, balanceCents: z.number().int().min(-100_000_000_00).max(100_000_000_00) });
+
+/** "Paguei uma parte e parcelei o resto" da fatura do cartão. */
+export const cardFinanceSchema = z.strictObject({
+  count: z.number().int().min(1).max(48),
+  perCents: z.number().int().min(1).max(100_000_000_00),
+  principalCents: z.number().int().min(1).max(100_000_000_00).optional(),
+  date: isoDate.optional(),
+  paymentIds: z.array(z.string().uuid()).max(20).optional(),
+});
+
 export type CreateCaseInput = z.infer<typeof createCaseSchema>;

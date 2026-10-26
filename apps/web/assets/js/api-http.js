@@ -277,6 +277,12 @@ export async function getCardRevolving(id, fixedCents = 0) {
 export async function importCardInvoice(id, body) {
   return request('POST', `/account/cards/${id}/import`, { body });
 }
+export async function financeCardInvoice(id, key, body) {
+  return request('POST', `/account/cards/${id}/invoices/${key}/finance`, { body });
+}
+export async function anchorWallet(id, body) {
+  return request('POST', `/account/wallets/${id}/anchor`, { body });
+}
 /** Planejar férias (Ousado) e roteiro com IA (Desbravador). */
 export async function getTrips() {
   return request('GET', '/account/trips');

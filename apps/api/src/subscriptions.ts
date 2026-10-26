@@ -10,7 +10,7 @@ import { AppError, notFound } from './errors.ts';
 import type { Ctx, OrderView } from './services.ts';
 import { audit, num, orderView, todaySaoPaulo, wipeCase } from './services.ts';
 import type { Queryable } from './db.ts';
-import { ownedWalletId, walletOverdraftAlerts } from './account-extras.ts';
+import { accountBalances, ownedWalletId, walletOverdraftAlerts } from './account-extras.ts';
 import { monthLimits } from './account-debts.ts';
 import { createCustomCategory, customCategories, deleteCustomCategory, isAllowedCategory } from './categories.ts';
 import { markMissionDone } from './coach-program.ts';
@@ -403,6 +403,8 @@ export async function monthView(ctx: Ctx, subscriberId: string, month: string) {
       return { ...e, transfer: Boolean(e.transfer), walletId: m?.wallet_id ?? null, cardId: m?.card_id ?? null, cardName: m?.card_name ?? null, installmentNo: m?.installment_no ?? null, installmentTotal: m?.installment_total ?? null };
     }),
     summary: summarizeMonth(entries, limits, month),
+    // "Da receita à conta": o saldo da conta no começo e no fim do mês (com o negativo que já vinha de antes), para o saldo do mês não enganar
+    account: await accountBalances(ctx, subscriberId, `${month}-01`, new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).toISOString().slice(0, 10)),
     pace: buildPace(entries, month, today), // ritmo do mês, mapa de calor e maior gasto (Visão geral)
     limits,
     customCategories: await customCategories(ctx.db, subscriberId),

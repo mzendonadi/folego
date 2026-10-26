@@ -243,6 +243,8 @@ function pdfDate(line: string, refYear: number | null, now: Date): { iso: string
 /** Resultado da conferência do PDF: a soma dos lançamentos lidos bate com o que o próprio extrato informa (saldos ou totais)? */
 export interface PdfExtractCheck {
   ok: boolean;
+  /** Saldo final que o próprio extrato informa e o dia do último lançamento: serve para acertar o saldo da carteira. */
+  endBalance?: { cents: number; on: string };
   source: 'saldo' | 'totais';
   expectedCents: number;
   parsedCents: number;
@@ -300,7 +302,7 @@ export function parseMovementBlocks(text: string): { entries: ImportedEntry[]; s
   let chain = true;
   for (let i = 0; i < balances.length - 1; i += 1) if (balances[i + 1]! + entries[i]!.amountCents !== balances[i]!) chain = false;
   const check: PdfExtractCheck | null = start !== null && end !== null
-    ? { ok: end - start === parsed && chain, source: 'saldo', expectedCents: end - start, parsedCents: parsed }
+    ? { ok: end - start === parsed && chain, source: 'saldo', expectedCents: end - start, parsedCents: parsed, endBalance: { cents: end, on: entries[0]!.date } }
     : null;
   // do mais antigo para o mais novo, como o resto do importador
   entries.reverse();

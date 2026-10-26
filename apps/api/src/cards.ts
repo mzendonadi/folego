@@ -4,7 +4,7 @@
 import { AppError, notFound } from './errors.ts';
 import type { Ctx } from './services.ts';
 import { audit, num, todaySaoPaulo } from './services.ts';
-import { addMonthsIso, cardPaymentHint, cardStrategies, categorize, dueInstallments, installmentCommitments, invoiceDates, invoiceKeyOf, limitLevel, planByCode, revolvingOptions, summarizeCard } from './engine.ts';
+import { addMonthsIso, cardPaymentHint, installmentRatePct, cardStrategies, categorize, dueInstallments, installmentCommitments, invoiceDates, invoiceKeyOf, limitLevel, planByCode, revolvingOptions, summarizeCard } from './engine.ts';
 import type { CardCharge, CardPayment, CardStrategy, CardSummary, InstallmentPlan, OfficialInvoice } from './engine.ts';
 import { requireFeature } from './subscriptions.ts';
 import { isAllowedCategory } from './categories.ts';
@@ -46,8 +46,8 @@ interface CardRow {
 // ---------------------------------------------------------------------------
 export async function materializeInstallments(ctx: Ctx, subscriberId: string): Promise<number> {
   const today = todaySaoPaulo();
-  const plans = await ctx.db.query<{ id: string; card_id: string; note: string; category: string; per_cents: string; total_n: number; posted_n: number; first_on: Date | string }>(
-    `SELECT id, card_id, note, category, per_cents, total_n, posted_n, first_on FROM app.card_installments WHERE subscriber_id = $1 AND posted_n < total_n`,
+  const plans = await ctx.db.query<{ id: string; card_id: string; note: string; category: string; per_cents: string; total_n: number; posted_n: number; first_on: Date | string; invoice_key: string | null }>(
+    `SELECT id, card_id, note, category, per_cents, total_n, posted_n, first_on, invoice_key FROM app.card_installments WHERE subscriber_id = $1 AND posted_n < total_n`,
     [subscriberId],
   );
   let posted = 0;
@@ -58,9 +58,10 @@ export async function materializeInstallments(ctx: Ctx, subscriberId: string): P
     await ctx.db.tx(async (q) => {
       for (const d of due) {
         await q.query(
-          `INSERT INTO app.ledger_entries(subscriber_id, occurred_on, amount_cents, category, note, source, card_id, installment_no, installment_total, installment_plan)
-           VALUES ($1,$2,$3,$4,$5,'manual',$6,$7,$8,$9)`,
-          [subscriberId, d.date, -plan.perCents, p.category, p.note, p.card_id, d.no, p.total_n, p.id],
+          // parcela de uma fatura parcelada: entra na fatura do cartão, mas não conta como gasto de novo (a compra já foi contada)
+          `INSERT INTO app.ledger_entries(subscriber_id, occurred_on, amount_cents, category, note, source, card_id, installment_no, installment_total, installment_plan, transfer_kind)
+           VALUES ($1,$2,$3,$4,$5,'manual',$6,$7,$8,$9,$10)`,
+          [subscriberId, d.date, -plan.perCents, p.category, p.note, p.card_id, d.no, p.total_n, p.id, p.invoice_key ? 'invoice_financing' : null],
         );
         posted += 1;
       }
@@ -90,8 +91,8 @@ async function loadAll(ctx: Ctx, subscriberId: string, today: string) {
       `SELECT id, card_id, note, per_cents, total_n, posted_n, first_on FROM app.card_installments WHERE subscriber_id = $1 ORDER BY created_at`,
       [subscriberId],
     ),
-    ctx.db.query<{ card_id: string; invoice_key: string; closing_on: Date | string; due_on: Date | string | null; total_cents: string; paid_cents: string | null; min_payment_cents: string | null; previous_cents: string | null; period_start: Date | string | null }>(
-      `SELECT card_id, invoice_key, closing_on, due_on, total_cents, paid_cents, min_payment_cents, previous_cents, period_start FROM app.card_invoices WHERE subscriber_id = $1`,
+    ctx.db.query<{ card_id: string; invoice_key: string; closing_on: Date | string; due_on: Date | string | null; total_cents: string; paid_cents: string | null; min_payment_cents: string | null; previous_cents: string | null; period_start: Date | string | null; financed_cents: string | null }>(
+      `SELECT card_id, invoice_key, closing_on, due_on, total_cents, paid_cents, min_payment_cents, previous_cents, period_start, financed_cents FROM app.card_invoices WHERE subscriber_id = $1`,
       [subscriberId],
     ),
   ]);
@@ -104,7 +105,7 @@ function chargesOf(l: Loaded, cardId: string): CardCharge[] {
   return l.charges.filter((c) => c.card_id === cardId).map((c) => ({ date: iso(c.occurred_on), amountCents: num(c.cents), category: c.category, note: c.note, installmentNo: c.installment_no, installmentTotal: c.installment_total, invoiceKey: c.invoice_key }));
 }
 const paymentsOf = (l: Loaded, cardId: string): CardPayment[] => l.pays.filter((p) => p.card_id === cardId).map((p) => ({ date: iso(p.paid_on), amountCents: num(p.amount_cents), invoiceKey: p.invoice_key }));
-const officialOf = (l: Loaded, cardId: string): OfficialInvoice[] => l.invoices.filter((i) => i.card_id === cardId).map((i) => ({ key: i.invoice_key, closingOn: iso(i.closing_on), dueOn: i.due_on ? iso(i.due_on) : null, totalCents: num(i.total_cents), paidCents: i.paid_cents === null ? null : num(i.paid_cents) }));
+const officialOf = (l: Loaded, cardId: string): OfficialInvoice[] => l.invoices.filter((i) => i.card_id === cardId).map((i) => ({ key: i.invoice_key, closingOn: iso(i.closing_on), dueOn: i.due_on ? iso(i.due_on) : null, totalCents: num(i.total_cents), paidCents: i.paid_cents === null ? null : num(i.paid_cents), financedCents: i.financed_cents === null ? null : num(i.financed_cents) }));
 const plansOf = (l: Loaded, cardId: string): InstallmentPlan[] => l.plans.filter((p) => p.card_id === cardId).map((p) => ({ perCents: num(p.per_cents), totalN: p.total_n, postedN: p.posted_n, firstOn: iso(p.first_on), note: p.note }));
 
 async function averageIncome(ctx: Ctx, subscriberId: string, today: string): Promise<number | null> {
@@ -313,7 +314,10 @@ export async function invoiceDetail(ctx: Ctx, subscriberId: string, cardId: stri
     totalCents: official ? num(official.total_cents) : sumCents,
     sumCents,
     official: official ? { totalCents: num(official.total_cents), minPaymentCents: official.min_payment_cents === null ? null : num(official.min_payment_cents), previousCents: official.previous_cents === null ? null : num(official.previous_cents), paidCents: official.paid_cents === null ? null : num(official.paid_cents) } : null,
+    financedCents: official?.financed_cents ? num(official.financed_cents) : 0,
     payments: l.pays.filter((p) => p.card_id === cardId && p.invoice_key === key).map((p) => ({ id: p.id, paidOn: iso(p.paid_on), amountCents: num(p.amount_cents), note: p.note, kind: p.kind })),
+    // pagamentos que ainda não sabem de qual fatura são (ao parcelar, a pessoa escolhe quais foram desta)
+    unlinkedPayments: l.pays.filter((p) => p.card_id === cardId && !p.invoice_key && p.kind === 'payment').map((p) => ({ id: p.id, paidOn: iso(p.paid_on), amountCents: num(p.amount_cents), note: p.note })),
     entries: rows.map((c) => ({ id: c.id, date: iso(c.occurred_on), amountCents: num(c.cents), note: c.note, category: c.category, installmentNo: c.installment_no, installmentTotal: c.installment_total })).reverse(),
   };
   if (plan === 'desbravador') {
@@ -331,6 +335,65 @@ export async function invoiceDetail(ctx: Ctx, subscriberId: string, cardId: stri
     out.biggest = rows.slice().sort((a, b) => num(b.cents) - num(a.cents)).slice(0, 3).map((c) => ({ note: c.note, amountCents: num(c.cents) }));
   }
   return out;
+}
+
+export interface FinanceInvoiceInput {
+  /** Número de parcelas e valor de cada uma (o que o banco ofereceu). */
+  count: number;
+  perCents: number;
+  /** Quanto da fatura foi parcelado; sem isso, é o que ainda falta pagar dela. */
+  principalCents?: number | undefined;
+  /** Dia em que parcelou (padrão: hoje). */
+  date?: string | undefined;
+  /** Pagamentos de cartão que eram desta fatura (ficam ligados a ela). */
+  paymentIds?: string[] | undefined;
+}
+
+/**
+ * "Paguei uma parte e parcelei o resto": liga os pagamentos à fatura, transforma o saldo que sobrou em parcelas que entram nas próximas faturas
+ * (sem contar como gasto de novo) e lança só os juros do parcelamento como gasto. A fatura passa a mostrar "parcelada" em vez de "vencida".
+ */
+export async function financeInvoice(ctx: Ctx, subscriberId: string, cardId: string, key: string, input: FinanceInvoiceInput): Promise<{ principalCents: number; interestCents: number; monthlyRatePct: number; firstOn: string }> {
+  await requireFeature(ctx, subscriberId, 'cards');
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(key)) throw new AppError(422, 'invalid_key', 'Fatura inválida.');
+  if (!Number.isInteger(input.count) || input.count < 1 || input.count > 48 || !Number.isInteger(input.perCents) || input.perCents < 1) throw new AppError(422, 'invalid_plan', 'Informe o número de parcelas e o valor de cada uma.');
+  const today = todaySaoPaulo();
+  const when = input.date && /^\d{4}-\d{2}-\d{2}$/.test(input.date) ? input.date : today;
+  await ctx.db.tx(async (q) => {
+    await ownedCard(q, subscriberId, cardId);
+    if (input.paymentIds?.length) await q.query(`UPDATE app.card_payments SET invoice_key = $4 WHERE subscriber_id = $1 AND card_id = $2 AND kind = 'payment' AND invoice_key IS NULL AND id = ANY($3::uuid[])`, [subscriberId, cardId, input.paymentIds, key]);
+  });
+  const l = await loadAll(ctx, subscriberId, today);
+  const card = l.cards.find((c) => c.id === cardId);
+  if (!card) throw notFound();
+  const summary = summarizeCard({ closingDay: card.closing_day, dueDay: card.due_day, limitCents: num(card.limit_cents) }, chargesOf(l, cardId), paymentsOf(l, cardId), plansOf(l, cardId), today, officialOf(l, cardId));
+  const inv = summary.invoices.find((i) => i.key === key);
+  if (!inv || inv.remainingCents <= 0) throw new AppError(422, 'nothing_to_finance', 'Esta fatura não tem saldo a parcelar.');
+  const principal = input.principalCents ?? inv.remainingCents;
+  if (!Number.isInteger(principal) || principal < 1 || principal > inv.remainingCents) throw new AppError(422, 'invalid_amount', 'O valor parcelado não pode passar do que falta pagar da fatura.');
+  const interest = Math.max(0, input.perCents * input.count - principal);
+  // a primeira parcela cai na fatura seguinte: nunca antes do dia depois do fechamento da fatura parcelada
+  const dayAfterClosing = new Date(Date.parse(`${inv.closingOn}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+  const firstOn = when >= dayAfterClosing ? when : dayAfterClosing;
+  const label = `${key.slice(5)}/${key.slice(0, 4)}`;
+  await ctx.db.tx(async (q) => {
+    const plan = await q.query<{ id: string }>(
+      `INSERT INTO app.card_installments(subscriber_id, card_id, note, category, per_cents, total_n, posted_n, first_on, invoice_key) VALUES ($1,$2,$3,'dividas',$4,$5,0,$6,$7) RETURNING id`,
+      [subscriberId, cardId, `Parcelamento da fatura ${label}`, input.perCents, input.count, firstOn, key],
+    );
+    await q.query(
+      `INSERT INTO app.card_invoices(subscriber_id, card_id, invoice_key, closing_on, due_on, total_cents, source, financed_cents, financed_plan)
+       VALUES ($1,$2,$3,$4,$5,$6,'history',$7,$8)
+       ON CONFLICT (card_id, invoice_key) DO UPDATE SET financed_cents = EXCLUDED.financed_cents, financed_plan = EXCLUDED.financed_plan`,
+      [subscriberId, cardId, key, inv.closingOn, inv.dueOn, inv.totalCents, principal, plan.rows[0]!.id],
+    );
+    if (interest > 0) {
+      await q.query(`INSERT INTO app.ledger_entries(subscriber_id, occurred_on, amount_cents, category, note, source) VALUES ($1,$2,$3,'dividas',$4,'manual')`, [subscriberId, when, -interest, `Juros do parcelamento da fatura ${label}`]);
+    }
+    await audit(q, `subscriber:${subscriberId}`, 'card_invoice_financed', 'subscriber', subscriberId, { key, count: input.count });
+  });
+  await materializeInstallments(ctx, subscriberId);
+  return { principalCents: principal, interestCents: interest, monthlyRatePct: installmentRatePct(principal, input.perCents, input.count), firstOn };
 }
 
 /** Simulação do rotativo para a fatura a pagar (Desbravador). */

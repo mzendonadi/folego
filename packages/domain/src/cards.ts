@@ -72,6 +72,8 @@ export interface OfficialInvoice {
   totalCents: number;
   /** Quanto o banco diz que já foi pago dessa fatura. */
   paidCents: number | null;
+  /** Quanto da fatura virou parcelamento (as parcelas entram nas próximas faturas). */
+  financedCents?: number | null;
 }
 export interface InstallmentPlan {
   perCents: number;
@@ -82,7 +84,7 @@ export interface InstallmentPlan {
   note?: string;
 }
 
-export type InvoiceStatus = 'open' | 'closed' | 'overdue' | 'paid';
+export type InvoiceStatus = 'open' | 'closed' | 'overdue' | 'paid' | 'financed';
 export interface InvoiceView {
   key: string;
   closingOn: string;
@@ -90,6 +92,8 @@ export interface InvoiceView {
   status: InvoiceStatus;
   totalCents: number;
   paidCents: number;
+  /** Parte da fatura que foi parcelada. */
+  financedCents: number;
   remainingCents: number;
   count: number;
   /** Dias até vencer (negativo = vencida). */
@@ -157,11 +161,13 @@ export function summarizeCard(
     const free = Math.min(pool, t.cents - paidCents);
     paidCents += free;
     pool -= free;
-    const remainingCents = t.cents - paidCents;
+    // o que foi parcelado deixa de ser dívida da fatura: vira as parcelas (que contam no limite como parcelas futuras)
+    const financedCents = Math.min(Math.max(o?.financedCents ?? 0, 0), t.cents - paidCents);
+    const remainingCents = t.cents - paidCents - financedCents;
     const closed = d.closingOn <= today;
     const daysToDue = diffDays(today, d.dueOn);
-    const status: InvoiceStatus = closed ? (remainingCents === 0 ? 'paid' : daysToDue < 0 ? 'overdue' : 'closed') : 'open';
-    return { key, closingOn: d.closingOn, dueOn: d.dueOn, status, totalCents: t.cents, paidCents, remainingCents, count: t.count, daysToDue };
+    const status: InvoiceStatus = closed ? (remainingCents === 0 ? (financedCents > 0 ? 'financed' : 'paid') : daysToDue < 0 ? 'overdue' : 'closed') : 'open';
+    return { key, closingOn: d.closingOn, dueOn: d.dueOn, status, totalCents: t.cents, paidCents, financedCents, remainingCents, count: t.count, daysToDue };
   });
   const future = plans.reduce((s, p) => s + p.perCents * Math.max(0, p.totalN - p.postedN), 0);
   const owed = asc.reduce((s, i) => s + i.remainingCents, 0);
@@ -179,6 +185,20 @@ export function summarizeCard(
     invoices: [...asc].reverse().slice(0, 8),
     futureInstallmentsCents: future,
   };
+}
+
+/** Juro mensal (em %) de um parcelamento: financia `pvCents`, paga `n` parcelas de `pmtCents` (tabela Price). 0 se não há juro. */
+export function installmentRatePct(pvCents: number, pmtCents: number, n: number): number {
+  if (pvCents <= 0 || n < 1 || pmtCents * n <= pvCents) return 0;
+  let lo = 0;
+  let hi = 1; // 100% ao mês
+  const pmtAt = (r: number) => (r === 0 ? pvCents / n : (pvCents * r) / (1 - Math.pow(1 + r, -n)));
+  for (let i = 0; i < 80; i += 1) {
+    const mid = (lo + hi) / 2;
+    if (pmtAt(mid) < pmtCents) lo = mid;
+    else hi = mid;
+  }
+  return Math.round(((lo + hi) / 2) * 10_000) / 100;
 }
 
 // ---------------------------------------------------------------------------

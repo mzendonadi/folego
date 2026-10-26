@@ -51,7 +51,7 @@ import { contactSchema, sendContact } from './contact.ts';
 import * as waPortal from './wa-portal.ts';
 import { handleWebhook as handleWhatsAppWebhook, loadAccount, validSignature } from './whatsapp.ts';
 import type { WebhookBody } from './whatsapp.ts';
-import { cardSchema, cardPatchSchema, cardPurchaseSchema, cardPaymentSchema, cardImportSchema, tripSchema, tripCheckSchema, accessSchema, addEntriesSchema, cancelSchema, contributionSchema, createCaseSchema, entryWalletSchema, accountDebtSchema, accountDebtPatchSchema, debtPaymentSchema, monthLimitSchema, plannerSchema, objectiveSchema, inviteSchema, memberAccessSchema, checkoutSchema, profileSchema, referralLeadSchema, referralInviteSchema, recurringDecisionSchema, reminderPatchSchema, reminderSchema, walletSchema, walletPatchSchema, createOrderSchema, emailLinkSchema, emailOnlySchema, goalSchema, incomeInterviewSchema, leadSchema, loginCodeSchema, newPartnerSchema, partnerLoginSchema, partnerStatusSchema, setCategorySchema, categoryNameSchema, setLimitSchema, simulateSchema, subscriptionOrderSchema, toggleIncomeTaskSchema, translationSchema, guidedSchema, uuidParam, monthParam } from './schemas.ts';
+import { cardSchema, cardPatchSchema, cardPurchaseSchema, cardPaymentSchema, cardImportSchema, cardFinanceSchema, walletAnchorSchema, tripSchema, tripCheckSchema, accessSchema, addEntriesSchema, cancelSchema, contributionSchema, createCaseSchema, entryWalletSchema, accountDebtSchema, accountDebtPatchSchema, debtPaymentSchema, monthLimitSchema, plannerSchema, objectiveSchema, inviteSchema, memberAccessSchema, checkoutSchema, profileSchema, referralLeadSchema, referralInviteSchema, recurringDecisionSchema, reminderPatchSchema, reminderSchema, walletSchema, walletPatchSchema, createOrderSchema, emailLinkSchema, emailOnlySchema, goalSchema, incomeInterviewSchema, leadSchema, loginCodeSchema, newPartnerSchema, partnerLoginSchema, partnerStatusSchema, setCategorySchema, categoryNameSchema, setLimitSchema, simulateSchema, subscriptionOrderSchema, toggleIncomeTaskSchema, translationSchema, guidedSchema, uuidParam, monthParam } from './schemas.ts';
 import { EngineInputError } from './engine.ts';
 import { GUIDED_KINDS } from './guided.ts';
 import * as openFinance from './openfinance.ts';
@@ -743,6 +743,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
   app.post('/api/account/trips/:id/itinerary', { config: { rateLimit: { max: 8 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => reply.status(202).send(await trips.generateItinerary(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id))));
 
+  app.post('/api/account/cards/:id/invoices/:key/finance', async (req) => {
+    const p = req.params as { id: string; key: string };
+    return cards.financeInvoice(ctx, await requireSubscriber(req), idParam(p.id), p.key, cardFinanceSchema.parse(req.body));
+  });
   app.get('/api/account/cards', async (req) => cards.listCards(ctx, await requireSubscriber(req)));
   app.post('/api/account/cards', async (req, reply) => reply.status(201).send({ id: await cards.createCard(ctx, await requireSubscriber(req), cardSchema.parse(req.body)) }));
   app.put('/api/account/cards/:id', async (req) => {
@@ -774,6 +778,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     return cards.rotativoSimulation(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id), fixed);
   });
   app.post('/api/account/cards/:id/import', { config: { rateLimit: { max: 12 * scale, timeWindow: '10 minutes' } } }, async (req) => cards.importInvoice(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id), cardImportSchema.parse(req.body)));
+  app.post('/api/account/wallets/:id/anchor', async (req) => {
+    const b = walletAnchorSchema.parse(req.body);
+    return extras.anchorWallet(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id), b.asOf, b.balanceCents);
+  });
   app.get('/api/account/wallets', async (req) => extras.listWallets(ctx, await requireSubscriber(req)));
   app.post('/api/account/wallets', async (req, reply) => {
     return reply.status(201).send({ id: await extras.createWallet(ctx, await requireSubscriber(req), walletSchema.parse(req.body)) });

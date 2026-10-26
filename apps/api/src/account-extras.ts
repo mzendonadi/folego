@@ -36,6 +36,57 @@ export async function listWallets(ctx: Ctx, subscriberId: string) {
   };
 }
 
+/**
+ * Saldo da conta bancária no começo e no fim de um mês: saldo de partida da carteira + lançamentos da conta − pagamentos de fatura pagos por ela.
+ * Só existe quando há conta com movimentação até o fim do mês (antes disso o saldo seria só o de partida, sem significado).
+ */
+export async function accountBalances(ctx: Ctx, subscriberId: string, monthStart: string, monthEnd: string) {
+  const r = await ctx.db.query<{ id: string; name: string; limit_c: string; opening: string; before_start: string; at_end: string; n: string }>(
+    `SELECT w.id, w.name, w.overdraft_limit_cents::text AS limit_c, w.opening_balance_cents::text AS opening,
+            (coalesce((SELECT sum(l.amount_cents) FROM app.ledger_entries l WHERE l.wallet_id = w.id AND l.occurred_on < $2::date), 0)
+              - coalesce((SELECT sum(cp.amount_cents) FROM app.card_payments cp WHERE cp.wallet_id = w.id AND cp.paid_on < $2::date), 0))::text AS before_start,
+            (coalesce((SELECT sum(l.amount_cents) FROM app.ledger_entries l WHERE l.wallet_id = w.id AND l.occurred_on <= $3::date), 0)
+              - coalesce((SELECT sum(cp.amount_cents) FROM app.card_payments cp WHERE cp.wallet_id = w.id AND cp.paid_on <= $3::date), 0))::text AS at_end,
+            (SELECT count(*) FROM app.ledger_entries l WHERE l.wallet_id = w.id AND l.occurred_on <= $3::date)::text AS n
+       FROM app.wallets w WHERE w.subscriber_id = $1 AND w.kind = 'conta' ORDER BY w.created_at`,
+    [subscriberId, monthStart, monthEnd],
+  );
+  const live = r.rows.filter((w) => num(w.n) > 0);
+  if (live.length === 0) return null;
+  return {
+    startCents: live.reduce((s, w) => s + num(w.opening) + num(w.before_start), 0),
+    endCents: live.reduce((s, w) => s + num(w.opening) + num(w.at_end), 0),
+    limitCents: live.reduce((s, w) => s + num(w.limit_c), 0),
+    name: live.length === 1 ? live[0]!.name : 'Contas',
+  };
+}
+
+/**
+ * Ancora o saldo da conta ao saldo que o extrato do banco informa: os lançamentos soltos da conta passam a ser dela e o saldo de partida
+ * é recalculado para que o saldo em `asOf` seja exatamente o do extrato. Depois disso, cada lançamento novo move o saldo a partir dele.
+ */
+export async function anchorWallet(ctx: Ctx, subscriberId: string, id: string, asOf: string, balanceCents: number): Promise<{ openingBalanceCents: number; balanceCents: number }> {
+  await requireFeature(ctx, subscriberId, 'ledger');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf)) throw new AppError(422, 'invalid_date', 'Data inválida.');
+  return ctx.db.tx(async (q) => {
+    const w = await q.query<{ kind: string }>(`SELECT kind FROM app.wallets WHERE id = $1 AND subscriber_id = $2 FOR UPDATE`, [id, subscriberId]);
+    if (!w.rows[0]) throw notFound();
+    if (w.rows[0].kind !== 'conta') throw new AppError(422, 'invalid_kind', 'Só uma conta bancária pode ser ajustada pelo extrato.');
+    // lançamentos da conta que estavam sem carteira (compras no cartão ficam de fora: não mexem na conta)
+    await q.query(`UPDATE app.ledger_entries SET wallet_id = $2 WHERE subscriber_id = $1 AND wallet_id IS NULL AND card_id IS NULL`, [subscriberId, id]);
+    const sum = await q.query<{ s: string; later: string }>(
+      `SELECT (coalesce((SELECT sum(amount_cents) FROM app.ledger_entries WHERE wallet_id = $1 AND occurred_on <= $2::date), 0)
+                - coalesce((SELECT sum(amount_cents) FROM app.card_payments WHERE wallet_id = $1 AND paid_on <= $2::date), 0))::text AS s,
+              (coalesce((SELECT sum(amount_cents) FROM app.ledger_entries WHERE wallet_id = $1 AND occurred_on > $2::date), 0)
+                - coalesce((SELECT sum(amount_cents) FROM app.card_payments WHERE wallet_id = $1 AND paid_on > $2::date), 0))::text AS later`,
+      [id, asOf],
+    );
+    const opening = balanceCents - num(sum.rows[0]?.s ?? 0);
+    await q.query(`UPDATE app.wallets SET opening_balance_cents = $3 WHERE id = $1 AND subscriber_id = $2`, [id, subscriberId, opening]);
+    return { openingBalanceCents: opening, balanceCents: balanceCents + num(sum.rows[0]?.later ?? 0) };
+  });
+}
+
 export interface WalletInput {
   name: string;
   kind: string;
