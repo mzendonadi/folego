@@ -25,7 +25,14 @@ export interface StrategyInvestment {
   status: InvestStatus;
 }
 export interface StrategyDebt { name: string; balanceCents: number; monthlyRatePct: number | null }
-export interface StrategyCard { name: string; openCents: number; overdue: boolean; revolvingMonthlyPct: number }
+export interface StrategyCard {
+  name: string;
+  openCents: number;
+  overdue: boolean;
+  revolvingMonthlyPct: number;
+  /** Parcelas que ainda vão chegar nas próximas faturas (compras parceladas e fatura parcelada): é dívida, mesmo com a fatura de hoje zerada. */
+  futureInstallmentsCents?: number;
+}
 export interface StrategySnapshot {
   today: string;
   cdiAnnualPct: number | null;
