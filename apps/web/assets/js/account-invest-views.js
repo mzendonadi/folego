@@ -2,7 +2,7 @@
 // Investimentos: a pessoa lança o que aplicou; o Prumo mostra total investido, rendimento e imposto estimado, em "Ativos" e "Processando".
 // Estratégias: "jogadas" calculadas com as contas, cartões, dívidas e aplicações dela + a análise completa do Estrategista (IA).
 import { el, icon, toast } from './dom.js';
-import { brl, percentToBps, todayISO } from './format.js';
+import { brl, todayISO } from './format.js';
 import { moneyInput } from './money.js';
 import { confirmDialog } from './confirm.js';
 
@@ -47,7 +47,7 @@ export function viewInvestimentos(ctx) {
     });
     const hero = card(
       el('div', { class: 'inv-hero' },
-        el('div', {}, el('span', { class: 'muted' }, 'Total investido'), el('strong', { class: 'inv-total' }, money(t.positionCents)),
+        el('div', {}, el('span', { class: 'muted' }, 'Total investido'), el('strong', { class: 'inv-total' }, money(t.positionCents + t.processingCents)),
           el('p', { class: 'inv-yield' }, 'Rendimento atual ', el('strong', { class: t.yieldCents >= 0 ? 'pos' : 'neg' }, hidden.on ? '••••' : `${t.yieldCents >= 0 ? '+' : ''}${brl(t.yieldCents)} (${fmtPct(t.yieldPct)})`))),
         eye),
       t.count + t.processingCount === 0 ? null : el('p', { class: 'fine muted' }, 'Rendimento estimado até hoje pelo CDI e pela taxa que você informou, sem descontar o imposto. A posição que aparece no app da corretora vale mais: informe-a ao editar uma aplicação.'));
@@ -161,13 +161,15 @@ export function viewInvestimentos(ctx) {
     f.addEventListener('submit', async (e) => {
       e.preventDefault();
       const cents = applied.cents();
-      const bps = percentToBps(rate.value);
+      // 102 (% do CDI) passa de 100: não dá para usar o conversor de juros, que só aceita até 100
+      const n = Number(rate.value.trim().replace(/\./g, '').replace(',', '.'));
+      const ratePct = rate.value.trim() !== '' && Number.isFinite(n) && n >= 0 && n <= 1000 ? Math.round(n * 100) / 100 : undefined;
       if (!name.value.trim()) return toast('Dê um nome à aplicação.');
       if (!cents) return toast('Informe o valor aplicado.');
-      if (bps === undefined && indexer.value !== 'poupanca' && indexer.value !== 'outro') return toast('A taxa deve ser um número, como 102 ou 12,5.');
+      if (ratePct === undefined && indexer.value !== 'poupanca' && indexer.value !== 'outro') return toast('A taxa deve ser um número, como 102 ou 12,5.');
       if (!on.value) return toast('Informe a data da aplicação.');
       const body = {
-        name: name.value.trim(), kind: kind.value, indexer: indexer.value, ratePct: bps === undefined ? 0 : bps / 100, appliedCents: cents,
+        name: name.value.trim(), kind: kind.value, indexer: indexer.value, ratePct: ratePct ?? 0, appliedCents: cents,
         positionCents: position.cents() || null, appliedOn: on.value, maturesOn: matures.value || null, liquidity: liq.value, status: status.value, note: note.value.trim() || null,
       };
       save.disabled = true;
