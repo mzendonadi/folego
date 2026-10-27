@@ -302,6 +302,18 @@ export async function setEntryCategory(ctx: Ctx, subscriberId: string, id: strin
   if (r.rowCount === 0) throw notFound();
 }
 
+/** Corrige um lançamento (texto, valor, data, categoria), mesmo depois de importado. Só mexe no que veio no pedido. */
+export async function updateEntry(ctx: Ctx, subscriberId: string, id: string, patch: { note?: string | undefined; amountCents?: number | undefined; date?: string | undefined; category?: string | undefined }): Promise<void> {
+  await requireFeature(ctx, subscriberId, 'ledger');
+  if (patch.category !== undefined && !(await isAllowedCategory(ctx.db, subscriberId, patch.category))) throw new AppError(422, 'invalid_category', 'Categoria inválida');
+  const r = await ctx.db.query(
+    `UPDATE app.ledger_entries SET note = coalesce($3, note), amount_cents = coalesce($4, amount_cents), occurred_on = coalesce($5::date, occurred_on), category = coalesce($6, category)
+      WHERE id = $1 AND subscriber_id = $2`,
+    [id, subscriberId, patch.note ?? null, patch.amountCents ?? null, patch.date ?? null, patch.category ?? null],
+  );
+  if (r.rowCount === 0) throw notFound();
+}
+
 /** Lançamentos para análise. Pagamento de fatura de cartão (transferência) fica de fora, a não ser que se peça para listar. */
 async function loadLedger(ctx: Ctx, subscriberId: string, fromDate: string, withTransfers = false): Promise<LedgerEntry[]> {
   const r = await ctx.db.query<{ id: string; occurred_on: Date | string; amount_cents: string; category: string; note: string; transfer_kind: string | null }>(

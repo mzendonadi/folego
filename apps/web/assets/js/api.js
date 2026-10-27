@@ -23,6 +23,7 @@ export const getMonth = impl.getMonth;
 export const addEntries = impl.addEntries;
 export const deleteEntry = impl.deleteEntry;
 export const setEntryCategory = impl.setEntryCategory;
+export const updateEntry = impl.updateEntry;
 export const setLimit = impl.setLimit;
 export const getCategories = impl.getCategories;
 export const createCategory = impl.createCategory;

@@ -14,6 +14,7 @@ import { viewCartoes } from './account-cards-views.js';
 import { viewFerias } from './account-trips-views.js';
 import { partnerPrompt } from './account-map-banner.js';
 import { quickEntryCard } from './account-quick.js';
+import { ledgerGroups } from './account-ledger.js';
 import { paceCard } from './account-visual.js';
 import { viewCofre } from './account-vault.js';
 import { NEW_CAT, catLabel, catList, categoryEditor } from './account-categories.js';
@@ -425,55 +426,11 @@ export function viewLancamentos(ctx) {
     importBox = el('div', { class: 'import-box no-print' }, input, btn, el('span', { class: 'fine' }, 'Aceita CSV, OFX e PDF. O PDF é lido no seu aparelho: o arquivo não é enviado. Repetidos são ignorados.'), previewBox);
   }
 
-  const walletName = new Map(wallets.map((x) => [x.id, x.name]));
-  const rows = d.entries.map((x) => {
-    const del = el('button', { class: 'btn btn-quiet btn-sm icon-btn', type: 'button', 'aria-label': `Remover ${x.note}` }, icon('trash'));
-    del.addEventListener('click', async () => {
-      try {
-        await ctx.api.deleteEntry(x.id);
-        toast('Lançamento removido.');
-        ctx.refresh();
-      } catch {
-        toast('Não consegui remover agora.');
-      }
-    });
-    const options = catList(ctx);
-    if (!options.includes(x.category)) options.push(x.category);
-    let current = x.category;
-    const cat = el('select', { class: 'input input-sm', 'aria-label': `Categoria de ${x.note}` }, ...options.map((c) => el('option', { value: c, selected: c === x.category }, catLabel(c))), el('option', { value: NEW_CAT }, '＋ Nova categoria…'));
-    cat.addEventListener('change', () => {
-      if (cat.value === NEW_CAT) {
-        // criar na hora: o campo de nome entra no lugar do seletor
-        cat.value = current;
-        const editor = categoryEditor(ctx, {
-          onCreated: async (name) => {
-            await ctx.api.setEntryCategory(x.id, name);
-            toast(`Categoria "${name}" criada e aplicada.`);
-            ctx.refresh();
-          },
-          onCancel: () => editor.replaceWith(cat),
-        });
-        cat.replaceWith(editor);
-        return;
-      }
-      current = cat.value;
-      ctx.api.setEntryCategory(x.id, cat.value).then(() => toast('Categoria atualizada.')).catch(() => toast('Não consegui salvar a categoria.'));
-    });
-    return el(
-      'li', { class: 'entry-row' },
-      el('span', { class: 'entry-date muted' }, fmtDay(x.date)),
-      el('span', { class: 'entry-note' }, x.note, x.transfer ? el('span', { class: 'wallet-tag' }, ' · pagamento de fatura (fora dos gastos)') : null, x.cardName ? el('span', { class: 'wallet-tag' }, ` · ${x.cardName}${x.installmentNo ? ` ${x.installmentNo}/${x.installmentTotal}` : ''}`) : x.walletId && walletName.get(x.walletId) ? el('span', { class: 'wallet-tag' }, ` · ${walletName.get(x.walletId)}`) : null),
-      cat,
-      el('strong', { class: `entry-amount ${x.amountCents < 0 ? 'neg' : 'pos'}` }, brl(x.amountCents)),
-      del,
-    );
-  });
-
   return el(
     'div', { class: 'acc-stack' },
     quickEntryCard(ctx),
     card(el('h2', {}, 'Novo lançamento'), form, categoryManager(ctx), importBox),
-    card(monthNav(ctx), rows.length > 0 ? el('ul', { class: 'entries' }, ...rows) : empty('Nenhum lançamento neste mês', 'Adicione acima ou importe o extrato do banco.')),
+    card(monthNav(ctx), d.entries.length > 0 ? ledgerGroups(ctx, d.entries, wallets) : empty('Nenhum lançamento neste mês', 'Adicione acima ou importe o extrato do banco.')),
   );
 }
 

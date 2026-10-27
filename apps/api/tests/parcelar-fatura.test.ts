@@ -124,3 +124,18 @@ test('saldo da conta: o saldo do extrato vira a base e o negativo anterior comp�
   assert.equal(mes.account.startCents, -386_212);
   assert.equal(mes.account.limitCents, 1_000_000);
 });
+
+test('editar lançamento importado: texto, valor, data e categoria mudam; pedido vazio e valor zero são recusados', async () => {
+  const c = await assinante('edita-um@exemplo.com');
+  await c('POST', '/api/account/entries', { body: { entries: [{ date: '2026-10-03', amountCents: -1_990, note: 'COMPRA ERRADA', source: 'import' }] } });
+  const id = (await c('GET', '/api/account/month/2026-10')).json.entries[0].id as string;
+  const r = await c('PUT', `/api/account/entries/${id}`, { body: { note: 'Mercado do bairro', amountCents: -2_590, date: '2026-10-04', category: 'mercado' } });
+  assert.equal(r.status, 200, JSON.stringify(r.json));
+  const e = (await c('GET', '/api/account/month/2026-10')).json.entries.find((x: any) => x.id === id);
+  assert.equal(e.note, 'Mercado do bairro');
+  assert.equal(e.amountCents, -2_590);
+  assert.equal(e.date, '2026-10-04');
+  assert.equal((await c('PUT', `/api/account/entries/${id}`, { body: {} })).status, 400);
+  assert.equal((await c('PUT', `/api/account/entries/${id}`, { body: { amountCents: 0 } })).status, 400);
+  assert.equal((await c('PUT', `/api/account/entries/01a17641-923e-7edf-8abc-5e224e99dd53`, { body: { note: 'x' } })).status, 404);
+});

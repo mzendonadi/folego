@@ -331,6 +331,14 @@ export const tripSchema = z.strictObject({
 });
 export const tripCheckSchema = z.strictObject({ itemId: z.string().trim().min(1).max(40), done: z.boolean() });
 
+/** Edição de um lançamento já gravado (inclusive os importados): texto, valor, data e categoria. */
+export const entryPatchSchema = z.strictObject({
+  note: z.string().trim().min(1).max(120).optional(),
+  amountCents: z.number().int().min(-10_000_000_000).max(10_000_000_000).refine((v) => v !== 0, 'Valor zero').optional(),
+  date: isoDate.optional(),
+  category: z.string().trim().min(1).max(30).optional(),
+}).refine((v) => Object.keys(v).length > 0, 'Nada para alterar');
+
 /** Saldo da conta que o extrato do banco informa, e o dia a que ele se refere. */
 export const walletAnchorSchema = z.strictObject({ asOf: isoDate, balanceCents: z.number().int().min(-100_000_000_00).max(100_000_000_00) });
 

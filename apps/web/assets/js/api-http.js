@@ -119,6 +119,10 @@ export async function addEntries(entries) {
 export async function deleteEntry(id) {
   return request('DELETE', `/account/entries/${id}`);
 }
+/** Corrige um lançamento (texto, valor, data ou categoria), mesmo importado. */
+export async function updateEntry(id, patch) {
+  return request('PUT', `/account/entries/${id}`, { body: patch });
+}
 export async function setEntryCategory(id, category) {
   return request('POST', `/account/entries/${id}/category`, { body: { category } });
 }

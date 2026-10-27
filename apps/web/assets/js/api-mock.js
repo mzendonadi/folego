@@ -92,6 +92,7 @@ export const getMonth = notAvailable;
 export const addEntries = notAvailable;
 export const deleteEntry = notAvailable;
 export const setEntryCategory = notAvailable;
+export const updateEntry = notAvailable;
 export const setLimit = notAvailable;
 export const getCategories = notAvailable;
 export const createCategory = notAvailable;
