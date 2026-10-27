@@ -115,6 +115,11 @@ export function initChat() {
         if (e.status === 401) {
           store.set('');
           token = '';
+          if (document.body.dataset.route === 'account') {
+            toast('Sua conversa expirou. Abra o chat de novo.');
+            closePanel();
+            return;
+          }
           toast('Sua conversa expirou. Informe seus dados para continuar.');
           drawForm();
           return;
@@ -201,6 +206,18 @@ export function initChat() {
         store.set('');
         token = '';
       }
+    }
+    // Dentro do Prumo (assinante logado) os dados já existem: abre a conversa sem formulário. Se não der (não logado), segue o fluxo normal.
+    if (document.body.dataset.route === 'account') {
+      body.replaceChildren(el('p', { class: 'fl-chat-wait', role: 'status' }, 'Abrindo a conversa…'));
+      try {
+        const out = await call('POST', '/chat/start-member');
+        if (out.token) {
+          token = out.token;
+          store.set(token);
+          return drawChat(out.messages?.length ? out.messages : [{ role: 'assistant', text: out.greeting }]);
+        }
+      } catch { /* sem sessão de assinante: pede os dados como qualquer visitante */ }
     }
     drawForm();
   }

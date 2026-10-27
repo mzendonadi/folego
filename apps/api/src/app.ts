@@ -343,6 +343,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     const h = String(req.headers.authorization ?? '');
     return h.startsWith('Bearer ') ? h.slice(7) : undefined;
   };
+  // FolIA dentro do Prumo: quem já está logado não preenche formulário
+  app.post('/api/chat/start-member', { config: { rateLimit: { max: 12 * scale, timeWindow: '10 minutes' } } }, async (req) => chatbot.startMemberChat(ctx, await requireSubscriber(req)));
   app.get('/api/chat/history', { config: { rateLimit: { max: 30 * scale, timeWindow: '1 minute' } } }, async (req) => chatbot.chatHistory(ctx, chatToken(req)));
   app.post('/api/chat/message', { config: { rateLimit: { max: 12 * scale, timeWindow: '1 minute' } } }, async (req) => chatbot.chatMessage(ctx, chatToken(req), chatbot.messageSchema.parse(req.body).text));
 

@@ -12,6 +12,7 @@ import { AppError } from './errors.ts';
 import type { Ctx } from './services.ts';
 import { audit, num } from './services.ts';
 import { waPhone } from './whatsapp.ts';
+import { accountView } from './subscriptions.ts';
 
 export const CHAT_NAME = 'FôlIA';
 const MAX_USER_CHARS = 800;
@@ -80,9 +81,9 @@ PRODUTOS AVULSOS (Fôlego)
 - Calculadora de prescrição e guias de direitos são gratuitos.
 
 PRUMO (assinatura mensal paga NO CARTÃO DE CRÉDITO, todo mês; cancelamento em um clique dentro do app. A assinatura do Prumo NÃO é por Pix.)
-- Controle: controle de gastos e orçamento, Lançar rápido (escrever ou fotografar o comprovante), assistente no WhatsApp (a pessoa manda texto "mercado 45", um áudio ou a foto do cupom e o gasto é lançado), importação de extrato (CSV/OFX/PDF), alertas e lembretes, controle de dívidas, treinador financeiro limitado, indicadores de mercado.
-- Ousado: tudo do Controle + metas, treinador financeiro completo (IA), jornadas, orçamento da casa/família, cartões de crédito (limite, fatura, vencimento e parcelas; a fatura do cartão fica separada do extrato, sem gasto em dobro), e-book de presente, cenários, Planejar férias (formulário simples, sozinho ou em família: divisão do orçamento, quanto guardar por mês e checklist completo que muda com o tipo de viagem: carro, avião, ônibus, motorhome ou navio).
-- Desbravador: tudo do Ousado + importar a fatura do cartão em PDF (o Prumo lê, confere a soma, atualiza o limite e cadastra o cartão novo; também dá para mandar o PDF pelo WhatsApp), estratégias e custo do rotativo, roteiro de viagem completo escrito por IA (dia a dia, para o tipo de viagem escolhido, com checklist extra), dólar e euro com histórico no Cenário econômico, simulador, planejador com IA, mercado profissional (dólar e histórico) e o Mapa da Virada incluso.
+- Controle: controle de gastos e orçamento, Lançar rápido (escrever ou fotografar o comprovante), assistente no WhatsApp (a pessoa manda texto "mercado 45", um áudio ou a foto do cupom e o gasto é lançado), importação de extrato (CSV/OFX/PDF), lançamentos organizados por conta e por cartão (resumo que abre ao tocar; qualquer lançamento pode ser editado depois de importado), alertas e lembretes, controle de dívidas, treinador financeiro limitado, indicadores de mercado.
+- Ousado: tudo do Controle + metas, treinador financeiro completo (IA), jornadas, orçamento da casa/família, cartões de crédito (limite, fatura, vencimento e parcelas; a fatura do cartão fica separada do extrato, sem gasto em dobro; quem paga parte da fatura e parcela o resto registra isso em "Parcelei o restante": o Prumo liga o pagamento à fatura, cria as parcelas nas faturas seguintes e mostra os juros), e-book de presente, cenários, Planejar férias (formulário simples, sozinho ou em família: divisão do orçamento, quanto guardar por mês e checklist completo que muda com o tipo de viagem: carro, avião, ônibus, motorhome ou navio).
+- Desbravador: tudo do Ousado + importar a fatura do cartão em PDF (o Prumo lê, confere a soma, atualiza o limite e cadastra o cartão novo; também dá para mandar o PDF pelo WhatsApp), estratégias e custo do rotativo, aba Investimentos (lança as aplicações e mostra total investido, rendimento e imposto estimado, em ativas e em processamento), aba Estratégias (dicas de arbitragem entre contas, aplicações, dívidas e imposto, e a análise completa de um estrategista financeiro por IA; é educação financeira, não recomendação de produto), saldo da conta que considera o negativo que já vinha de antes, roteiro de viagem completo escrito por IA (dia a dia, para o tipo de viagem escolhido, com checklist extra), dólar e euro com histórico no Cenário econômico, simulador, planejador com IA, mercado profissional (dólar e histórico) e o Mapa da Virada incluso.
 - Mapa da Virada para assinante Ousado tem preço especial (pago no Pix, por ser compra avulsa; acesso de 90 dias); no Desbravador já está incluso. Confirme o valor na tabela de preços abaixo.
 
 COMO APRESENTAR OS PLANOS DO PRUMO (quando perguntarem o que o Prumo é, os planos, diferenças ou "o que eu levo em cada um")
@@ -105,6 +106,8 @@ Ousado (valor da tabela): tudo do Controle, mais:
 - E-book de presente
 Desbravador (valor da tabela): tudo do Ousado, mais:
 - Fatura do cartão em PDF lida e conferida (também pelo WhatsApp)
+- Investimentos: total investido, rendimento e imposto estimado das suas aplicações
+- Estratégias: dicas de como pagar menos juros e menos imposto, com análise por IA
 - Roteiro de viagem completo por IA, dia a dia
 - Simulador
 - Planejador com IA
@@ -153,6 +156,65 @@ LIMITES QUE NÃO MUDAM
 9. Em sinais de crise (desespero, ameaça a si mesmo), acolha com humanidade e sugira procurar apoio imediato (CVV 188) antes de falar de produto.
 10. Quando a pessoa pedir atendimento humano, reclamar, falar de cancelamento, cobrança indevida ou problema técnico, diga que a equipe vai entrar em contato pelo celular e e-mail informados e registre o motivo em uma frase.
 11. Você é uma assistente virtual e deve dizer isso com naturalidade se perguntarem.`;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// FolIA para quem já assina o Prumo: sem formulário (os dados já existem) e com o foco nas funções do plano da pessoa.
+// O prompt do site (visitante) não muda: este bloco só é somado quando a conversa pertence a um assinante logado.
+// ---------------------------------------------------------------------------------------------------------------------
+const MEMBER_TABS: Record<'controle' | 'ousado' | 'desbravador', string> = {
+  controle: 'Visão geral (saldo do mês e, se houver conta, o saldo da conta com o negativo que já vinha de antes), Lançamentos (separados por conta e por cartão, com resumo que abre ao tocar; qualquer lançamento pode ser editado, inclusive importado; Lançar rápido por texto, voz ou foto; importar extrato CSV, OFX ou PDF, com opção de acertar o saldo da carteira pelo saldo do extrato), Orçamento, Cobranças, Carteiras (contas, cheque especial, taxa e dias do limite sem juros), Lembretes, Dívidas, Cofre, Mercado, Treinador básico, assistente no WhatsApp.',
+  ousado: 'Tudo do Controle e mais: Metas, Cartões (limite, faturas, parcelas; em Faturas, o botão "Parcelei o restante" liga o pagamento à fatura, cria as parcelas nas faturas seguintes e registra os juros), Férias (orçamento, quanto guardar por mês e checklist), E se...? (cenários), Compartilhar a conta, Treinador completo e jornadas.',
+  desbravador: 'Tudo do Ousado e mais: fatura do cartão em PDF lida e conferida, Planejador com IA, Simulador, roteiro de viagem por IA, dólar e euro com histórico, Investimentos (total investido, rendimento e imposto estimado, aplicações ativas e em processamento), Estratégias (jogadas de arbitragem: dias do limite sem juros, resgatar ou manter aplicação, qual dívida atacar primeiro, janelas de imposto; e a análise completa do Estrategista financeiro por IA) e o Mapa da Virada incluso.',
+};
+const NEXT_PLAN: Record<'controle' | 'ousado' | 'desbravador', string> = {
+  controle: 'Ousado (metas, cartões de crédito com faturas e parcelas, planejar férias, cenários "e se...?", conta compartilhada, treinador completo) e, acima dele, Desbravador',
+  ousado: 'Desbravador (fatura do cartão em PDF, planejador com IA, simulador, roteiro de viagem por IA, dólar e euro, aba Investimentos, aba Estratégias com o Estrategista por IA, Mapa da Virada incluso)',
+  desbravador: '(a pessoa já tem o plano mais completo: nada acima para oferecer)',
+};
+
+export async function memberSection(ctx: Ctx, subscriberId: string): Promise<string> {
+  const a = await accountView(ctx, subscriberId);
+  const first = a.profile.displayName?.trim().split(/\s+/)[0] ?? null;
+  const sub = a.subscription;
+  const list = await liveCatalog(ctx);
+  const planName = sub?.active ? (sub.plan === 'controle' ? 'Controle' : sub.plan === 'ousado' ? 'Ousado' : 'Desbravador') : null;
+  const head = `
+
+ASSINANTE LOGADO (estas regras valem acima das anteriores quanto a pedir dados e a vender)
+- Você está falando com ${first ?? 'um(a) assinante'} dentro do Prumo, já logado(a). O e-mail e a conta já existem: NUNCA peça nome, celular, e-mail nem preencha formulário, e não diga que anotou dados de contato.
+- Plano atual: ${planName ?? 'nenhum plano ativo no momento'}.`;
+  if (!sub?.active || !planName) {
+    return `${head}
+- A pessoa ainda não tem plano ativo: ajude a escolher (Controle, Ousado ou Desbravador) com os preços da tabela e explique que assinar leva ao cartão de crédito, com cancelamento em um clique em "Plano e dados".`;
+  }
+  const price = list.find((p) => p.code === `sub_${sub.plan}`);
+  return `${head}${price ? ` (${brl(price.price_cents)} por mês)` : ''}
+- O QUE O PLANO DELA TEM, e onde fica no menu da conta: ${MEMBER_TABS[sub.plan]}
+- Seu foco é ajudar a usar bem o que o plano dela oferece: explique passo a passo onde clicar (nome da aba e do botão), como o Prumo calcula e o que fazer em seguida. Responda a dúvida e resolva; só depois, se couber, sugira o próximo passo dentro do plano. Você NÃO enxerga os números da conta dela: se ela pedir uma análise, diga em qual aba ela aparece pronta (por exemplo Estratégias) ou peça que cole o valor que quer entender.
+- UPGRADE: se ela perguntar por algo que só existe em plano acima do dela, explique em até 3 linhas o que a função faz e como ajudaria o caso dela, diga o nome e o preço do plano em que ela existe (tabela de preços) e como trocar: aba "Plano e dados", botão para mudar de plano. Faça UMA pergunta curta ("quer que eu te mostre como trocar?"). Se ela não quiser ou ignorar, aceite com naturalidade, não insista nem repita a oferta, e continue atendendo dentro do plano dela.
+- Acima do plano dela: ${NEXT_PLAN[sub.plan]}.
+- Pagamento: a mensalidade é no cartão de crédito. Cancelamento, cobrança indevida ou problema técnico: registre o motivo em uma frase e diga que a equipe retorna pelo e-mail da conta (as regras 10 e 11 continuam valendo).`;
+}
+
+export async function startMemberChat(ctx: Ctx, subscriberId: string): Promise<{ token: string; greeting: string; messages: Msg[] }> {
+  const a = await accountView(ctx, subscriberId);
+  const name = a.profile.displayName?.trim() || undefined;
+  const phoneKey = `member:${subscriberId}`;
+  const existing = await ctx.db.query<{ id: string }>(`SELECT id FROM app.chat_leads WHERE phone_key = $1 AND origin = 'prumo' ORDER BY created_at DESC LIMIT 1`, [phoneKey]);
+  let id = existing.rows[0]?.id;
+  const hello = `Oi${name ? `, ${name.split(' ')[0]}` : ''}! Eu sou a ${CHAT_NAME}, assistente virtual do Prumo. Posso tirar dúvidas, mostrar onde fica cada função do seu plano e te ajudar a tirar mais proveito dele. Como posso ajudar hoje?`;
+  if (!id) {
+    const ins = await ctx.db.query<{ id: string }>(
+      `INSERT INTO app.chat_leads(origin, name_enc, phone_enc, email_enc, phone_key, email_key, subscriber_id, utm, status)
+       VALUES ('prumo', $1, $2, $3, $4, $5, $6, '{}'::jsonb, 'novo') RETURNING id`,
+      [name ? enc(ctx, name) : null, enc(ctx, ''), enc(ctx, a.email), phoneKey, key(ctx, 'mail', a.email), subscriberId],
+    );
+    id = ins.rows[0]!.id;
+    await addMessage(ctx, id, 'assistant', hello, 'regras');
+  }
+  const token = signToken(ctx.config.secret, { chat: id }, 24 * 3600);
+  return { token, greeting: hello, messages: await loadMessages(ctx, id, 60) };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -308,7 +370,7 @@ export async function chatHistory(ctx: Ctx, token: string | undefined): Promise<
 
 export async function chatMessage(ctx: Ctx, token: string | undefined, text: string): Promise<{ reply: Msg; via: 'ai' | 'regras' }> {
   const leadId = leadIdFrom(ctx, token);
-  const lead = await ctx.db.query<{ origin: 'landing' | 'prumo'; status: string }>(`SELECT origin, status FROM app.chat_leads WHERE id = $1`, [leadId]);
+  const lead = await ctx.db.query<{ origin: 'landing' | 'prumo'; status: string; subscriber_id: string | null; phone_key: string }>(`SELECT origin, status, subscriber_id, phone_key FROM app.chat_leads WHERE id = $1`, [leadId]);
   const row = lead.rows[0];
   if (!row) throw new AppError(401, 'chat_session', 'Sua conversa expirou. Abra o chat de novo.');
   const used = await ctx.db.query<{ h: string; d: string }>(
@@ -328,7 +390,9 @@ export async function chatMessage(ctx: Ctx, token: string | undefined, text: str
   }
   while (turns.length && turns[0]!.role !== 'user') turns.shift();
 
-  const ai = await askModel(ctx, await buildSystemPrompt(ctx, row.origin), turns);
+  // conversa aberta por assinante logado (sem formulário): o prompt ganha o plano e as funções dele; a do site segue igual
+  const member = row.subscriber_id && row.phone_key === `member:${row.subscriber_id}` ? await memberSection(ctx, row.subscriber_id).catch(() => '') : '';
+  const ai = await askModel(ctx, (await buildSystemPrompt(ctx, row.origin)) + member, turns);
   const reply = ai?.text ?? (await ruleReply(ctx, text));
   const via = ai ? 'ai' : 'regras';
   await addMessage(ctx, leadId, 'assistant', reply, via, ai?.inTok ?? 0, ai?.outTok ?? 0);

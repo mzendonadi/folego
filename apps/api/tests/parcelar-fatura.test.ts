@@ -10,6 +10,7 @@ import type { Db } from '../src/db.ts';
 import { FakeGateway } from '../src/gateway.ts';
 import { MemorySender } from '../src/email.ts';
 import { handleWebhook } from '../src/services.ts';
+import { memberSection } from '../src/chatbot.ts';
 
 let db: Db;
 let app: FastifyInstance;
@@ -178,4 +179,23 @@ test('estratégias: as jogadas usam o saldo negativo da conta, os dias sem juros
   assert.equal(s.summary.netWorthCents, 101_000 - 186_212);
   assert.equal(s.report, null);
   assert.equal(s.ai.perDay, 3);
+});
+test('FolIA do assinante: abre sem formulário, guarda a conversa na conta e o prompt traz o plano e o que está acima', async () => {
+  const c = await assinante('folia-um@exemplo.com', 'ousado');
+  const s = await c('POST', '/api/chat/start-member');
+  assert.equal(s.status, 200, JSON.stringify(s.json));
+  assert.ok(s.json.token && /Prumo/.test(s.json.greeting));
+  const lead = await db.query<{ subscriber_id: string | null; origin: string }>(`SELECT subscriber_id, origin FROM app.chat_leads ORDER BY created_at DESC LIMIT 1`);
+  assert.equal(lead.rows[0]!.origin, 'prumo');
+  assert.ok(lead.rows[0]!.subscriber_id);
+  // uma segunda abertura reaproveita a mesma conversa
+  const again = await c('POST', '/api/chat/start-member');
+  assert.equal(again.json.messages.length, s.json.messages.length);
+  const prompt = await memberSection(ctx(), lead.rows[0]!.subscriber_id!);
+  assert.match(prompt, /Plano atual: Ousado/);
+  assert.match(prompt, /NUNCA peça nome, celular, e-mail/);
+  assert.match(prompt, /Desbravador \(fatura do cartão em PDF/);
+  assert.match(prompt, /UMA pergunta curta/);
+  // sem sessão de assinante, o endpoint não abre conversa de membro
+  assert.equal((await client()('POST', '/api/chat/start-member')).status, 401);
 });
