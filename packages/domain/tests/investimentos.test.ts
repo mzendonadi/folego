@@ -1,7 +1,7 @@
 // Investimentos (posição estimada, IR regressivo) e as "jogadas" de estratégia. Dados inventados.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPlays, businessDays, irPctForDays, nextIrStep, summarizeInvestments, viewInvestment } from '../src/index.ts';
+import { addMonthsIso, buildPlays, businessDays, irPctForDays, nextIrStep, summarizeInvestments, viewInvestment } from '../src/index.ts';
 import type { InvestmentInput, StrategySnapshot } from '../src/index.ts';
 
 const rates = { cdiAnnualPct: 14.5 };
@@ -82,4 +82,12 @@ test('jogadas: IR perto de cair de degrau e rendimento baixo aparecem; sem dados
   assert.ok(plays.some((x) => x.id.startsWith('ir-CDB Novo')), JSON.stringify(plays.map((x) => x.id)));
   assert.ok(plays.some((x) => x.id === 'low-Poupança'));
   assert.deepEqual(buildPlays(base), []);
+});
+
+test('addMonthsIso: voltar meses cruzando o ano (maio menos 5 é dezembro do ano anterior)', () => {
+  assert.equal(addMonthsIso('2026-05-09', -5), '2025-12-09');
+  assert.equal(addMonthsIso('2026-01-31', -1), '2025-12-31');
+  assert.equal(addMonthsIso('2026-03-31', -1), '2026-02-28');
+  assert.equal(addMonthsIso('2026-11-15', 3), '2027-02-15');
+  assert.equal(addMonthsIso('2026-05-09', -17), '2024-12-09');
 });

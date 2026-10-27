@@ -33,7 +33,7 @@ export function addMonthsIso(iso: string, months: number): string {
   const [y, m, d] = iso.split('-').map(Number) as [number, number, number];
   const total = m - 1 + months;
   const year = y + Math.floor(total / 12);
-  const month = total % 12;
+  const month = ((total % 12) + 12) % 12; // em JS, -1 % 12 é -1 (e não 11): voltar meses cruzando o ano dava "mês 00"
   const last = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
   return `${year}-${String(month + 1).padStart(2, '0')}-${String(Math.min(d, last)).padStart(2, '0')}`;
 }

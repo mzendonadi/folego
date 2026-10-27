@@ -199,3 +199,23 @@ test('FolIA do assinante: abre sem formulário, guarda a conversa na conta e o p
   // sem sessão de assinante, o endpoint não abre conversa de membro
   assert.equal((await client()('POST', '/api/chat/start-member')).status, 401);
 });
+test('fatura de cartão novo: duas parcelas 6/12 da mesma loja na mesma data, pagamento da fatura anterior e compra solta importam sem erro', async () => {
+  const c = await assinante('novo-cartao@exemplo.com');
+  const made = await c('POST', '/api/account/cards', { body: { name: 'Santander Sx Mastercard', brand: 'mastercard', limitCents: 4_406_000, closingDay: 9, dueDay: 16 } });
+  assert.equal(made.status, 201, JSON.stringify(made.json));
+  const id = made.json.id as string;
+  const body = {
+    entries: [
+      { date: '2026-05-09', amountCents: 968, note: 'HTM*META SMART GROUP L', installmentNo: 6, installmentTotal: 12 },
+      { date: '2026-05-09', amountCents: 2_964, note: 'HTM*META SMART GROUP L', installmentNo: 6, installmentTotal: 12 },
+      { date: '2026-09-25', amountCents: 13_990, note: 'TOTALPASS', installmentNo: null, installmentTotal: null },
+    ],
+    credits: [],
+    payments: [{ date: '2026-09-10', amountCents: 24_122, note: 'PAGAMENTO DE FATURA' }],
+    invoice: { key: '2026-10', periodStart: '2026-09-09', closingOn: '2026-10-08', dueOn: '2026-10-16', totalCents: 17_922, minPaymentCents: null, previousCents: 24_122, previousKey: '2026-09', history: [] },
+    card: { name: 'Santander Sx Mastercard', limitCents: 4_406_000, closingDay: 9, dueDay: 16, last4: '2721' },
+  };
+  const r = await c('POST', `/api/account/cards/${id}/import`, { body });
+  assert.equal(r.status, 200, JSON.stringify(r.json));
+  assert.equal(r.json.added, 3);
+});
