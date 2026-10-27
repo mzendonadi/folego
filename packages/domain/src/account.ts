@@ -6,7 +6,7 @@ import { addDaysIso, formatBrl } from './calendar.ts';
 // Planos
 // ---------------------------------------------------------------------------
 export type PlanCode = 'controle' | 'ousado' | 'desbravador';
-export type Feature = 'health' | 'debts' | 'reminders' | 'ledger' | 'import' | 'alerts' | 'coach_limited' | 'goals' | 'coach' | 'simulator' | 'planner' | 'journeys' | 'market' | 'market_pro' | 'household' | 'ebook' | 'recurring' | 'scenarios' | 'map_member' | 'map_included' | 'cards' | 'cards_pro' | 'trips' | 'trips_ai';
+export type Feature = 'health' | 'debts' | 'reminders' | 'ledger' | 'import' | 'alerts' | 'coach_limited' | 'goals' | 'coach' | 'simulator' | 'planner' | 'journeys' | 'market' | 'market_pro' | 'household' | 'ebook' | 'recurring' | 'scenarios' | 'map_member' | 'map_included' | 'cards' | 'cards_pro' | 'trips' | 'trips_ai' | 'investments' | 'strategies';
 
 export interface Plan {
   code: PlanCode;
@@ -35,7 +35,7 @@ export const PLANS: Plan[] = [
   {
     code: 'desbravador', name: 'Desbravador', priceCents: 5999, productCode: 'sub_desbravador',
     tagline: 'Tudo, mais planejador com IA, dólar e histórico de mercado',
-    features: ['health', 'ledger', 'import', 'alerts', 'debts', 'reminders', 'goals', 'coach', 'simulator', 'planner', 'market', 'journeys', 'market_pro', 'household', 'ebook', 'recurring', 'scenarios', 'cards', 'cards_pro', 'trips', 'trips_ai', 'map_included'],
+    features: ['health', 'ledger', 'import', 'alerts', 'debts', 'reminders', 'goals', 'coach', 'simulator', 'planner', 'market', 'journeys', 'market_pro', 'household', 'ebook', 'recurring', 'scenarios', 'cards', 'cards_pro', 'trips', 'trips_ai', 'investments', 'strategies', 'map_included'],
     soon: ['Contas conectadas (Open Finance): depende de parceiro autorizado pelo Banco Central.'],
   },
 ];

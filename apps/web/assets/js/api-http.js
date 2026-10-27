@@ -287,6 +287,25 @@ export async function financeCardInvoice(id, key, body) {
 export async function anchorWallet(id, body) {
   return request('POST', `/account/wallets/${id}/anchor`, { body });
 }
+/** Investimentos e Estratégias (Desbravador). */
+export async function getInvestments() {
+  return request('GET', '/account/investments');
+}
+export async function createInvestment(body) {
+  return request('POST', '/account/investments', { body });
+}
+export async function updateInvestment(id, body) {
+  return request('PUT', `/account/investments/${id}`, { body });
+}
+export async function deleteInvestment(id) {
+  return request('DELETE', `/account/investments/${id}`);
+}
+export async function getStrategies() {
+  return request('GET', '/account/strategies');
+}
+export async function requestStrategyReport() {
+  return request('POST', '/account/strategies/report', { body: {} });
+}
 /** Planejar férias (Ousado) e roteiro com IA (Desbravador). */
 export async function getTrips() {
   return request('GET', '/account/trips');

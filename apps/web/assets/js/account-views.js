@@ -12,6 +12,7 @@ import { viewCobrancas, viewCenarios } from './account-insight-views.js';
 import { viewContas } from './account-openfinance-views.js';
 import { viewCartoes } from './account-cards-views.js';
 import { viewFerias } from './account-trips-views.js';
+import { viewInvestimentos, viewEstrategias } from './account-invest-views.js';
 import { partnerPrompt } from './account-map-banner.js';
 import { quickEntryCard } from './account-quick.js';
 import { ledgerGroups } from './account-ledger.js';
@@ -20,7 +21,7 @@ import { viewCofre } from './account-vault.js';
 import { NEW_CAT, catLabel, catList, categoryEditor } from './account-categories.js';
 import { PLANS, CATEGORIES, CATEGORY_LABEL, cardPaymentHint, categorize, detectDocumentKind, parseExtract, parsePdfExtract, simulateInvestment } from '../vendor/engine.js';
 
-export const FEATURE_LABEL = { health: 'Nota de saúde financeira', debts: 'Dívidas com plano de quitação', reminders: 'Lembretes de contas por e-mail', ledger: 'Controle de gastos, com Lançar rápido (texto, voz ou foto) e assistente no WhatsApp', import: 'Importar extrato (CSV, OFX ou PDF), com o pagamento da fatura fora dos gastos', alerts: 'Alertas de limite', coach_limited: 'Treinador (3 dicas)', goals: 'Metas com aportes', coach: 'Treinador completo', simulator: 'Simulador de investimento', planner: 'Planejador com IA', household: 'Conta compartilhada (1 pessoa no Ousado, até 3 no Desbravador)', recurring: 'Detector de assinaturas e cobranças recorrentes', scenarios: 'Simulador "e se...?" de cenários', ebook: 'eBook de presente no seu e-mail (50+ páginas)', journeys: 'Todas as jornadas do coach', market: 'Cenário econômico (Selic, inflação, CDI)', market_pro: 'Dólar e histórico de 12 meses', cards: 'Cartões de crédito: limite, fatura, vencimento e parcelas, sem misturar com o extrato', cards_pro: 'Cartões avançado: fatura em PDF lida e conferida (também pelo WhatsApp), cartão novo cadastrado na hora, estratégias e custo do rotativo', trips: 'Planejar férias: orçamento, quanto guardar por mês e checklist completo (carro, avião, ônibus, motorhome, navio)', trips_ai: 'Roteiro de viagem completo por IA, dia a dia, para o tipo de viagem escolhido', map_member: 'Mapa da Virada com preço de assinante (Pix, 90 dias)', map_included: 'Mapa da Virada incluso, enquanto a assinatura valer' };
+export const FEATURE_LABEL = { health: 'Nota de saúde financeira', debts: 'Dívidas com plano de quitação', reminders: 'Lembretes de contas por e-mail', ledger: 'Controle de gastos, com Lançar rápido (texto, voz ou foto) e assistente no WhatsApp', import: 'Importar extrato (CSV, OFX ou PDF), com o pagamento da fatura fora dos gastos', alerts: 'Alertas de limite', coach_limited: 'Treinador (3 dicas)', goals: 'Metas com aportes', coach: 'Treinador completo', simulator: 'Simulador de investimento', planner: 'Planejador com IA', household: 'Conta compartilhada (1 pessoa no Ousado, até 3 no Desbravador)', recurring: 'Detector de assinaturas e cobranças recorrentes', scenarios: 'Simulador "e se...?" de cenários', ebook: 'eBook de presente no seu e-mail (50+ páginas)', journeys: 'Todas as jornadas do coach', market: 'Cenário econômico (Selic, inflação, CDI)', market_pro: 'Dólar e histórico de 12 meses', cards: 'Cartões de crédito: limite, fatura, vencimento e parcelas, sem misturar com o extrato', cards_pro: 'Cartões avançado: fatura em PDF lida e conferida (também pelo WhatsApp), cartão novo cadastrado na hora, estratégias e custo do rotativo', trips: 'Planejar férias: orçamento, quanto guardar por mês e checklist completo (carro, avião, ônibus, motorhome, navio)', trips_ai: 'Roteiro de viagem completo por IA, dia a dia, para o tipo de viagem escolhido', investments: 'Investimentos: total investido, rendimento e imposto estimado das suas aplicações', strategies: 'Estratégias: jogadas de arbitragem (limite da conta, resgates, dívidas, imposto) e análise do Estrategista financeiro por IA', map_member: 'Mapa da Virada com preço de assinante (Pix, 90 dias)', map_included: 'Mapa da Virada incluso, enquanto a assinatura valer' };
 
 /** Abas da conta. `needs` = recurso do plano exigido (a aba aparece sempre; sem o recurso mostra o que o upgrade traz). */
 export const TABS = [
@@ -37,6 +38,8 @@ export const TABS = [
   { id: 'cofre', label: 'Cofre', group: 'Dívidas e metas' },
   { id: 'metas', label: 'Metas', needs: 'goals', group: 'Dívidas e metas' },
   { id: 'ferias', label: 'Férias', needs: 'trips', group: 'Dívidas e metas' },
+  { id: 'investimentos', label: 'Investimentos', needs: 'investments', group: 'Dívidas e metas' },
+  { id: 'estrategias', label: 'Estratégias', needs: 'strategies', group: 'Inteligência' },
   { id: 'planejador', label: 'Planejador', needs: 'planner', group: 'Inteligência' },
   { id: 'cenarios', label: 'E se...?', needs: 'scenarios', group: 'Inteligência' },
   { id: 'mercado', label: 'Mercado', group: 'Inteligência' },
@@ -781,6 +784,16 @@ export function viewFeriasTab(ctx) {
   return locked(ctx, { title: 'Planejar férias', feature: 'trips', blurb: 'Conte para onde vão, quando e com quem, e receba o orçamento dividido, quanto guardar por mês e o checklist completo da viagem.', bullets: ['Formulário simples: sozinho ou em família, com crianças, idosos e bichos de estimação', 'Checklist que muda com o tipo de viagem: carro, avião, ônibus, motorhome ou navio', 'No Desbravador, a IA escreve o roteiro completo dia a dia'] });
 }
 
-export const VIEWS = { ferias: viewFeriasTab, cofre: viewCofre, contas: viewContasTab, cobrancas: viewCobrancas, cenarios: viewCenariosTab, indicar: viewIndicar, perfil: viewPerfil, familia: viewCompartilhar, coach: viewCoach, mercado: viewMercado, geral: viewGeral, lancamentos: viewLancamentos, orcamento: viewOrcamento, dividas: viewDividas, carteiras: viewCarteiras, cartoes: viewCartoes, lembretes: viewLembretes, metas: viewMetas, treinador: viewTreinador, simulador: viewSimulador, planejador: viewPlanejador, plano: viewPlano };
+export function viewInvestimentosTab(ctx) {
+  if (ctx.has('investments')) return viewInvestimentos(ctx);
+  return locked(ctx, { title: 'Investimentos', feature: 'investments', blurb: 'Lance o que você aplicou (CDB, Tesouro, fundos) e veja o total investido, o rendimento e o imposto estimado de cada aplicação, separado em ativas e em processamento.', bullets: ['Total investido e rendimento atual, como no app da corretora', 'Imposto de renda estimado se resgatar hoje e quando cai de faixa', 'Alimenta as jogadas da aba Estratégias (resgatar ou manter, quitar dívida, imposto)'] });
+}
+
+export function viewEstrategiasTab(ctx) {
+  if (ctx.has('strategies')) return viewEstrategias(ctx);
+  return locked(ctx, { title: 'Estratégias', feature: 'strategies', blurb: 'O Prumo cruza contas, cartões, dívidas e investimentos e diz onde mover dinheiro, o que resgatar e o que quitar primeiro para pagar menos juros e menos imposto.', bullets: ['Dicas de arbitragem: dias do limite da conta sem juros, resgatar aplicação para zerar o negativo, qual dívida atacar primeiro', 'Janelas de imposto: quando o IR do seu investimento cai de faixa', 'Análise completa do Estrategista financeiro por IA, com plano de ação em tabela'] });
+}
+
+export const VIEWS = { investimentos: viewInvestimentosTab, estrategias: viewEstrategiasTab, ferias: viewFeriasTab, cofre: viewCofre, contas: viewContasTab, cobrancas: viewCobrancas, cenarios: viewCenariosTab, indicar: viewIndicar, perfil: viewPerfil, familia: viewCompartilhar, coach: viewCoach, mercado: viewMercado, geral: viewGeral, lancamentos: viewLancamentos, orcamento: viewOrcamento, dividas: viewDividas, carteiras: viewCarteiras, cartoes: viewCartoes, lembretes: viewLembretes, metas: viewMetas, treinador: viewTreinador, simulador: viewSimulador, planejador: viewPlanejador, plano: viewPlano };
 export const NEEDS_MONTH = new Set(['geral', 'lancamentos', 'orcamento', 'metas']);
 export { monthNow };

@@ -129,10 +129,10 @@ export function ledgerGroups(ctx, entries, wallets) {
     const ico = g.type === 'cartao' ? 'card' : g.type === 'conta' ? 'bank' : 'wallet';
     const nCompras = g.items.filter((x) => !x.transfer).length;
     const summary = g.type === 'cartao'
-      ? [el('span', { class: 'lg-fig' }, el('span', { class: 'muted fine' }, 'Compras do mês'), el('strong', { class: 'neg' }, brl(-g.outCents)))]
+      ? [el('span', { class: 'lg-fig' }, el('span', { class: 'muted fine' }, 'Compras do mês'), el('strong', { class: 'neg' }, brl(g.outCents)))]
       : [
         el('span', { class: 'lg-fig' }, el('span', { class: 'muted fine' }, 'Entrou'), el('strong', { class: 'pos' }, brl(g.inCents))),
-        el('span', { class: 'lg-fig' }, el('span', { class: 'muted fine' }, 'Saiu'), el('strong', { class: 'neg' }, brl(-g.outCents))),
+        el('span', { class: 'lg-fig' }, el('span', { class: 'muted fine' }, 'Saiu'), el('strong', { class: 'neg' }, brl(g.outCents))),
       ];
     const head = el('button', { class: 'lg-head', type: 'button', 'aria-expanded': 'false' },
       el('span', { class: 'lg-ico' }, icon(ico)),

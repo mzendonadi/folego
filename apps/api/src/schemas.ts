@@ -187,12 +187,15 @@ export const walletSchema = z.strictObject({
   /** Cheque especial (LIS): limite contratado e taxa ao mês em pontos-base (8% = 800). Só faz sentido em conta bancária. */
   overdraftLimitCents: z.number().int().min(0).max(10_000_000_000).optional(),
   overdraftRateBps: z.number().int().min(0).max(2000).optional(),
+  /** Dias do limite que o banco não cobra juros (a pessoa informa; vira dica na aba Estratégias). */
+  overdraftFreeDays: z.number().int().min(0).max(60).optional(),
 });
 export const walletPatchSchema = z.strictObject({
   name: z.string().trim().min(1).max(40).optional(),
   openingBalanceCents: signedCents.optional(),
   overdraftLimitCents: z.number().int().min(0).max(10_000_000_000).optional(),
   overdraftRateBps: z.number().int().min(0).max(2000).optional(),
+  overdraftFreeDays: z.number().int().min(0).max(60).optional(),
 });
 export const entryWalletSchema = z.object({ walletId: z.string().uuid().nullable() });
 export const reminderSchema = z.strictObject({
@@ -330,6 +333,21 @@ export const tripSchema = z.strictObject({
   notes: z.string().trim().max(500).default(''),
 });
 export const tripCheckSchema = z.strictObject({ itemId: z.string().trim().min(1).max(40), done: z.boolean() });
+
+/** Aplicação lançada à mão na aba Investimentos (Desbravador). `ratePct`: 102 = 102% do CDI; prefixado/IPCA: % ao ano. */
+export const investmentSchema = z.strictObject({
+  name: z.string().trim().min(1).max(80),
+  kind: z.enum(['renda_fixa', 'tesouro', 'fundo', 'acoes', 'cripto', 'previdencia', 'poupanca', 'outro']).default('renda_fixa'),
+  indexer: z.enum(['cdi', 'selic', 'ipca', 'prefixado', 'poupanca', 'outro']).default('cdi'),
+  ratePct: z.number().min(0).max(1000).default(100),
+  appliedCents: z.number().int().min(1).max(100_000_000_000),
+  positionCents: z.number().int().min(0).max(100_000_000_000).nullable().optional(),
+  appliedOn: isoDate,
+  maturesOn: isoDate.nullable().optional(),
+  liquidity: z.enum(['diaria', 'vencimento']).default('diaria'),
+  status: z.enum(['ativo', 'processando', 'resgatado']).default('ativo'),
+  note: z.string().trim().max(200).nullable().optional(),
+});
 
 /** Edição de um lançamento já gravado (inclusive os importados): texto, valor, data e categoria. */
 export const entryPatchSchema = z.strictObject({

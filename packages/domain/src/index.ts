@@ -21,6 +21,8 @@ export * from './pace.ts';
 export * from './invoice.ts';
 export * from './trip.ts';
 export * from './cards.ts';
+export * from './investments.ts';
+export * from './strategy.ts';
 export * from './partner-import.ts';
 export { buildStrategies } from './strategies.ts';
 export type { Strategies, StrategyScenario, WhatIfExtra, LumpSumScenario, SettlementOption, MonthPlanRow, Milestone, PlaybookItem } from './strategies.ts';

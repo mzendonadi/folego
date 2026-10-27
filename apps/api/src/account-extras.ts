@@ -18,8 +18,8 @@ const MAX_WALLETS = 10;
 
 export async function listWallets(ctx: Ctx, subscriberId: string) {
   await requireFeature(ctx, subscriberId, 'ledger');
-  const r = await ctx.db.query<{ id: string; name: string; kind: string; opening: string; limit_c: string; rate: number; balance: string; entries: string }>(
-    `SELECT w.id, w.name, w.kind, w.opening_balance_cents::text AS opening, w.overdraft_limit_cents::text AS limit_c, w.overdraft_rate_bps AS rate,
+  const r = await ctx.db.query<{ id: string; name: string; kind: string; opening: string; limit_c: string; rate: number; free_days: number | null; balance: string; entries: string }>(
+    `SELECT w.id, w.name, w.kind, w.opening_balance_cents::text AS opening, w.overdraft_limit_cents::text AS limit_c, w.overdraft_rate_bps AS rate, w.overdraft_free_days AS free_days,
             (w.opening_balance_cents + coalesce(sum(l.amount_cents), 0) - coalesce((SELECT sum(cp.amount_cents) FROM app.card_payments cp WHERE cp.wallet_id = w.id), 0))::text AS balance, count(l.id)::text AS entries
        FROM app.wallets w LEFT JOIN app.ledger_entries l ON l.wallet_id = w.id WHERE w.subscriber_id = $1 GROUP BY w.id ORDER BY w.created_at`,
     [subscriberId],
@@ -28,7 +28,7 @@ export async function listWallets(ctx: Ctx, subscriberId: string) {
   return {
     wallets: r.rows.map((w) => ({
       id: w.id, name: w.name, kind: w.kind, balanceCents: num(w.balance), entries: num(w.entries),
-      openingBalanceCents: num(w.opening), overdraftLimitCents: num(w.limit_c), overdraftRateBps: w.rate,
+      openingBalanceCents: num(w.opening), overdraftLimitCents: num(w.limit_c), overdraftRateBps: w.rate, overdraftFreeDays: w.free_days,
       // cheque especial (LIS): só em conta bancária
       overdraft: w.kind === 'conta' ? overdraftStatus({ balanceCents: num(w.balance), limitCents: num(w.limit_c), rateBps: w.rate }) : null,
     })),
@@ -93,6 +93,7 @@ export interface WalletInput {
   openingBalanceCents?: number | undefined;
   overdraftLimitCents?: number | undefined;
   overdraftRateBps?: number | undefined;
+  overdraftFreeDays?: number | undefined;
 }
 
 /** Alertas de cheque especial (LIS) de todas as contas bancárias do assinante, para a visão do mês. */
@@ -113,8 +114,8 @@ export async function createWallet(ctx: Ctx, subscriberId: string, input: Wallet
   if (num(n.rows[0]?.n ?? 0) >= MAX_WALLETS) throw new AppError(422, 'too_many', `Limite de ${MAX_WALLETS} carteiras.`);
   const isAccount = input.kind === 'conta';
   const r = await ctx.db.query<{ id: string }>(
-    `INSERT INTO app.wallets(subscriber_id, name, kind, opening_balance_cents, overdraft_limit_cents, overdraft_rate_bps) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
-    [subscriberId, input.name.trim().slice(0, 40), input.kind, input.openingBalanceCents ?? 0, isAccount ? (input.overdraftLimitCents ?? 0) : 0, isAccount ? (input.overdraftRateBps ?? 800) : 800],
+    `INSERT INTO app.wallets(subscriber_id, name, kind, opening_balance_cents, overdraft_limit_cents, overdraft_rate_bps, overdraft_free_days) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+    [subscriberId, input.name.trim().slice(0, 40), input.kind, input.openingBalanceCents ?? 0, isAccount ? (input.overdraftLimitCents ?? 0) : 0, isAccount ? (input.overdraftRateBps ?? 800) : 800, isAccount ? (input.overdraftFreeDays ?? null) : null],
   );
   return r.rows[0]!.id;
 }
@@ -124,12 +125,13 @@ export async function updateWallet(ctx: Ctx, subscriberId: string, id: string, p
   await requireFeature(ctx, subscriberId, 'ledger');
   const cur = await ctx.db.query<{ kind: string }>(`SELECT kind FROM app.wallets WHERE id = $1 AND subscriber_id = $2`, [id, subscriberId]);
   if (!cur.rows[0]) throw notFound();
-  if (cur.rows[0].kind !== 'conta' && (patch.overdraftLimitCents !== undefined || patch.overdraftRateBps !== undefined)) throw new AppError(422, 'not_account', 'Cheque especial só vale para conta bancária.');
+  if (cur.rows[0].kind !== 'conta' && (patch.overdraftLimitCents !== undefined || patch.overdraftRateBps !== undefined || patch.overdraftFreeDays !== undefined)) throw new AppError(422, 'not_account', 'Cheque especial só vale para conta bancária.');
   await ctx.db.query(
     `UPDATE app.wallets SET name = coalesce($3, name), opening_balance_cents = coalesce($4, opening_balance_cents),
-            overdraft_limit_cents = coalesce($5, overdraft_limit_cents), overdraft_rate_bps = coalesce($6, overdraft_rate_bps)
+            overdraft_limit_cents = coalesce($5, overdraft_limit_cents), overdraft_rate_bps = coalesce($6, overdraft_rate_bps),
+            overdraft_free_days = CASE WHEN $7::int IS NULL THEN overdraft_free_days WHEN $7::int = 0 THEN NULL ELSE $7::int END
       WHERE id = $1 AND subscriber_id = $2`,
-    [id, subscriberId, patch.name?.trim().slice(0, 40) ?? null, patch.openingBalanceCents ?? null, patch.overdraftLimitCents ?? null, patch.overdraftRateBps ?? null],
+    [id, subscriberId, patch.name?.trim().slice(0, 40) ?? null, patch.openingBalanceCents ?? null, patch.overdraftLimitCents ?? null, patch.overdraftRateBps ?? null, patch.overdraftFreeDays ?? null],
   );
 }
 

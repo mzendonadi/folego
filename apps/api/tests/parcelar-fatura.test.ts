@@ -43,12 +43,12 @@ function client() {
 }
 type Client = ReturnType<typeof client>;
 const lastCode = () => /\b(\d{6})\b/.exec(mailbox.sent.at(-1)!.text)![1]!;
-async function assinante(email: string): Promise<Client> {
+async function assinante(email: string, plan: 'ousado' | 'desbravador' = 'desbravador'): Promise<Client> {
   const c = client();
   mailbox.sent.length = 0;
   await c('POST', '/api/account/login-code', { body: { email } });
   await c('POST', '/api/account/login', { body: { email, code: lastCode() } });
-  const co = await c('POST', '/api/account/subscription-checkout', { body: { plan: 'desbravador', acceptTerms: true } });
+  const co = await c('POST', '/api/account/subscription-checkout', { body: { plan, acceptTerms: true } });
   const p = await db.query<{ provider_payment_id: string }>(`SELECT provider_payment_id FROM app.payments WHERE order_id = $1`, [co.json.orderId]);
   gateway.markPaid(p.rows[0]!.provider_payment_id);
   await handleWebhook(ctx(), { 'x-webhook-secret': config.webhookSecret }, { eventId: `evt-${co.json.orderId}`, paymentId: p.rows[0]!.provider_payment_id });
@@ -138,4 +138,44 @@ test('editar lançamento importado: texto, valor, data e categoria mudam; pedido
   assert.equal((await c('PUT', `/api/account/entries/${id}`, { body: {} })).status, 400);
   assert.equal((await c('PUT', `/api/account/entries/${id}`, { body: { amountCents: 0 } })).status, 400);
   assert.equal((await c('PUT', `/api/account/entries/01a17641-923e-7edf-8abc-5e224e99dd53`, { body: { note: 'x' } })).status, 404);
+});
+
+test('investimentos: lançar, ver total e rendimento, processando à parte; só no Desbravador', async () => {
+  const c = await assinante('invest-um@exemplo.com');
+  const r = await c('POST', '/api/account/investments', { body: { name: 'CDB Exemplo Liquidez', kind: 'renda_fixa', indexer: 'cdi', ratePct: 102, appliedCents: 25_376, positionCents: 25_774, appliedOn: '2026-09-01', liquidity: 'diaria', status: 'ativo' } });
+  assert.equal(r.status, 201, JSON.stringify(r.json));
+  await c('POST', '/api/account/investments', { body: { name: 'CDB Exemplo Liquidez', indexer: 'cdi', ratePct: 102, appliedCents: 77_000, appliedOn: '2026-10-26', status: 'processando' } });
+  const l = (await c('GET', '/api/account/investments')).json;
+  assert.equal(l.totals.count, 1);
+  assert.equal(l.totals.appliedCents, 25_376);
+  assert.equal(l.totals.positionCents, 25_774);
+  assert.equal(l.totals.yieldCents, 398);
+  assert.equal(l.totals.processingCents, 77_000);
+  const one = l.investments.find((x: any) => x.status === 'ativo');
+  assert.equal(one.ratePct, 102);
+  assert.equal(one.view.estimated, false);
+  // editar e apagar
+  assert.equal((await c('PUT', `/api/account/investments/${one.id}`, { body: { name: 'CDB Exemplo', indexer: 'cdi', ratePct: 100, appliedCents: 25_376, appliedOn: '2026-09-01', status: 'ativo' } })).status, 200);
+  assert.equal((await c('GET', '/api/account/investments')).json.investments.find((x: any) => x.id === one.id).ratePct, 100);
+  assert.equal((await c('DELETE', `/api/account/investments/${one.id}`)).status, 204);
+  assert.equal((await c('POST', '/api/account/investments', { body: { name: 'X', appliedCents: 0, appliedOn: '2026-10-01' } })).status, 400);
+
+  const o = await assinante('invest-ousado@exemplo.com', 'ousado');
+  assert.equal((await o('GET', '/api/account/investments')).status, 403);
+  assert.equal((await o('GET', '/api/account/strategies')).status, 403);
+});
+
+test('estratégias: as jogadas usam o saldo negativo da conta, os dias sem juros e o aplicado', async () => {
+  const c = await assinante('estrat-um@exemplo.com');
+  const w = await c('POST', '/api/account/wallets', { body: { name: 'Conta Exemplo', kind: 'conta', openingBalanceCents: -186_212, overdraftLimitCents: 1_000_000, overdraftRateBps: 800, overdraftFreeDays: 10 } });
+  assert.equal(w.status, 201, JSON.stringify(w.json));
+  assert.equal((await c('GET', '/api/account/wallets')).json.wallets[0].overdraftFreeDays, 10);
+  await c('POST', '/api/account/investments', { body: { name: 'CDB Exemplo', indexer: 'cdi', ratePct: 102, appliedCents: 100_000, positionCents: 101_000, appliedOn: '2026-09-01', liquidity: 'diaria', status: 'ativo' } });
+  const s = (await c('GET', '/api/account/strategies')).json;
+  const ids = s.plays.map((p: any) => p.id);
+  assert.ok(ids.includes('free-Conta Exemplo'), ids.join(','));
+  assert.equal(s.summary.liquidCents, 101_000);
+  assert.equal(s.summary.netWorthCents, 101_000 - 186_212);
+  assert.equal(s.report, null);
+  assert.equal(s.ai.perDay, 3);
 });

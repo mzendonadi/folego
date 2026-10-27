@@ -25,6 +25,8 @@ import * as assistant from './assistant.ts';
 import * as avatar from './avatar.ts';
 import * as cards from './cards.ts';
 import * as trips from './trips.ts';
+import * as investmentsApi from './investments.ts';
+import * as strategiesApi from './strategies.ts';
 import * as debts from './account-debts.ts';
 import { askPlanner } from './planner.ts';
 import * as program from './coach-program.ts';
@@ -51,7 +53,7 @@ import { contactSchema, sendContact } from './contact.ts';
 import * as waPortal from './wa-portal.ts';
 import { handleWebhook as handleWhatsAppWebhook, loadAccount, validSignature } from './whatsapp.ts';
 import type { WebhookBody } from './whatsapp.ts';
-import { cardSchema, cardPatchSchema, cardPurchaseSchema, cardPaymentSchema, cardImportSchema, cardFinanceSchema, walletAnchorSchema, entryPatchSchema, tripSchema, tripCheckSchema, accessSchema, addEntriesSchema, cancelSchema, contributionSchema, createCaseSchema, entryWalletSchema, accountDebtSchema, accountDebtPatchSchema, debtPaymentSchema, monthLimitSchema, plannerSchema, objectiveSchema, inviteSchema, memberAccessSchema, checkoutSchema, profileSchema, referralLeadSchema, referralInviteSchema, recurringDecisionSchema, reminderPatchSchema, reminderSchema, walletSchema, walletPatchSchema, createOrderSchema, emailLinkSchema, emailOnlySchema, goalSchema, incomeInterviewSchema, leadSchema, loginCodeSchema, newPartnerSchema, partnerLoginSchema, partnerStatusSchema, setCategorySchema, categoryNameSchema, setLimitSchema, simulateSchema, subscriptionOrderSchema, toggleIncomeTaskSchema, translationSchema, guidedSchema, uuidParam, monthParam } from './schemas.ts';
+import { cardSchema, cardPatchSchema, cardPurchaseSchema, cardPaymentSchema, cardImportSchema, cardFinanceSchema, walletAnchorSchema, entryPatchSchema, investmentSchema, tripSchema, tripCheckSchema, accessSchema, addEntriesSchema, cancelSchema, contributionSchema, createCaseSchema, entryWalletSchema, accountDebtSchema, accountDebtPatchSchema, debtPaymentSchema, monthLimitSchema, plannerSchema, objectiveSchema, inviteSchema, memberAccessSchema, checkoutSchema, profileSchema, referralLeadSchema, referralInviteSchema, recurringDecisionSchema, reminderPatchSchema, reminderSchema, walletSchema, walletPatchSchema, createOrderSchema, emailLinkSchema, emailOnlySchema, goalSchema, incomeInterviewSchema, leadSchema, loginCodeSchema, newPartnerSchema, partnerLoginSchema, partnerStatusSchema, setCategorySchema, categoryNameSchema, setLimitSchema, simulateSchema, subscriptionOrderSchema, toggleIncomeTaskSchema, translationSchema, guidedSchema, uuidParam, monthParam } from './schemas.ts';
 import { EngineInputError } from './engine.ts';
 import { GUIDED_KINDS } from './guided.ts';
 import * as openFinance from './openfinance.ts';
@@ -729,6 +731,19 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // Carteiras e lembretes
   // Cartões de crédito: Ousado (cadastro, limite, fatura, parcelas) e Desbravador (também fatura em PDF e estratégias)
   // Planejar férias (Ousado) e roteiro com IA (Desbravador)
+  // Investimentos e Estratégias (Desbravador)
+  app.get('/api/account/investments', async (req) => investmentsApi.listInvestments(ctx, await requireSubscriber(req)));
+  app.post('/api/account/investments', async (req, reply) => reply.status(201).send({ id: await investmentsApi.createInvestment(ctx, await requireSubscriber(req), investmentSchema.parse(req.body)) }));
+  app.put('/api/account/investments/:id', async (req) => {
+    await investmentsApi.updateInvestment(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id), investmentSchema.parse(req.body));
+    return { ok: true };
+  });
+  app.delete('/api/account/investments/:id', async (req, reply) => {
+    await investmentsApi.deleteInvestment(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id));
+    return reply.status(204).send();
+  });
+  app.get('/api/account/strategies', async (req) => strategiesApi.strategyOverview(ctx, await requireSubscriber(req)));
+  app.post('/api/account/strategies/report', { config: { rateLimit: { max: 6 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => reply.status(202).send(await strategiesApi.requestStrategyReport(ctx, await requireSubscriber(req))));
   app.get('/api/account/trips', async (req) => trips.listTrips(ctx, await requireSubscriber(req)));
   app.post('/api/account/trips', async (req, reply) => reply.status(201).send({ id: await trips.createTrip(ctx, await requireSubscriber(req), tripSchema.parse(req.body)) }));
   app.get('/api/account/trips/:id', async (req) => trips.getTrip(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id)));

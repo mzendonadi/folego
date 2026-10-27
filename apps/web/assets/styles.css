@@ -2074,3 +2074,39 @@ body[data-route="partner"] .fl-chat, body[data-route="unsubscribe"] .fl-chat, bo
   .lg .ledger-actions { grid-area: del; justify-self: end; }
 }
 @media (prefers-reduced-motion: reduce) { .lg-head, .lg-chev { transition: none; } }
+
+/* Investimentos: total no topo, cartões por aplicação (como no app da corretora) e abas Ativos / Processando. */
+.inv-hero { display: flex; justify-content: space-between; gap: var(--s4); align-items: flex-start; flex-wrap: wrap; }
+.inv-hero > div { display: grid; gap: 2px; }
+.inv-total { font-family: var(--font-display); font-size: clamp(2rem, 7vw, 2.75rem); line-height: 1.1; letter-spacing: -0.01em; }
+.inv-yield { margin: 0; }
+.inv-seg { display: inline-flex; }
+.inv-cards { display: grid; gap: var(--s3); margin-top: var(--s3); }
+.inv-card { border: 1px solid var(--line); border-radius: var(--radius); background: var(--sunken); overflow: hidden; }
+.inv-card-head { all: unset; box-sizing: border-box; width: 100%; display: grid; gap: var(--s2); padding: 16px; cursor: pointer; position: relative; }
+.inv-card-head.static { cursor: default; }
+.inv-card-head:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; }
+.inv-card-head .lg-chev { position: absolute; right: 16px; top: 16px; }
+.inv-card-head[aria-expanded="true"] .lg-chev { transform: rotate(180deg); }
+.inv-pill { justify-self: start; font-size: .72rem; letter-spacing: .04em; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: var(--line); color: var(--ink-2); }
+.inv-name { font-size: 1.125rem; }
+.inv-dl { display: grid; gap: 6px; margin: 0; }
+.inv-dl > div { display: flex; justify-content: space-between; gap: var(--s3); }
+.inv-dl dt { color: var(--muted); }
+.inv-dl dd { margin: 0; font-weight: 600; text-align: right; }
+.inv-card-body { padding: 0 16px 8px; background: var(--surface); border-top: 1px solid var(--line); }
+.inv-row { grid-template-columns: minmax(0, 1fr) auto auto; }
+
+/* Estratégias: jogadas calculadas e a análise do Estrategista. */
+.plays { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s3); }
+.play { border: 1px solid var(--line); border-left: 4px solid var(--tone-attention); border-radius: var(--radius-sm); padding: 14px 16px; background: var(--surface); display: grid; gap: 6px; }
+.play-good { border-left-color: var(--tone-ok); }
+.play-info { border-left-color: var(--seg-a); }
+.play p { margin: 0; color: var(--ink-2); }
+.play-top { display: flex; justify-content: space-between; gap: var(--s3); align-items: center; flex-wrap: wrap; }
+.md h3 { margin: var(--s5) 0 var(--s2); font-size: 1.15rem; }
+.md h4 { margin: var(--s4) 0 var(--s2); }
+.md p { margin: 0 0 var(--s3); line-height: 1.6; max-width: 72ch; }
+.md-list { margin: 0 0 var(--s3); padding-left: 1.3em; display: grid; gap: 6px; max-width: 72ch; }
+.md-table-wrap { overflow-x: auto; margin: 0 0 var(--s3); }
+.md-table th, .md-table td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--line); }

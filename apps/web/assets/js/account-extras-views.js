@@ -39,9 +39,11 @@ function accountFields(init = {}) {
   negative.checked = (init.openingBalanceCents ?? 0) < 0;
   const limit = moneyInput({ id: init.prefix ? `${init.prefix}-lis` : 'cw-lis', ariaLabel: 'Limite do cheque especial (LIS)', value: init.overdraftLimitCents || null, placeholder: 'sem limite' });
   const rate = el('input', { class: 'input', id: init.prefix ? `${init.prefix}-taxa` : 'cw-taxa', type: 'text', inputmode: 'decimal', maxlength: '5', 'aria-label': 'Taxa do cheque especial ao mês (%)', value: bpsToField(init.overdraftRateBps ?? 800) });
+  const free = el('input', { class: 'input', id: init.prefix ? `${init.prefix}-dias` : 'cw-dias', type: 'text', inputmode: 'numeric', maxlength: '2', 'aria-label': 'Dias do limite sem juros', placeholder: 'Ex.: 10', value: init.overdraftFreeDays ? String(init.overdraftFreeDays) : '' });
   const node = el(
     'div', { class: 'lis-wrap' },
     el('div', { class: 'lis-fields' },
+      el('div', { class: 'field' }, el('label', { class: 'label', for: free.id }, 'Dias do limite sem juros'), free, el('p', { class: 'fine' }, 'Se o seu banco não cobra juros nos primeiros dias do limite, informe quantos. Em Estratégias, o Prumo diz o dia certo de cobrir o negativo.')),
       el('div', { class: 'field' }, el('label', { class: 'label', for: opening.input.id }, 'Saldo da conta hoje'), opening.input, el('p', { class: 'fine' }, 'O que aparece no app do banco agora.')),
       el('div', { class: 'field' }, el('label', { class: 'label', for: limit.input.id }, 'Limite do cheque especial (LIS)'), limit.input, el('p', { class: 'fine' }, 'Está no app ou no extrato do banco. Deixe em branco se não tem.')),
       el('div', { class: 'field' }, el('label', { class: 'label', for: rate.id }, 'Taxa do cheque especial (% ao mês)'), rate, el('p', { class: 'fine' }, 'Usamos 8% ao mês se você não souber. É o teto que os bancos podem cobrar.')),
@@ -51,7 +53,7 @@ function accountFields(init = {}) {
   const read = () => {
     const base = centsOrZero(opening);
     const r = percentToBps(rate.value);
-    return { openingBalanceCents: negative.checked ? -base : base, overdraftLimitCents: centsOrZero(limit), overdraftRateBps: r === undefined ? 800 : r, rateOk: r !== undefined };
+    return { openingBalanceCents: negative.checked ? -base : base, overdraftLimitCents: centsOrZero(limit), overdraftRateBps: r === undefined ? 800 : r, overdraftFreeDays: Math.min(60, Math.max(0, parseInt(free.value, 10) || 0)), rateOk: r !== undefined };
   };
   return { node, read };
 }
@@ -91,7 +93,7 @@ export function viewCarteiras(ctx) {
     if (kind.value === 'conta') {
       const v = fields.read();
       if (!v.rateOk) return toast('A taxa do cheque especial deve ser um número entre 0 e 100.');
-      Object.assign(body, { openingBalanceCents: v.openingBalanceCents, overdraftLimitCents: v.overdraftLimitCents, overdraftRateBps: v.overdraftRateBps });
+      Object.assign(body, { openingBalanceCents: v.openingBalanceCents, overdraftLimitCents: v.overdraftLimitCents, overdraftRateBps: v.overdraftRateBps, overdraftFreeDays: v.overdraftFreeDays });
     }
     add.disabled = true;
     try {
@@ -133,14 +135,14 @@ export function viewCarteiras(ctx) {
 
   /** "Ajustar saldo e cheque especial" dentro da linha da conta bancária. */
   function adjustForm(x) {
-    const f = accountFields({ prefix: `aj-${x.id.slice(0, 8)}`, openingBalanceCents: x.openingBalanceCents, overdraftLimitCents: x.overdraftLimitCents, overdraftRateBps: x.overdraftRateBps });
+    const f = accountFields({ prefix: `aj-${x.id.slice(0, 8)}`, openingBalanceCents: x.openingBalanceCents, overdraftLimitCents: x.overdraftLimitCents, overdraftRateBps: x.overdraftRateBps, overdraftFreeDays: x.overdraftFreeDays });
     const save = el('button', { class: 'btn btn-secondary btn-sm', type: 'button' }, 'Salvar');
     save.addEventListener('click', async () => {
       const v = fields2(f);
       if (!v.rateOk) return toast('A taxa deve ser um número entre 0 e 100.');
       save.disabled = true;
       try {
-        await ctx.api.updateWallet(x.id, { openingBalanceCents: v.openingBalanceCents, overdraftLimitCents: v.overdraftLimitCents, overdraftRateBps: v.overdraftRateBps });
+        await ctx.api.updateWallet(x.id, { openingBalanceCents: v.openingBalanceCents, overdraftLimitCents: v.overdraftLimitCents, overdraftRateBps: v.overdraftRateBps, overdraftFreeDays: v.overdraftFreeDays });
         toast('Conta atualizada.');
         ctx.refresh();
       } catch {
