@@ -95,7 +95,7 @@ async function askStrategist(ctx: Ctx, snapshot: StrategySnapshot): Promise<stri
   if (!res.ok) throw new Error(`anthropic_http_${res.status}`);
   const data = (await res.json()) as { content?: Array<{ type: string; text?: string }> };
   const text = (data.content ?? []).filter((c) => c.type === 'text').map((c) => c.text ?? '').join('\n').trim();
-  if (text.length < 200 || !/###\s*5/.test(text)) throw new Error('anthropic_formato_invalido');
+  if (text.length < 600) throw new Error(`anthropic_resposta_curta_${text.length}`);
   return clean(text);
 }
 
@@ -110,11 +110,16 @@ export async function requestStrategyReport(ctx: Ctx, subscriberId: string): Pro
   const ins = await ctx.db.query<{ id: string }>(`INSERT INTO app.strategy_reports(subscriber_id) VALUES ($1) RETURNING id`, [subscriberId]);
   const id = ins.rows[0]!.id;
   void (async () => {
+    let reason = 'erro';
     try {
-      const content = await askStrategist(ctx, snapshot).catch(() => askStrategist(ctx, snapshot));
+      let content = '';
+      for (let attempt = 0; attempt < 2 && !content; attempt += 1) {
+        try { content = await askStrategist(ctx, snapshot); } catch (e) { reason = e instanceof Error ? e.message.slice(0, 60) : 'erro'; }
+      }
+      if (!content) throw new Error(reason);
       await ctx.db.query(`UPDATE app.strategy_reports SET status = 'done', content = $3, finished_at = now() WHERE id = $1 AND subscriber_id = $2`, [id, subscriberId, content]);
     } catch {
-      await ctx.db.query(`UPDATE app.strategy_reports SET status = 'failed', error = $3, finished_at = now() WHERE id = $1 AND subscriber_id = $2`, [id, subscriberId, 'Não consegui montar a análise agora. Tente de novo em instantes; as jogadas calculadas continuam valendo.']).catch(() => undefined);
+      await ctx.db.query(`UPDATE app.strategy_reports SET status = 'failed', error = $3, finished_at = now() WHERE id = $1 AND subscriber_id = $2`, [id, subscriberId, `Não consegui montar a análise agora (motivo: ${reason}). Tente de novo em instantes; as jogadas calculadas continuam valendo.`]).catch(() => undefined);
     }
   })();
   return { status: 'running' };
