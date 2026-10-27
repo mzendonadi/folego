@@ -349,6 +349,11 @@ export const investmentSchema = z.strictObject({
   note: z.string().trim().max(200).nullable().optional(),
 });
 
+/** Resgate (total ou parcial): quanto, quando e em qual conta o dinheiro entrou. */
+export const investmentRedeemSchema = z.strictObject({ amountCents: z.number().int().min(1).max(100_000_000_000), date: isoDate, walletId: z.string().uuid() });
+/** Aplicação que estava processando e foi creditada: o dia em que passou a valer. */
+export const investmentProcessSchema = z.strictObject({ date: isoDate });
+
 /** Edição de um lançamento já gravado (inclusive os importados): texto, valor, data e categoria. */
 export const entryPatchSchema = z.strictObject({
   note: z.string().trim().min(1).max(120).optional(),

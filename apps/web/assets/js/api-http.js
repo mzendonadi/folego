@@ -300,6 +300,12 @@ export async function updateInvestment(id, body) {
 export async function deleteInvestment(id) {
   return request('DELETE', `/account/investments/${id}`);
 }
+export async function redeemInvestment(id, body) {
+  return request('POST', `/account/investments/${id}/redeem`, { body });
+}
+export async function processInvestment(id, body) {
+  return request('POST', `/account/investments/${id}/process`, { body });
+}
 export async function getStrategies() {
   return request('GET', '/account/strategies');
 }

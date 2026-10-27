@@ -219,3 +219,40 @@ test('fatura de cartão novo: duas parcelas 6/12 da mesma loja na mesma data, pa
   assert.equal(r.status, 200, JSON.stringify(r.json));
   assert.equal(r.json.added, 3);
 });
+test('investimentos: processado vira ativo; resgate parcial e total entram a crédito na conta sem virar receita', async () => {
+  const c = await assinante('resgate-um@exemplo.com');
+  const w = await c('POST', '/api/account/wallets', { body: { name: 'Conta Exemplo', kind: 'conta' } });
+  const wid = w.json.id as string;
+  const mk = async (body: object) => (await c('POST', '/api/account/investments', { body })).json.id as string;
+  const proc = await mk({ name: 'CDB Exemplo', indexer: 'cdi', ratePct: 102, appliedCents: 77_000, appliedOn: '2026-10-26', status: 'processando' });
+  const act = await mk({ name: 'CDB Exemplo', indexer: 'cdi', ratePct: 102, appliedCents: 25_376, positionCents: 25_774, appliedOn: '2026-10-01', status: 'ativo' });
+
+  assert.equal((await c('POST', `/api/account/investments/${proc}/process`, { body: { date: '2099-01-01' } })).status, 422, 'dia futuro');
+  assert.equal((await c('POST', `/api/account/investments/${proc}/process`, { body: { date: '2026-10-26' } })).status, 200);
+  let l = (await c('GET', '/api/account/investments')).json;
+  assert.equal(l.totals.processingCount, 0);
+  assert.equal(l.totals.count, 2);
+  assert.equal((await c('POST', `/api/account/investments/${proc}/process`, { body: { date: '2026-10-26' } })).status, 422, 'já está ativa');
+
+  // resgate parcial: R$ 100,00 entram na conta; a aplicação continua menor
+  const part = await c('POST', `/api/account/investments/${act}/redeem`, { body: { amountCents: 10_000, date: '2026-10-26', walletId: wid } });
+  assert.equal(part.status, 200, JSON.stringify(part.json));
+  assert.equal(part.json.closed, false);
+  l = (await c('GET', '/api/account/investments')).json;
+  const left = l.investments.find((i: any) => i.id === act);
+  assert.ok(left.appliedCents < 25_376 && left.appliedCents > 0);
+  assert.equal((await c('GET', '/api/account/wallets')).json.wallets[0].balanceCents, 10_000);
+  const mes = (await c('GET', '/api/account/month/2026-10')).json;
+  assert.equal(mes.summary.incomeCents, 0, 'resgate não é receita');
+  const e = mes.entries.find((x: any) => x.transferKind === 'investment_redeem');
+  assert.ok(e && e.amountCents === 10_000 && e.walletId === wid);
+
+  // resgate do resto encerra; valor absurdo é recusado; conta alheia é recusada
+  assert.equal((await c('POST', `/api/account/investments/${act}/redeem`, { body: { amountCents: 9_999_999, date: '2026-10-26', walletId: wid } })).status, 422);
+  assert.equal((await c('POST', `/api/account/investments/${act}/redeem`, { body: { amountCents: 15_774, date: '2026-10-26', walletId: '01a17641-923e-7edf-8abc-5e224e99dd53' } })).status, 422);
+  const rest = await c('POST', `/api/account/investments/${act}/redeem`, { body: { amountCents: 15_774, date: '2026-10-26', walletId: wid } });
+  assert.equal(rest.status, 200, JSON.stringify(rest.json));
+  assert.equal(rest.json.closed, true);
+  assert.equal((await c('GET', '/api/account/investments')).json.investments.find((i: any) => i.id === act).status, 'resgatado');
+  assert.equal((await c('POST', `/api/account/investments/${act}/redeem`, { body: { amountCents: 100, date: '2026-10-26', walletId: wid } })).status, 422, 'já resgatada');
+});

@@ -400,10 +400,10 @@ export async function monthView(ctx: Ctx, subscriberId: string, month: string) {
   const limits = { ...(await loadLimits(ctx, subscriberId)), ...(await monthLimits(ctx, subscriberId, month)) };
   const goals = planHas(plan, 'goals') ? await loadGoals(ctx, subscriberId) : [];
   const inMonth = everything.filter((e) => monthOf(e.date) === month); // a lista mostra tudo, com o pagamento de fatura marcado
-  type Meta = { id: string; wallet_id: string | null; card_id: string | null; card_name: string | null; installment_no: number | null; installment_total: number | null };
+  type Meta = { id: string; transfer_kind: string | null; wallet_id: string | null; card_id: string | null; card_name: string | null; installment_no: number | null; installment_total: number | null };
   const metas = inMonth.length
     ? await ctx.db.query<Meta>(
-      `SELECT l.id, l.wallet_id, l.card_id, c.name AS card_name, l.installment_no, l.installment_total FROM app.ledger_entries l LEFT JOIN app.credit_cards c ON c.id = l.card_id WHERE l.subscriber_id = $1 AND l.id = ANY($2::uuid[])`,
+      `SELECT l.id, l.transfer_kind, l.wallet_id, l.card_id, c.name AS card_name, l.installment_no, l.installment_total FROM app.ledger_entries l LEFT JOIN app.credit_cards c ON c.id = l.card_id WHERE l.subscriber_id = $1 AND l.id = ANY($2::uuid[])`,
       [subscriberId, inMonth.map((e) => e.id)],
     )
     : { rows: [] as Meta[] };
@@ -412,7 +412,7 @@ export async function monthView(ctx: Ctx, subscriberId: string, month: string) {
     month,
     entries: inMonth.map((e) => {
       const m = metaOf.get(e.id as string);
-      return { ...e, transfer: Boolean(e.transfer), walletId: m?.wallet_id ?? null, cardId: m?.card_id ?? null, cardName: m?.card_name ?? null, installmentNo: m?.installment_no ?? null, installmentTotal: m?.installment_total ?? null };
+      return { ...e, transfer: Boolean(e.transfer), transferKind: m?.transfer_kind ?? null, walletId: m?.wallet_id ?? null, cardId: m?.card_id ?? null, cardName: m?.card_name ?? null, installmentNo: m?.installment_no ?? null, installmentTotal: m?.installment_total ?? null };
     }),
     summary: summarizeMonth(entries, limits, month),
     // "Da receita à conta": o saldo da conta no começo e no fim do mês (com o negativo que já vinha de antes), para o saldo do mês não enganar

@@ -53,7 +53,7 @@ import { contactSchema, sendContact } from './contact.ts';
 import * as waPortal from './wa-portal.ts';
 import { handleWebhook as handleWhatsAppWebhook, loadAccount, validSignature } from './whatsapp.ts';
 import type { WebhookBody } from './whatsapp.ts';
-import { cardSchema, cardPatchSchema, cardPurchaseSchema, cardPaymentSchema, cardImportSchema, cardFinanceSchema, walletAnchorSchema, entryPatchSchema, investmentSchema, tripSchema, tripCheckSchema, accessSchema, addEntriesSchema, cancelSchema, contributionSchema, createCaseSchema, entryWalletSchema, accountDebtSchema, accountDebtPatchSchema, debtPaymentSchema, monthLimitSchema, plannerSchema, objectiveSchema, inviteSchema, memberAccessSchema, checkoutSchema, profileSchema, referralLeadSchema, referralInviteSchema, recurringDecisionSchema, reminderPatchSchema, reminderSchema, walletSchema, walletPatchSchema, createOrderSchema, emailLinkSchema, emailOnlySchema, goalSchema, incomeInterviewSchema, leadSchema, loginCodeSchema, newPartnerSchema, partnerLoginSchema, partnerStatusSchema, setCategorySchema, categoryNameSchema, setLimitSchema, simulateSchema, subscriptionOrderSchema, toggleIncomeTaskSchema, translationSchema, guidedSchema, uuidParam, monthParam } from './schemas.ts';
+import { cardSchema, cardPatchSchema, cardPurchaseSchema, cardPaymentSchema, cardImportSchema, cardFinanceSchema, walletAnchorSchema, entryPatchSchema, investmentSchema, investmentRedeemSchema, investmentProcessSchema, tripSchema, tripCheckSchema, accessSchema, addEntriesSchema, cancelSchema, contributionSchema, createCaseSchema, entryWalletSchema, accountDebtSchema, accountDebtPatchSchema, debtPaymentSchema, monthLimitSchema, plannerSchema, objectiveSchema, inviteSchema, memberAccessSchema, checkoutSchema, profileSchema, referralLeadSchema, referralInviteSchema, recurringDecisionSchema, reminderPatchSchema, reminderSchema, walletSchema, walletPatchSchema, createOrderSchema, emailLinkSchema, emailOnlySchema, goalSchema, incomeInterviewSchema, leadSchema, loginCodeSchema, newPartnerSchema, partnerLoginSchema, partnerStatusSchema, setCategorySchema, categoryNameSchema, setLimitSchema, simulateSchema, subscriptionOrderSchema, toggleIncomeTaskSchema, translationSchema, guidedSchema, uuidParam, monthParam } from './schemas.ts';
 import { EngineInputError } from './engine.ts';
 import { GUIDED_KINDS } from './guided.ts';
 import * as openFinance from './openfinance.ts';
@@ -738,6 +738,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.post('/api/account/investments', async (req, reply) => reply.status(201).send({ id: await investmentsApi.createInvestment(ctx, await requireSubscriber(req), investmentSchema.parse(req.body)) }));
   app.put('/api/account/investments/:id', async (req) => {
     await investmentsApi.updateInvestment(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id), investmentSchema.parse(req.body));
+    return { ok: true };
+  });
+  app.post('/api/account/investments/:id/redeem', async (req) => investmentsApi.redeemInvestment(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id), investmentRedeemSchema.parse(req.body)));
+  app.post('/api/account/investments/:id/process', async (req) => {
+    await investmentsApi.processInvestment(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id), investmentProcessSchema.parse(req.body).date);
     return { ok: true };
   });
   app.delete('/api/account/investments/:id', async (req, reply) => {

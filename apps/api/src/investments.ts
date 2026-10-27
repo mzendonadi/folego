@@ -76,6 +76,53 @@ export async function updateInvestment(ctx: Ctx, subscriberId: string, id: strin
   if (r.rowCount === 0) throw notFound();
 }
 
+/**
+ * Resgate: o valor entra a crédito na conta escolhida (como transferência: não é receita) e a aplicação baixa.
+ * Resgate de quase tudo (a partir de 99,5% da posição) encerra a aplicação; menos que isso é parcial e a aplicação continua, proporcionalmente menor.
+ */
+export async function redeemInvestment(ctx: Ctx, subscriberId: string, id: string, p: { amountCents: number; date: string; walletId: string }): Promise<{ closed: boolean; remainingCents: number }> {
+  await requireFeature(ctx, subscriberId, 'investments');
+  const today = todaySaoPaulo();
+  if (p.date > today) throw new AppError(422, 'future_date', 'O resgate não pode ter data futura.');
+  const rates = await loadIndicators(ctx).then((m) => ({ cdiAnnualPct: m.indicators.cdiPct, ipcaAnnualPct: m.indicators.ipca12Pct })).catch(() => ({ cdiAnnualPct: null, ipcaAnnualPct: null }));
+  return ctx.db.tx(async (q) => {
+    const cur = await q.query<Row>(
+      `SELECT id, name, kind, indexer, rate_bp, applied_cents::text AS applied_cents, position_cents::text AS position_cents, applied_on, matures_on, liquidity, status, note FROM app.investments WHERE id = $1 AND subscriber_id = $2 FOR UPDATE`,
+      [id, subscriberId],
+    );
+    const r = cur.rows[0];
+    if (!r) throw notFound();
+    if (r.status !== 'ativo') throw new AppError(422, 'not_active', 'Só dá para resgatar uma aplicação ativa.');
+    const wallet = await q.query(`SELECT 1 FROM app.wallets WHERE id = $1 AND subscriber_id = $2`, [p.walletId, subscriberId]);
+    if (wallet.rows.length === 0) throw new AppError(422, 'invalid_wallet', 'Escolha a conta em que o dinheiro entrou.');
+    const input = inputOf(r);
+    const position = viewInvestment(input, today, rates).positionCents;
+    if (p.amountCents > Math.round(position * 1.2) + 100) throw new AppError(422, 'too_much', 'O valor passa do que a aplicação tem. Confira o valor ou atualize a posição ao editar.');
+    const full = p.amountCents >= Math.round(position * 0.995);
+    const ratio = full ? 1 : p.amountCents / position;
+    if (full) {
+      await q.query(`UPDATE app.investments SET status = 'resgatado', updated_at = now() WHERE id = $1`, [id]);
+    } else {
+      const applied = Math.max(1, Math.round(input.appliedCents * (1 - ratio)));
+      const informed = input.positionCents == null ? null : Math.max(0, Math.round(input.positionCents * (1 - ratio)));
+      await q.query(`UPDATE app.investments SET applied_cents = $2, position_cents = $3, updated_at = now() WHERE id = $1`, [id, applied, informed]);
+    }
+    await q.query(
+      `INSERT INTO app.ledger_entries(subscriber_id, occurred_on, amount_cents, category, note, source, wallet_id, transfer_kind) VALUES ($1,$2,$3,'outros',$4,'manual',$5,'investment_redeem')`,
+      [subscriberId, p.date, p.amountCents, `Resgate ${r.name}`.slice(0, 100), p.walletId],
+    );
+    return { closed: full, remainingCents: full ? 0 : Math.max(0, position - p.amountCents) };
+  });
+}
+
+/** Aplicação que estava processando e foi creditada: passa a valer como ativa a partir do dia informado. */
+export async function processInvestment(ctx: Ctx, subscriberId: string, id: string, date: string): Promise<void> {
+  await requireFeature(ctx, subscriberId, 'investments');
+  if (date > todaySaoPaulo()) throw new AppError(422, 'future_date', 'O dia do processamento não pode ser futuro.');
+  const r = await ctx.db.query(`UPDATE app.investments SET status = 'ativo', applied_on = $3, updated_at = now() WHERE id = $1 AND subscriber_id = $2 AND status = 'processando'`, [id, subscriberId, date]);
+  if (r.rowCount === 0) throw new AppError(422, 'not_processing', 'Esta aplicação não está processando.');
+}
+
 export async function deleteInvestment(ctx: Ctx, subscriberId: string, id: string): Promise<void> {
   await requireFeature(ctx, subscriberId, 'investments');
   const r = await ctx.db.query(`DELETE FROM app.investments WHERE id = $1 AND subscriber_id = $2`, [id, subscriberId]);

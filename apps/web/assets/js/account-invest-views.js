@@ -63,11 +63,11 @@ export function viewInvestimentos(ctx) {
     add.addEventListener('click', () => form(null));
 
     const list = tab === 'ativos' ? activeCards(data) : processingCards(data);
-    root.replaceChildren(
+    root.replaceChildren(...[
       hero,
       card(el('div', { class: 'button-row' }, seg, add), list),
       data.investments.some((x) => x.status === 'resgatado') ? card(el('h3', {}, 'Resgatadas'), el('ul', { class: 'entries' }, ...data.investments.filter((x) => x.status === 'resgatado').map((x) => row(x)))) : null,
-    );
+    ].filter(Boolean));
   }
 
   function activeCards(data) {
@@ -104,13 +104,15 @@ export function viewInvestimentos(ctx) {
     return el('div', { class: 'inv-cards' }, ...items.map((x) => {
       const edit = el('button', { class: 'btn btn-secondary btn-sm', type: 'button' }, 'Editar');
       edit.addEventListener('click', () => form(x));
+      const done = el('button', { class: 'btn btn-primary btn-sm', type: 'button' }, 'Processado');
+      done.addEventListener('click', () => processForm(x));
       return el('section', { class: 'inv-card' }, el('div', { class: 'inv-card-head static' },
         el('span', { class: 'inv-pill' }, tagText(x)), el('strong', { class: 'inv-name' }, x.name),
         el('dl', { class: 'inv-dl' },
           el('div', {}, el('dt', {}, 'Valor aplicado'), el('dd', {}, money(x.appliedCents))),
           el('div', {}, el('dt', {}, 'Rentabilidade'), el('dd', {}, rateText(x))),
           el('div', {}, el('dt', {}, 'Data da aplicação'), el('dd', {}, dayBr(x.appliedOn)))),
-        edit));
+        edit, done));
     }));
   }
 
@@ -130,7 +132,64 @@ export function viewInvestimentos(ctx) {
         el('p', { class: 'muted fine' }, v
           ? `Posição ${money(v.positionCents)}${v.estimated ? ' (estimada)' : ''} · rendimento ${hidden.on ? '••••' : brl(v.yieldCents)} · IR hoje ${fmtPct(v.irPct)}, líquido ${hidden.on ? '••••' : brl(v.netYieldCents)} · ${x.liquidity === 'diaria' ? 'liquidez diária' : `vence ${x.maturesOn ? dayBr(x.maturesOn) : 'no vencimento'}`}`
           : `Resgatada · ${money(x.appliedCents)} aplicados em ${dayBr(x.appliedOn)}`)),
-      el('span', {}), el('span', { class: 'ledger-actions' }, edit, del));
+      el('span', {}), el('span', { class: 'ledger-actions' }, ...(x.status === 'ativo' ? [redeemBtn(x)] : []), edit, del));
+  }
+
+  function redeemBtn(x) {
+    const b = el('button', { class: 'btn btn-secondary btn-sm', type: 'button' }, 'Resgatado');
+    b.addEventListener('click', () => redeemForm(x));
+    return b;
+  }
+
+  /** Resgate: quanto saiu da aplicação, em que dia e em qual conta o dinheiro entrou. */
+  async function redeemForm(x) {
+    let wallets = [];
+    try { wallets = (await ctx.api.getWallets()).wallets ?? []; } catch { /* sem carteiras: o servidor avisa */ }
+    if (wallets.length === 0) return toast('Cadastre antes a conta em que o dinheiro entrou, em Carteiras.');
+    const value = moneyInput({ id: 'rs-valor', ariaLabel: 'Valor resgatado', value: x.view.positionCents });
+    const day = el('input', { class: 'input', id: 'rs-data', type: 'date', max: todayISO(), value: todayISO() });
+    const wallet = select('rs-conta', wallets.map((w) => [w.id, w.name]), (wallets.find((w) => w.kind === 'conta') ?? wallets[0]).id);
+    const ok = el('button', { class: 'btn btn-primary', type: 'submit' }, 'Registrar resgate');
+    const back = el('button', { class: 'btn btn-quiet', type: 'button' }, 'Voltar');
+    back.addEventListener('click', show);
+    const f = el('form', { class: 'entry-form form-std' },
+      field('Valor resgatado (R$)', value.input, `Posição atual: ${brl(x.view.positionCents)}${x.view.estimated ? ' (estimada)' : ''}. Se resgatar menos, a aplicação continua com o restante.`),
+      field('Dia do resgate', day), field('Entrou na conta', wallet, 'O valor entra a crédito nessa conta, mas não conta como receita do mês.'),
+      el('div', { class: 'button-row' }, ok, back));
+    f.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const cents = value.cents();
+      if (!cents) return toast('Informe o valor resgatado.');
+      if (!day.value) return toast('Informe o dia do resgate.');
+      ok.disabled = true;
+      try {
+        const r = await ctx.api.redeemInvestment(x.id, { amountCents: cents, date: day.value, walletId: wallet.value });
+        toast(r.closed ? 'Resgate registrado. A aplicação foi encerrada.' : `Resgate registrado. Ficam ${brl(r.remainingCents)} aplicados.`);
+        show();
+      } catch (err) {
+        ok.disabled = false;
+        toast(err?.message && err.status === 422 ? err.message : 'Não consegui registrar agora.');
+      }
+    });
+    root.replaceChildren(card(el('h2', {}, `Resgatar ${x.name}`), f));
+  }
+
+  /** Aplicação que estava processando e foi creditada: passa a valer como ativa a partir do dia informado. */
+  function processForm(x) {
+    const day = el('input', { class: 'input', id: 'pr-data', type: 'date', max: todayISO(), value: todayISO() });
+    const ok = el('button', { class: 'btn btn-primary', type: 'submit' }, 'Confirmar');
+    const back = el('button', { class: 'btn btn-quiet', type: 'button' }, 'Voltar');
+    back.addEventListener('click', show);
+    const f = el('form', { class: 'entry-form form-std' },
+      field('Dia em que foi processada', day, `Os ${brl(x.appliedCents)} passam para Ativos a partir desse dia e deixam de aparecer em Processando.`),
+      el('div', { class: 'button-row' }, ok, back));
+    f.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!day.value) return toast('Informe o dia.');
+      ok.disabled = true;
+      try { await ctx.api.processInvestment(x.id, { date: day.value }); tab = 'ativos'; toast('Aplicação ativa.'); show(); } catch (err) { ok.disabled = false; toast(err?.message && err.status === 422 ? err.message : 'Não consegui registrar agora.'); }
+    });
+    root.replaceChildren(card(el('h2', {}, `${x.name}: processada`), f));
   }
 
   function form(existing) {

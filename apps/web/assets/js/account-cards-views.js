@@ -197,7 +197,7 @@ function invoicesPanel(ctx, c) {
             el('ul', { class: 'cc-cats' }, ...d.byCategory.filter((x) => x.cents > 0 || x.previousCents > 0).map((x) => el('li', {}, el('span', {}, catLabel(x.category)), el('strong', {}, brl(x.cents)), el('span', { class: `fine ${x.cents > x.previousCents ? 'neg' : 'muted'}` }, x.previousCents ? `antes ${brl(x.previousCents)}` : 'novo')))));
         }
         const fin = (inv.status === 'closed' || inv.status === 'overdue') && inv.remainingCents > 0 ? financeForm(ctx, c, inv, d) : d.financedCents > 0 ? el('p', { class: 'note' }, icon('info'), `Esta fatura foi parcelada: ${brl(d.financedCents)} viraram parcelas nas próximas faturas.`) : null;
-        body.replaceChildren(list, ...extra.filter(Boolean), fin);
+        body.replaceChildren(...[list, ...extra, fin].filter(Boolean));
       } catch {
         loaded = false;
         body.replaceChildren(el('p', { class: 'muted' }, 'Não consegui carregar agora.'));

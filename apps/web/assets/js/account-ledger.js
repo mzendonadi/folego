@@ -16,7 +16,7 @@ export function groupEntries(entries, wallets) {
     if (!groups.has(key)) groups.set(key, { key, ...base, items: [], inCents: 0, outCents: 0, invoicePaidCents: 0 });
     const g = groups.get(key);
     g.items.push(x);
-    if (x.transfer) g.invoicePaidCents += -x.amountCents;
+    if (x.transfer && x.transferKind !== 'investment_redeem') g.invoicePaidCents += -x.amountCents;
     else if (x.amountCents >= 0) g.inCents += x.amountCents;
     else g.outCents += -x.amountCents;
   };
@@ -111,7 +111,7 @@ function entryRow(ctx, x) {
     li.replaceChildren(
       el('span', { class: 'entry-date muted' }, fmtDay(x.date)),
       el('span', { class: 'entry-note' }, x.note,
-        x.transfer ? el('span', { class: 'wallet-tag' }, ' · pagamento de fatura (fora dos gastos)') : null,
+        x.transfer ? el('span', { class: 'wallet-tag' }, x.transferKind === 'investment_redeem' ? ' · resgate de investimento (não é receita)' : ' · pagamento de fatura (fora dos gastos)') : null,
         x.installmentNo ? el('span', { class: 'wallet-tag' }, ` · parcela ${x.installmentNo}/${x.installmentTotal}`) : null),
       cat,
       el('strong', { class: `entry-amount ${x.amountCents < 0 ? 'neg' : 'pos'}` }, brl(x.amountCents)),

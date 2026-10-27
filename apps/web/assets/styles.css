@@ -2115,3 +2115,6 @@ body[data-route="partner"] .fl-chat, body[data-route="unsubscribe"] .fl-chat, bo
 .form-std > .field, .entry-form > .field { min-width: 0; }
 .form-std .input, .entry-form .input { max-width: 100%; box-sizing: border-box; }
 
+
+.inv-card-head.static .btn { justify-self: start; }
+
