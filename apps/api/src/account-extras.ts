@@ -24,7 +24,7 @@ export async function listWallets(ctx: Ctx, subscriberId: string) {
        FROM app.wallets w LEFT JOIN app.ledger_entries l ON l.wallet_id = w.id WHERE w.subscriber_id = $1 GROUP BY w.id ORDER BY w.created_at`,
     [subscriberId],
   );
-  const loose = await ctx.db.query<{ balance: string; entries: string }>(`SELECT coalesce(sum(amount_cents), 0)::text AS balance, count(*)::text AS entries FROM app.ledger_entries WHERE subscriber_id = $1 AND wallet_id IS NULL`, [subscriberId]);
+  const loose = await ctx.db.query<{ balance: string; entries: string }>(`SELECT coalesce(sum(amount_cents), 0)::text AS balance, count(*)::text AS entries FROM app.ledger_entries WHERE subscriber_id = $1 AND wallet_id IS NULL AND card_id IS NULL AND note NOT LIKE 'Juros do parcelamento da fatura%'`, [subscriberId]);
   return {
     wallets: r.rows.map((w) => ({
       id: w.id, name: w.name, kind: w.kind, balanceCents: num(w.balance), entries: num(w.entries),
