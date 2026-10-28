@@ -2275,3 +2275,16 @@ h1, h2, h3, .cat-head span, .lg-title strong, .inv-name { text-wrap: balance; }
 .check input[type="checkbox"], .check input[type="radio"] { margin-top: 0; }
 /* links soltos do rodapé também têm área de toque confortável */
 .site-footer p a, .site-footer li a { display: inline-block; padding-block: 12px; }
+
+/* Landing: alinhamento do bloco de preço, exemplo do Tradutor e vão entre seções do mesmo fundo */
+/* o bloco de preço é todo centralizado: o título e a etiqueta acompanham o preço */
+.price-wrap .section-head { text-align: center; }
+/* o cartão de resposta do exemplo começa na mesma linha da mensagem recebida */
+.tr-read { margin-left: 0; }
+/* duas seções sem fundo colorido seguidas (início e Como funciona; Prumo e Guias) ganham uma linha fina no meio do vão, que some nas pontas */
+#como-funciona, #guias { position: relative; }
+#como-funciona::before, #guias::before {
+  content: ""; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+  width: min(1120px, calc(100% - 2 * var(--gutter))); height: 1px;
+  background: linear-gradient(90deg, transparent, var(--line) 18%, var(--line) 82%, transparent);
+}
