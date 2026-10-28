@@ -2118,3 +2118,82 @@ body[data-route="partner"] .fl-chat, body[data-route="unsubscribe"] .fl-chat, bo
 
 .inv-card-head.static .btn { justify-self: start; }
 
+
+/* =============================================================================
+   Refinamento mobile do Prumo: alinhamentos, quebras de linha, alvos de toque e espaço para a FôlIA.
+   Tudo aqui só vale em tela estreita; o desktop não muda.
+   ============================================================================= */
+/* quebras de linha mais limpas em qualquer tela: títulos equilibrados e sem palavra sozinha na última linha */
+h1, h2, h3, .cat-head span, .lg-title strong, .inv-name { text-wrap: balance; }
+.d-section p, .card p, .note span { text-wrap: pretty; }
+.entry-amount, .rec-money strong, .balance-num, .lg-fig strong, .inv-dl dd, .cat-head strong { font-variant-numeric: tabular-nums; }
+
+@media (max-width: 959px) {
+  /* a barra de abas fica opaca: o conteúdo que passa por baixo não aparece cortado atrás dela */
+  .acc-tabs { background: var(--paper); backdrop-filter: none; box-shadow: 0 1px 0 var(--line); padding-block: 10px; }
+  .acc-tab { min-height: 44px; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  /* a FôlIA flutuante nunca cobre o último item da tela */
+  body[data-route="account"] { padding-bottom: 112px; }
+  .d-section { scroll-margin-top: 140px; }
+}
+
+@media (max-width: 760px) {
+  .card { padding: var(--s4); }
+  .d-section h2 { line-height: 1.2; }
+
+  /* "Para onde foi o dinheiro", Orçamento: nome à esquerda, valor à direita; se não couber, o valor desce inteiro, alinhado à direita */
+  .cat-head { flex-wrap: wrap; row-gap: 2px; }
+  .cat-head > span:first-child { flex: 0 1 auto; min-width: 0; }
+  .cat-head > strong { margin-left: auto; text-align: right; white-space: nowrap; }
+
+  /* linhas de lista (carteiras, viagens, aplicações, parcelas): o texto usa a largura toda e os botões descem para uma linha própria */
+  .wallet-row { grid-template-columns: minmax(0, 1fr) auto; row-gap: var(--s2); align-items: start; }
+  .wallet-row > :first-child { grid-column: 1 / -1; }
+  .wallet-row > :nth-child(2):not(:last-child) { grid-column: 1; align-self: center; }
+  .wallet-row > :last-child:not(:first-child) { grid-column: 2; justify-self: end; align-self: center; }
+  .wallet-row > span:empty { display: none; }
+  .wallet-row > strong { white-space: nowrap; }
+  .wallet-row.of-row { grid-template-columns: 1fr; }
+  .inv-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .lis-block, .lis-note { max-width: 100%; }
+  .lis-note { align-items: flex-start; }
+
+  /* cobranças recorrentes */
+  .rec-row { grid-template-columns: 1fr; row-gap: var(--s2); }
+  .rec-money { display: flex; justify-content: space-between; align-items: baseline; gap: var(--s3); text-align: left; }
+  .rec-money .fine { text-align: right; }
+  .rec-flags > * { border-radius: 12px; padding: 6px 12px; line-height: 1.35; text-align: left; max-width: 100%; }
+  .rec-row select { grid-column: 1; width: 100%; }
+
+  /* lançamentos por origem: título, resumo e seta em colunas fixas */
+  .lg-head { grid-template-columns: 40px minmax(0, 1fr) 24px; align-items: start; row-gap: 10px; padding: 14px; }
+  .lg-chev { grid-column: 3; grid-row: 1; justify-self: end; margin-top: 8px; }
+  .lg-figs { grid-column: 1 / -1; justify-content: flex-start; gap: var(--s5); padding-left: 52px; }
+  .lg-fig { text-align: left; }
+  .lg-body { padding-inline: 14px; }
+
+  /* aplicações */
+  .inv-hero { flex-direction: column; align-items: stretch; }
+  .inv-hero .btn { align-self: flex-start; }
+  .inv-card-head { padding: 14px; }
+  .inv-card-head .inv-name { padding-right: 32px; }
+  .inv-seg { width: 100%; }
+  .inv-seg .seg-btn { flex: 1; }
+
+  /* botões: linhas só com botões ocupam a largura toda, todos do mesmo tamanho */
+  .button-row:not(:has(.input, .field, .seg)) { flex-direction: column; align-items: stretch; }
+  .button-row:not(:has(.input, .field, .seg)) > .btn { width: 100%; justify-content: center; }
+  .btn-sm { min-height: 44px; }
+  .icon-btn { min-width: 44px; min-height: 44px; justify-content: center; }
+  .ledger-actions .btn { min-width: 44px; }
+  .play-top { align-items: flex-start; }
+  .cc-stats { grid-template-columns: 1fr; }
+  .md-table-wrap { margin-inline: calc(var(--s4) * -1); padding-inline: var(--s4); }
+}
+
+/* deslizar para os lados: a tela nova entra vindo do lado para onde o dedo foi */
+@keyframes swipe-in-next { from { opacity: .35; transform: translateX(28px); } to { opacity: 1; transform: none; } }
+@keyframes swipe-in-prev { from { opacity: .35; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
+.acc-panel.swipe-next { animation: swipe-in-next .22s var(--ease); }
+.acc-panel.swipe-prev { animation: swipe-in-prev .22s var(--ease); }
+@media (prefers-reduced-motion: reduce) { .acc-panel.swipe-next, .acc-panel.swipe-prev { animation: none; } }

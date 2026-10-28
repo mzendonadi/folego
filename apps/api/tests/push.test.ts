@@ -226,3 +226,32 @@ test('aparelho desligado pelo navegador (410) é esquecido; falha passageira nã
     setPushTransport();
   }
 });
+
+test('avisos novos: fatura vencida, conta no negativo, uma vez só e no máximo 2 por dia', async () => {
+  const c = client();
+  await loginAndPay(c, 'push2@exemplo.com', 'push-sub-00002');
+  assert.equal((await c('POST', '/api/account/push/subscribe', { body: sub(21) })).status, 201);
+  const card = await c('POST', '/api/account/cards', { body: { name: 'Cartão Exemplo', brand: 'visa', limitCents: 500_000, closingDay: 5, dueDay: 12 } });
+  assert.equal(card.status, 201, JSON.stringify(card.json));
+  await c('POST', `/api/account/cards/${card.json.id}/purchases`, { body: { date: '2026-03-10', amountCents: 123_456, note: 'COMPRA' } });
+  assert.equal((await c('POST', '/api/account/wallets', { body: { name: 'Conta Exemplo', kind: 'conta', openingBalanceCents: -50_000, overdraftLimitCents: 500_000, overdraftRateBps: 800, overdraftFreeDays: 10 } })).status, 201);
+
+  const got: PushPayload[] = [];
+  setPushTransport(async (_s, payload) => { got.push(payload); });
+  try {
+    await sendPushReminders({ db, config, gateway, email: mailbox }, { force: true, now: { hour: 10, weekday: 3 } });
+    const titles = got.map((p) => p.title);
+    assert.ok(titles.some((t) => /Fatura vencida: Cartão Exemplo/.test(t)), titles.join(' | '));
+    assert.ok(titles.some((t) => /Conta Exemplo está no negativo/.test(t)), titles.join(' | '));
+    assert.ok(got.filter((p) => ['fatura', 'negativo', 'estrategia', 'preco', 'duplicada'].includes(p.tag)).length <= 2, 'no máximo 2 avisos por dia');
+    const first = got.find((p) => p.tag === 'negativo');
+    assert.match(first!.body, /10 dias sem juros/);
+    assert.equal(first!.url, '/conta/carteiras');
+    // a mesma checagem no mesmo dia não repete
+    const before = got.length;
+    await sendPushReminders({ db, config, gateway, email: mailbox }, { force: true, now: { hour: 11, weekday: 3 } });
+    assert.equal(got.filter((p) => p.tag === 'fatura' || p.tag === 'negativo').length, got.slice(0, before).filter((p) => p.tag === 'fatura' || p.tag === 'negativo').length);
+  } finally {
+    setPushTransport();
+  }
+});

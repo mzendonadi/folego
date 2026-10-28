@@ -136,7 +136,7 @@ export function ledgerGroups(ctx, entries, wallets) {
       ];
     const head = el('button', { class: 'lg-head', type: 'button', 'aria-expanded': 'false' },
       el('span', { class: 'lg-ico' }, icon(ico)),
-      el('span', { class: 'lg-title' }, el('strong', {}, g.title), el('span', { class: 'muted fine' }, `${g.sub} · ${g.items.length} ${g.items.length === 1 ? 'lançamento' : 'lançamentos'}${g.type === 'cartao' ? ` · ${nCompras} ${nCompras === 1 ? 'compra' : 'compras'}` : ''}`)),
+      el('span', { class: 'lg-title' }, el('strong', {}, g.title), el('span', { class: 'muted fine' }, g.sub), el('span', { class: 'muted fine' }, `${g.items.length} ${g.items.length === 1 ? 'lançamento' : 'lançamentos'}${g.type === 'cartao' ? `, ${nCompras} ${nCompras === 1 ? 'compra' : 'compras'}` : ''}`)),
       el('span', { class: 'lg-figs' }, ...summary),
       icon('chevron', 'icon lg-chev'));
     const note = g.invoicePaidCents > 0 ? el('p', { class: 'fine muted lg-note' }, icon('info'), ` Desta conta saíram ${brl(g.invoicePaidCents)} para pagar fatura de cartão. Isso não conta como gasto: o gasto está nas compras do cartão.`) : null;

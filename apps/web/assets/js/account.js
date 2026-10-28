@@ -6,7 +6,7 @@ import { brl } from './format.js';
 import { PLANS } from '../vendor/engine.js';
 import { FEATURE_LABEL, TABS, VIEWS, NEEDS_MONTH, monthNow } from './account-views.js';
 import { drawCardCheckout, billingHeader, cancelNotice } from './account-billing.js';
-import { installBanner, registerWorker } from './account-app.js';
+import { installBanner, pushBanner, registerWorker } from './account-app.js';
 import { hideHeaderAvatar, showHeaderAvatar } from './account-avatar.js';
 
 const card = (...c) => el('section', { class: 'card d-section' }, ...c.filter(Boolean));
@@ -302,7 +302,8 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
         if (mine !== token) return; // a pessoa já foi para outra aba
         const view = VIEWS[id](ctx);
         const invite = id === 'coach' || id === 'geral' ? installBanner(showTab) : null; // convite para instalar o app (some ao instalar ou dispensar)
-        panel.replaceChildren(...[invite, view].filter(Boolean));
+        const pushInvite = id === 'coach' || id === 'geral' ? pushBanner(ctx) : null; // convite para ligar as notificações neste aparelho
+        panel.replaceChildren(...[invite, pushInvite, view].filter(Boolean));
         if (keepY !== null) window.scrollTo({ top: keepY, behavior: 'instant' });
       } catch (error) {
         if (mine !== token) return;
@@ -311,6 +312,45 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
         retry.addEventListener('click', () => showTab(id));
         panel.replaceChildren(card(el('h2', {}, 'Não consegui carregar'), el('p', { class: 'muted' }, 'Confira a conexão e tente de novo.'), retry));
       }
+    }
+
+    // Celular: deslizar o dedo para o lado troca de aba (da direita para a esquerda avança, da esquerda para a direita volta).
+    // Não vale sobre campos, tabelas e listas que rolam de lado, nem quando o gesto começa na borda da tela (é o "voltar" do navegador).
+    {
+      let sx = 0, sy = 0, st = 0, live = false;
+      const narrow = () => window.matchMedia('(max-width: 959px)').matches;
+      const blocked = (t) => {
+        for (let n = t; n && n !== panel; n = n.parentElement) {
+          if (/^(INPUT|TEXTAREA|SELECT|CANVAS|TABLE)$/.test(n.tagName) || n.isContentEditable || n.hasAttribute?.('data-noswipe')) return true;
+          const ox = getComputedStyle(n).overflowX;
+          if ((ox === 'auto' || ox === 'scroll') && n.scrollWidth > n.clientWidth + 2) return true;
+        }
+        return false;
+      };
+      panel.addEventListener('touchstart', (e) => {
+        live = false;
+        if (e.touches.length !== 1 || !narrow() || blocked(e.target)) return;
+        const p = e.touches[0];
+        if (p.clientX < 24 || p.clientX > window.innerWidth - 24) return;
+        sx = p.clientX; sy = p.clientY; st = Date.now(); live = true;
+      }, { passive: true });
+      panel.addEventListener('touchend', (e) => {
+        if (!live) return;
+        live = false;
+        const p = e.changedTouches[0];
+        const dx = p.clientX - sx, dy = p.clientY - sy;
+        if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.7 || Date.now() - st > 700) return;
+        if (String(window.getSelection?.() ?? '')) return;
+        const i = NAV_IDS.indexOf(current);
+        const next = i + (dx < 0 ? 1 : -1);
+        if (i < 0 || next < 0 || next >= NAV_IDS.length) return;
+        panel.classList.remove('swipe-next', 'swipe-prev');
+        showTab(NAV_IDS[next]);
+        window.scrollTo({ top: 0, behavior: 'instant' });
+        void panel.offsetWidth; // reinicia a animação
+        panel.classList.add(dx < 0 ? 'swipe-next' : 'swipe-prev');
+        panel.addEventListener('animationend', () => panel.classList.remove('swipe-next', 'swipe-prev'), { once: true });
+      }, { passive: true });
     }
 
     // replaceChildren() é API nativa: diferente do nosso el(), não ignora null — por isso o filter.

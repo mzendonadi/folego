@@ -179,7 +179,10 @@ test('fatura: parcelas "do futuro" lançadas com data do passado são corrigidas
   const p = (await db.query<{ posted_n: number }>(`SELECT posted_n FROM app.card_installments WHERE id = $1`, [plan])).rows[0]!;
   assert.equal(p.posted_n, 4);
   const card = (await c('GET', '/api/account/cards')).json.cards[0];
-  assert.equal(card.summary.futureInstallmentsCents, 60_000, 'faltam duas parcelas de R$ 300,00');
+  // a parcela 5 vence em 27/10: a partir desse dia ela já é lançada, então o que falta depende de hoje; o que não pode mudar é a conta
+  const after = (await db.query<{ posted_n: number }>(`SELECT posted_n FROM app.card_installments WHERE id = $1`, [plan])).rows[0]!;
+  assert.ok(after.posted_n >= 4 && after.posted_n <= 6);
+  assert.equal(card.summary.futureInstallmentsCents, (6 - after.posted_n) * 30_000, 'faltam as parcelas que ainda não foram lançadas, de R$ 300,00');
 });
 
 test('extrato: o mesmo lançamento com o nome mais curto (ou em outra caixa) não entra de novo', async () => {

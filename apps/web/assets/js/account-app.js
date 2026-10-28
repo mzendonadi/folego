@@ -65,7 +65,33 @@ async function enablePush(api, state) {
   const sub = (await reg.pushManager.getSubscription()) ?? (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(state.publicKey) }));
   const json = sub.toJSON();
   await api.subscribePush({ endpoint: json.endpoint, keys: { p256dh: json.keys.p256dh, auth: json.keys.auth } });
+  await api.testPush().catch(() => {}); // já manda uma notificação de verdade: a pessoa vê na hora que funcionou
   return 'ok';
+}
+
+/** Convite para ligar as notificações neste aparelho, na Visão geral: o botão do Perfil passava despercebido. Só aparece se ainda dá para ligar. */
+export function pushBanner(ctx) {
+  let off = false;
+  try { off = localStorage.getItem('prumo_push_convite') === '1'; } catch { off = false; }
+  if (off || !pushSupported()) return null;
+  const box = el('aside', { class: 'card d-section app-invite', hidden: true });
+  (async () => {
+    if (Notification.permission !== 'default') return; // já liberou ou bloqueou: o Perfil cuida
+    const state = await ctx.api.getPush().catch(() => null);
+    if (!state?.available || (await currentSubscription())) return;
+    const go = el('button', { class: 'btn btn-primary btn-sm', type: 'button' }, 'Ativar notificações');
+    const no = el('button', { class: 'btn btn-secondary btn-sm', type: 'button' }, 'Agora não');
+    go.addEventListener('click', async () => {
+      go.disabled = true;
+      try {
+        if ((await enablePush(ctx.api, state)) === 'ok') { toast('Notificações ativadas. Enviei um teste.'); box.remove(); } else { toast('Sem permissão, as notificações continuam desligadas.'); go.disabled = false; }
+      } catch { toast('Não consegui ativar agora. Tente pelo Perfil.'); go.disabled = false; }
+    });
+    no.addEventListener('click', () => { try { localStorage.setItem('prumo_push_convite', '1'); } catch { /* o convite volta na próxima visita */ } box.remove(); });
+    box.replaceChildren(el('strong', {}, 'Receba os avisos no celular'), el('p', { class: 'muted' }, 'Fatura do cartão perto de vencer, conta no negativo, boleto a pagar e lembrete de lançar o dia. Você escolhe o que receber, e só avisamos entre 8h e 22h.'), el('div', { class: 'row-actions' }, go, no));
+    box.hidden = false;
+  })().catch(() => {});
+  return box;
 }
 
 const HOURS = [8, 9, 10, 12, 18, 19, 20, 21];
@@ -163,7 +189,7 @@ export function appCard(ctx) {
           el('div', { class: 'field' }, el('label', { class: 'label', for: 'push-hour' }, 'Hora do lembrete de despesas'), hour),
           pref('push-metas', 'Metas', 'Aos domingos, para lembrar do seu próximo aporte.', state.prefs.goals, 'goals'),
           pref('push-contas', 'Contas a vencer', 'Quando uma conta dos Lembretes está perto do vencimento.', state.prefs.bills, 'bills'),
-          pref('push-avisos', 'Avisos de cobrança e limite', 'Assinatura que ficou mais cara, cobrança repetida e categoria perto do limite. No máximo 2 por dia.', state.prefs.alerts, 'alerts'),
+          pref('push-avisos', 'Avisos de cobrança e limite', 'Fatura do cartão vencendo ou vencida, conta no negativo, assinatura que ficou mais cara, cobrança repetida, categoria perto do limite e jogadas de Estratégias. No máximo 2 por dia.', state.prefs.alerts, 'alerts'),
           pref('push-resumo', 'Resumo da semana', 'Segunda de manhã: quanto você gastou e onde.', state.prefs.summary, 'summary'),
           el('div', { class: 'row-actions' }, test, off),
         );

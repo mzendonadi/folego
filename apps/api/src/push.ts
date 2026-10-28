@@ -11,6 +11,9 @@ import { CATEGORY_LABEL, formatBrl } from './engine.ts';
 import { recurringReport } from './insights.ts';
 import { monthView } from './subscriptions.ts';
 import { dueSoon } from './vault.ts';
+import { listCards } from './cards.ts';
+import { listWallets } from './account-extras.ts';
+import { strategyOverview } from './strategies.ts';
 
 export interface PushPayload { title: string; body: string; url: string; tag: string }
 type Sub = { endpoint: string; keys: { p256dh: string; auth: string } };
@@ -144,6 +147,33 @@ async function smartAlerts(ctx: Ctx, p: Person, today: string, weekday: number):
     if (n > 0) { await markSent(ctx, p.id, key, today); sent += n; budget -= 1; }
   };
   if (p.push_alerts) {
+    // Fatura do cartão: vencida (juros do rotativo) ou vencendo em até 3 dias. Uma vez por fatura.
+    try {
+      const cs = await listCards(ctx, p.data_id);
+      for (const c of cs.cards) {
+        const d = c.summary.due;
+        if (!d || d.remainingCents <= 0) continue;
+        const dueBr = new Date(`${d.dueOn}T12:00:00`).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+        if (d.status === 'overdue') await send(`fat-venc:${c.id}:${d.key}`, { title: `Fatura vencida: ${c.name}`, body: `${formatBrl(d.remainingCents)} em aberto desde ${dueBr}. Fatura vencida cai no rotativo, o crédito mais caro que existe.`, url: '/conta/cartoes', tag: 'fatura' });
+        else if (d.status === 'closed' && d.daysToDue >= 0 && d.daysToDue <= 3) await send(`fat:${c.id}:${d.key}`, { title: `Fatura do ${c.name} ${d.daysToDue === 0 ? 'vence hoje' : d.daysToDue === 1 ? 'vence amanhã' : `vence em ${d.daysToDue} dias`}`, body: `${formatBrl(d.remainingCents)} até ${dueBr}. Pagar em dia evita juros e multa.`, url: '/conta/cartoes', tag: 'fatura' });
+      }
+    } catch { /* plano sem cartões: segue */ }
+    // Conta no negativo: no máximo um aviso por semana e por conta.
+    try {
+      const w = await listWallets(ctx, p.data_id);
+      for (const x of w.wallets.filter((y) => y.kind === 'conta' && y.balanceCents < 0)) {
+        const cost = x.overdraft?.monthlyCostCents ?? 0;
+        const free = x.overdraftFreeDays ? ` Se o seu banco dá ${x.overdraftFreeDays} dias sem juros, cubra o saldo dentro desse prazo.` : '';
+        await send(`neg:${x.id}:${isoWeek(today)}`, { title: `${x.name} está no negativo`, body: `Usando ${formatBrl(-x.balanceCents)} do limite${cost > 0 ? `, cerca de ${formatBrl(cost)} de juros por mês` : ''}.${free}`, url: '/conta/carteiras', tag: 'negativo' });
+      }
+    } catch { /* sem carteiras: segue */ }
+    // Jogadas de prioridade alta da aba Estratégias (Desbravador): uma vez por jogada e por mês.
+    try {
+      const ov = await strategyOverview(ctx, p.data_id);
+      for (const pl of ov.plays.filter((x) => x.priority === 'alta').slice(0, 2)) {
+        await send(`jogada:${pl.id}:${today.slice(0, 7)}`, { title: pl.title.slice(0, 80), body: pl.text.length > 150 ? `${pl.text.slice(0, 147)}...` : pl.text, url: '/conta/estrategias', tag: 'estrategia' });
+      }
+    } catch { /* plano sem Estratégias: segue */ }
     try {
       const rep = await recurringReport(ctx, p.data_id);
       for (const i of rep.items) {
