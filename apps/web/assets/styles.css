@@ -2250,3 +2250,28 @@ h1, h2, h3, .cat-head span, .lg-title strong, .inv-name { text-wrap: balance; }
   .toast { bottom: calc(96px + env(safe-area-inset-bottom)); border-radius: 18px; text-align: center; padding: 12px 18px; }
   body[data-route="account"] { padding-bottom: calc(112px + env(safe-area-inset-bottom)); }
 }
+
+/* =============================================================================
+   Refinamento web e landing: listas de planos com ritmo uniforme, rodapé com alvos de toque, hero sem estouro lateral.
+   ============================================================================= */
+/* a lista do plano não estica para preencher a altura (o que variava o espaço entre os itens); só o botão vai para o pé do cartão */
+.plan-card .tick-list { align-content: start; grid-auto-rows: max-content; }
+.hero { overflow-x: clip; }
+.footer-links a { display: inline-flex; align-items: center; min-height: 44px; }
+@media (max-width: 640px) {
+  /* o botão secundário alinha o texto com a borda esquerda do botão principal */
+  .hero .btn-quiet { padding-left: 0; justify-content: flex-start; }
+  .site-footer { padding-block: var(--s6); }
+  .footer-links { gap: 0 var(--s5); }
+}
+
+/* Visão geral: o saldo da conta tem o seu próprio bloco, separado do saldo do mês por uma linha e com o texto explicativo respirando */
+.balance.balance-account { margin-top: var(--s4); padding-top: var(--s4); border-top: 1px solid var(--line); gap: 4px; }
+.balance.balance-account .fine { margin: var(--s2) 0 0; max-width: 62ch; }
+
+/* Caixas de seleção: a caixa fica ao lado do texto (alinhada à primeira linha), nunca numa linha só dela; vale para landing e Prumo */
+.check { flex-wrap: nowrap; align-items: flex-start; }
+.check > label, .check > span:not(.fine) { flex: 1 1 0; min-width: 0; padding-top: 1px; }
+.check input[type="checkbox"], .check input[type="radio"] { margin-top: 0; }
+/* links soltos do rodapé também têm área de toque confortável */
+.site-footer p a, .site-footer li a { display: inline-block; padding-block: 12px; }

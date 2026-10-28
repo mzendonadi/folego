@@ -303,7 +303,16 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
         const view = VIEWS[id](ctx);
         const invite = id === 'coach' || id === 'geral' ? installBanner(showTab) : null; // convite para instalar o app (some ao instalar ou dispensar)
         const pushInvite = id === 'coach' || id === 'geral' ? pushBanner(ctx) : null; // convite para ligar as notificações neste aparelho
-        panel.replaceChildren(...[invite, pushInvite, view].filter(Boolean));
+        const invites = [invite, pushInvite].filter(Boolean);
+        const kids = id === 'geral' && invites.length ? [...(view.children ?? [])] : [];
+        if (kids.length) {
+          // Visão geral: o saldo do mês vem primeiro e os alertas logo depois; os convites (instalar, notificações) só entram a seguir
+          const at = /Atenção/.test(kids[1]?.querySelector?.('h2')?.textContent ?? '') ? 1 : 0;
+          kids[at].after(...invites);
+          panel.replaceChildren(view);
+        } else {
+          panel.replaceChildren(...[...invites, view]);
+        }
         if (keepY !== null) window.scrollTo({ top: keepY, behavior: 'instant' });
       } catch (error) {
         if (mine !== token) return;
