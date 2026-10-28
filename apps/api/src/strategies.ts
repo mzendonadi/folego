@@ -89,13 +89,13 @@ async function askStrategist(ctx: Ctx, snapshot: StrategySnapshot): Promise<stri
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'x-api-key': ctx.config.anthropicApiKey!, 'anthropic-version': '2023-06-01', 'content-type': 'application/json', ...(ctx.config.anthropicWorkspaceId ? { 'anthropic-workspace-id': ctx.config.anthropicWorkspaceId } : {}) },
-    body: JSON.stringify({ model: ctx.config.aiModel, max_tokens: 6000, system: STRATEGIST_PROMPT, messages: [{ role: 'user', content: `Dados consolidados da pessoa (valores em centavos):\n${JSON.stringify(facts, null, 1)}\n\nEntregue a análise completa na estrutura obrigatória.` }] }),
+    body: JSON.stringify({ model: ctx.config.aiModel, max_tokens: 8000, system: STRATEGIST_PROMPT, messages: [{ role: 'user', content: `Dados consolidados da pessoa (valores em centavos):\n${JSON.stringify(facts, null, 1)}\n\nEntregue a análise completa na estrutura obrigatória.` }] }),
     signal: AbortSignal.timeout(170_000),
   });
   if (!res.ok) throw new Error(`anthropic_http_${res.status}`);
-  const data = (await res.json()) as { content?: Array<{ type: string; text?: string }> };
+  const data = (await res.json()) as { content?: Array<{ type: string; text?: string }>; stop_reason?: string };
   const text = (data.content ?? []).filter((c) => c.type === 'text').map((c) => c.text ?? '').join('\n').trim();
-  if (text.length < 600) throw new Error(`anthropic_resposta_curta_${text.length}`);
+  if (text.length < 600) throw new Error(`resposta_curta_${text.length}_${data.stop_reason ?? 'sem_parada'}_${(data.content ?? []).map((c) => c.type).join('+') || 'vazio'}`);
   return clean(text);
 }
 
