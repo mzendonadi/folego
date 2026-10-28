@@ -2197,3 +2197,56 @@ h1, h2, h3, .cat-head span, .lg-title strong, .inv-name { text-wrap: balance; }
 .acc-panel.swipe-next { animation: swipe-in-next .22s var(--ease); }
 .acc-panel.swipe-prev { animation: swipe-in-prev .22s var(--ease); }
 @media (prefers-reduced-motion: reduce) { .acc-panel.swipe-next, .acc-panel.swipe-prev { animation: none; } }
+
+/* =============================================================================
+   Refinamento mobile, parte 2: componentes compartilhados por todas as telas do Prumo
+   (balões, etiquetas, avisos, metas, dívidas, cartões, cenários, preferências, diálogos, avisos na tela).
+   ============================================================================= */
+@media (max-width: 760px) {
+  /* etiquetas e balões: texto longo quebra dentro do balão, alinhado à esquerda e com o mesmo respiro dos dois lados */
+  .pill { border-radius: 14px; line-height: 1.3; padding: 5px 12px; text-align: left; max-width: 100%; }
+  .note { padding: 12px; }
+  .note > .icon, .locked-box > .icon { flex: none; }
+  .note > span, .note > div, .note > p { min-width: 0; flex: 1 1 auto; margin: 0; }
+  .locked-box { padding: var(--s3); }
+  .locked-box > div { min-width: 0; }
+  .empty { padding: var(--s4); }
+  .input { min-width: 0; max-width: 100%; }
+
+  /* navegação de mês */
+  .month-nav { gap: var(--s2); }
+  .month-nav > strong, .month-nav > span { flex: 1; text-align: center; min-width: 0; }
+
+  /* metas, dívidas, cartões e cenários */
+  .goal-card { padding: var(--s4); }
+  .goal-nums strong { font-size: 1.4rem; }
+  .goal { flex-wrap: wrap; row-gap: var(--s2); }
+  .goal-history li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--s1, 4px) var(--s3); }
+  .debt-top { flex-wrap: wrap; row-gap: 4px; }
+  .cc-cats li { grid-template-columns: minmax(0, 1fr) auto; }
+  .cc-cats li > :nth-child(3) { grid-column: 1 / -1; }
+  .agenda-item, .milestone { grid-template-columns: 64px minmax(0, 1fr); gap: var(--s3); }
+  .challenges li { align-items: start; }
+  .scn-pair { grid-template-columns: 96px minmax(0, 1fr); }
+  .cc-table { font-size: 0.875rem; }
+  .cc-table th, .cc-table td { padding: 8px 4px; }
+
+  /* botões lado a lado dividem a linha em partes iguais */
+  .row-actions { display: flex; flex-wrap: wrap; gap: var(--s2); }
+  .row-actions > .btn { flex: 1 1 140px; justify-content: center; }
+
+  /* preferências de notificação: caixa de seleção no topo e texto na largura toda */
+  .pref-row .check { flex-wrap: nowrap; align-items: flex-start; }
+  .pref-row .check label { flex: 1; min-width: 0; }
+  .pref-row .check label span { display: block; }
+  .app-steps ol { padding-left: 1.2em; display: grid; gap: 6px; }
+
+  /* diálogos: ocupam a largura com folga e os botões ficam empilhados, todos do mesmo tamanho */
+  .dialog { width: calc(100% - 24px); max-height: 88dvh; }
+  .dialog-foot { flex-direction: column-reverse; align-items: stretch; gap: var(--s2); }
+  .dialog-foot .btn { width: 100%; justify-content: center; }
+
+  /* aviso na tela: acima da FôlIA, centralizado e com cantos que acompanham o texto em duas linhas */
+  .toast { bottom: calc(96px + env(safe-area-inset-bottom)); border-radius: 18px; text-align: center; padding: 12px 18px; }
+  body[data-route="account"] { padding-bottom: calc(112px + env(safe-area-inset-bottom)); }
+}
