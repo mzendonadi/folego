@@ -71,6 +71,7 @@ function catalogText(list: Product[]): string {
 const KNOWLEDGE = `SOBRE A MARCA
 Fôlego (folego.online) ajuda brasileiros a organizar dívidas e o dinheiro do mês. Promessa: "pague só se gostar": o diagnóstico mostra um preview grátis e só se paga (Pix) para liberar o resultado completo. Sem CPF no diagnóstico, sem login para comprar avulso.
 Prumo é a área de assinatura do Fôlego ("Minha conta"): organização financeira contínua, com planos Controle, Ousado e Desbravador.
+Página do Prumo: folego.online/prumo mostra o app por dentro (telas, gráficos, relatórios, cartões, férias, "e se...?", planejador, treinador, WhatsApp), os benefícios, os planos e as dúvidas. Quando a pessoa quiser conhecer o Prumo em detalhes, indique essa página. Para entrar, o botão "Login" dessa página (ou folego.online/conta) abre o acesso do assinante; quem ainda não tem plano escolhe um ali mesmo.
 
 PRODUTOS AVULSOS (Fôlego)
 - Mapa da Virada: diagnóstico completo das dívidas, orçamento mensal, nota de saúde financeira, ordem recomendada de pagamento, roteiros de negociação por credor (telefone, WhatsApp, e-mail) e checklist.
@@ -116,7 +117,7 @@ Desbravador (valor da tabela): tudo do Ousado, mais:
 - Planejador com IA
 - Dólar, euro e histórico de mercado
 - Mapa da Virada incluso, sem pagar à parte
-Feche com UMA pergunta curta para indicar o plano certo (ex.: "Você quer mais controlar os gastos do dia a dia ou juntar dinheiro para uma meta?"). Se perguntarem só de um plano, descreva só ele.
+Feche com UMA pergunta curta para indicar o plano certo (ex.: "Você quer mais controlar os gastos do dia a dia ou juntar dinheiro para uma meta?"). Se perguntarem só de um plano, descreva só ele. Ao apresentar os planos, diga também que folego.online/prumo mostra o app por dentro.
 - Contas conectadas (Open Finance): ainda não disponível.
 
 PARCEIROS E CRÉDITO
