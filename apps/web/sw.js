@@ -15,10 +15,10 @@ self.addEventListener('push', (event) => {
   }
   // Toda notificação recebida precisa aparecer (no iPhone, receber sem mostrar faz o sistema cancelar a permissão).
   event.waitUntil(
-    self.registration.showNotification(typeof d.title === 'string' && d.title ? d.title : 'Prumo', {
+    self.registration.showNotification(typeof d.title === 'string' && d.title ? d.title : 'Prumo Finanças', {
       body: typeof d.body === 'string' ? d.body : '',
-      icon: '/assets/icon-192.png',
-      badge: '/assets/favicon-32.png',
+      icon: '/assets/icon-192.png', // o "P" do Prumo
+      badge: '/assets/badge-96.png', // silhueta do "P" (a barra de status só usa a forma, em branco)
       tag: typeof d.tag === 'string' ? d.tag : undefined,
       lang: 'pt-BR',
       data: { url: safeUrl(d.url) },

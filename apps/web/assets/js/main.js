@@ -61,7 +61,7 @@ const TITLES = {
   translator: 'Tradutor de cobrança — Fôlego',
   guided: 'Guias sob medida — Fôlego',
   partner: 'Portal do parceiro — Fôlego',
-  account: 'Prumo, o app de finanças — Fôlego',
+  account: 'Prumo Finanças',
   prumo: 'Prumo — o app de finanças pessoais do Fôlego',
   unsubscribe: 'Cancelar e-mails — Fôlego',
 };
