@@ -5,6 +5,7 @@ import { el, icon, toast } from './dom.js';
 import { brl, todayISO } from './format.js';
 import { moneyInput } from './money.js';
 import { confirmDialog } from './confirm.js';
+import { donut, hbars, chartCard } from './charts.js';
 
 const card = (...c) => el('section', { class: 'card d-section' }, ...c.filter(Boolean));
 const dayBr = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
@@ -63,8 +64,12 @@ export function viewInvestimentos(ctx) {
     add.addEventListener('click', () => form(null));
 
     const list = tab === 'ativos' ? activeCards(data) : processingCards(data);
+    const held = new Map();
+    for (const x of data.investments.filter((i) => i.status === 'ativo' && i.view)) held.set(x.name, (held.get(x.name) ?? 0) + x.view.positionCents);
+    const composition = held.size > 0 ? chartCard('Composição da carteira', 'Quanto cada aplicação pesa no total investido.', donut([...held].map(([key, value]) => ({ key, label: key, value })), { interactive: true, totalLabel: 'Investido', label: 'Composição da carteira' }), hbars(data.investments.filter((i) => i.status === 'ativo' && i.view).map((i) => ({ key: i.id, label: `${i.name} (${dayBr(i.appliedOn)})`, value: i.view.yieldCents, tone: i.view.yieldCents < 0 ? 'neg' : undefined })), { interactive: true, label: 'Rendimento por aplicação' })) : null;
     root.replaceChildren(...[
       hero,
+      composition,
       card(el('div', { class: 'button-row' }, seg, add), list),
       data.investments.some((x) => x.status === 'resgatado') ? card(el('h3', {}, 'Resgatadas'), el('ul', { class: 'entries' }, ...data.investments.filter((x) => x.status === 'resgatado').map((x) => row(x)))) : null,
     ].filter(Boolean));
@@ -345,7 +350,8 @@ export function viewEstrategias(ctx) {
       d.report?.status === 'done' ? el('p', { class: 'fine muted' }, `Gerada em ${new Date(d.report.createdAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}.`) : null,
       body,
       el('p', { class: 'fine muted' }, 'Educação financeira com os seus números, não recomendação individual de investimento. Confirme taxas, impostos e condições com a instituição antes de agir.'));
-    root.replaceChildren(top, jogadas, strategist);
+    const balance = chartCard('O que você tem e o que deve', 'Dinheiro com liquidez contra dívidas, cheque especial e parcelas.', hbars([{ key: 'tem', label: 'Dinheiro com liquidez', value: s.liquidCents }, { key: 'deve', label: 'Dívidas, negativos e parcelas', value: s.debtsCents, tone: 'neg' }], { interactive: true, label: 'Dinheiro com liquidez contra dívidas' }));
+    root.replaceChildren(top, balance, jogadas, strategist);
   }
 
   show();

@@ -44,7 +44,7 @@ function client() {
 }
 type Client = ReturnType<typeof client>;
 const lastCode = () => /\b(\d{6})\b/.exec(mailbox.sent.at(-1)!.text)![1]!;
-async function assinante(email: string, plan: 'ousado' | 'desbravador' = 'desbravador'): Promise<Client> {
+async function assinante(email: string, plan: 'controle' | 'ousado' | 'desbravador' = 'desbravador'): Promise<Client> {
   const c = client();
   mailbox.sent.length = 0;
   await c('POST', '/api/account/login-code', { body: { email } });
@@ -194,7 +194,7 @@ test('FolIA do assinante: abre sem formulário, guarda a conversa na conta e o p
   const prompt = await memberSection(ctx(), lead.rows[0]!.subscriber_id!);
   assert.match(prompt, /Plano atual: Ousado/);
   assert.match(prompt, /NUNCA peça nome, celular, e-mail/);
-  assert.match(prompt, /Desbravador \(fatura do cartão em PDF/);
+  assert.match(prompt, /Desbravador \(gráficos interativos, Relatórios com filtros, fatura do cartão em PDF/);
   assert.match(prompt, /UMA pergunta curta/);
   // sem sessão de assinante, o endpoint não abre conversa de membro
   assert.equal((await client()('POST', '/api/chat/start-member')).status, 401);
@@ -255,4 +255,42 @@ test('investimentos: processado vira ativo; resgate parcial e total entram a cr�
   assert.equal(rest.json.closed, true);
   assert.equal((await c('GET', '/api/account/investments')).json.investments.find((i: any) => i.id === act).status, 'resgatado');
   assert.equal((await c('POST', `/api/account/investments/${act}/redeem`, { body: { amountCents: 100, date: '2026-10-26', walletId: wid } })).status, 422, 'já resgatada');
+});
+test('gráficos e relatórios: Controle só gráficos, Ousado relatório sem filtros, Desbravador com filtros; os números batem', async () => {
+  const ent = { entries: [
+    { date: '2026-10-02', amountCents: 500_000, note: 'SALARIO EXEMPLO', source: 'import' },
+    { date: '2026-10-03', amountCents: -100_000, note: 'MERCADO CENTRAL', category: 'mercado', source: 'import' },
+    { date: '2026-10-05', amountCents: -30_000, note: 'CINEMA', category: 'lazer', source: 'import' },
+    { date: '2026-09-10', amountCents: -20_000, note: 'MERCADO ANTIGO', category: 'mercado', source: 'import' },
+  ] };
+  const q = (from: string, to: string, extra = '') => `/api/account/reports?from=${from}&to=${to}${extra}`;
+
+  const c = await assinante('graf-controle@exemplo.com', 'controle');
+  await c('POST', '/api/account/entries', { body: ent });
+  const g = (await c('GET', '/api/account/charts?month=2026-10&months=2')).json;
+  assert.equal(g.totals.spendCents, 130_000);
+  assert.equal(g.totals.incomeCents, 500_000);
+  assert.deepEqual(g.series.map((s: any) => [s.month, s.spendCents]), [['2026-09', 20_000], ['2026-10', 130_000]]);
+  assert.equal(g.byCategory[0].category, 'mercado');
+  assert.equal((await c('GET', q('2026-10-01', '2026-10-31'))).status, 403, 'Controle não tem Relatórios');
+
+  const o = await assinante('graf-ousado@exemplo.com', 'ousado');
+  await o('POST', '/api/account/entries', { body: ent });
+  const r = (await o('GET', q('2026-10-01', '2026-10-31'))).json;
+  assert.equal(r.totals.spendCents, 130_000);
+  assert.equal(r.previous.totals.spendCents, 20_000, 'período anterior (mesma duração) para comparar');
+  assert.equal(r.top[0].note, 'MERCADO CENTRAL');
+  assert.equal(r.rows.length, 3);
+  assert.equal((await o('GET', q('2026-10-01', '2026-10-31', '&category=lazer'))).status, 403, 'filtro é do Desbravador');
+  assert.equal((await o('GET', q('2026-10-31', '2026-10-01'))).status, 422);
+
+  const d = await assinante('graf-desb@exemplo.com', 'desbravador');
+  await d('POST', '/api/account/entries', { body: ent });
+  const f = (await d('GET', q('2026-09-01', '2026-10-31', '&category=mercado&kind=gasto'))).json;
+  assert.equal(f.filtered, true);
+  assert.equal(f.totals.spendCents, 120_000);
+  assert.deepEqual(f.series.map((s: any) => s.spendCents), [20_000, 100_000]);
+  const s = (await d('GET', q('2026-09-01', '2026-10-31', '&q=cinema'))).json;
+  assert.equal(s.totals.spendCents, 30_000);
+  assert.equal((await d('GET', q('2026-09-01', '2026-10-31', '&q=%25'))).json.totals.count, 0, 'o texto é literal, não curinga');
 });

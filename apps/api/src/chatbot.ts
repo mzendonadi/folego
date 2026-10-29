@@ -81,9 +81,9 @@ PRODUTOS AVULSOS (Fôlego)
 - Calculadora de prescrição e guias de direitos são gratuitos.
 
 PRUMO (assinatura mensal paga NO CARTÃO DE CRÉDITO, todo mês; cancelamento em um clique dentro do app. A assinatura do Prumo NÃO é por Pix.)
-- Controle: controle de gastos e orçamento, Lançar rápido (escrever ou fotografar o comprovante), assistente no WhatsApp (a pessoa manda texto "mercado 45", um áudio ou a foto do cupom e o gasto é lançado), importação de extrato (CSV/OFX/PDF), lançamentos organizados por conta e por cartão (resumo que abre ao tocar; qualquer lançamento pode ser editado depois de importado), alertas e lembretes, controle de dívidas, treinador financeiro limitado, indicadores de mercado.
-- Ousado: tudo do Controle + metas, treinador financeiro completo (IA), jornadas, orçamento da casa/família, cartões de crédito (limite, fatura, vencimento e parcelas; a fatura do cartão fica separada do extrato, sem gasto em dobro; quem paga parte da fatura e parcela o resto registra isso em "Parcelei o restante": o Prumo liga o pagamento à fatura, cria as parcelas nas faturas seguintes e mostra os juros), e-book de presente, cenários, Planejar férias (formulário simples, sozinho ou em família: divisão do orçamento, quanto guardar por mês e checklist completo que muda com o tipo de viagem: carro, avião, ônibus, motorhome ou navio).
-- Desbravador: tudo do Ousado + importar a fatura do cartão em PDF (o Prumo lê, confere a soma, atualiza o limite e cadastra o cartão novo; também dá para mandar o PDF pelo WhatsApp), estratégias e custo do rotativo, aba Investimentos (lança as aplicações e mostra total investido, rendimento e imposto estimado, em ativas e em processamento), aba Estratégias (dicas de arbitragem entre contas, aplicações, dívidas e imposto, e a análise completa de um estrategista financeiro por IA; é educação financeira, não recomendação de produto), saldo da conta que considera o negativo que já vinha de antes, roteiro de viagem completo escrito por IA (dia a dia, para o tipo de viagem escolhido, com checklist extra), dólar e euro com histórico no Cenário econômico, simulador, planejador com IA, mercado profissional (dólar e histórico) e o Mapa da Virada incluso.
+- Controle: controle de gastos e orçamento, Lançar rápido (escrever ou fotografar o comprovante), assistente no WhatsApp (a pessoa manda texto "mercado 45", um áudio ou a foto do cupom e o gasto é lançado), importação de extrato (CSV/OFX/PDF), lançamentos organizados por conta e por cartão (resumo que abre ao tocar; qualquer lançamento pode ser editado depois de importado), gráficos do mês na Visão geral e no Orçamento (gastos por categoria, entrou e saiu mês a mês, gasto contra o limite), alertas e lembretes, controle de dívidas, treinador financeiro limitado, indicadores de mercado.
+- Ousado: tudo do Controle + gráficos em todas as telas (dia a dia, por conta e cartão, saldo das carteiras, limite dos cartões, dívidas, metas e cobranças) e o menu Relatórios (mês, 3 meses, 12 meses e ano, com comparação com o período anterior, maiores gastos, planilha CSV e PDF) + metas, treinador financeiro completo (IA), jornadas, orçamento da casa/família, cartões de crédito (limite, fatura, vencimento e parcelas; a fatura do cartão fica separada do extrato, sem gasto em dobro; quem paga parte da fatura e parcela o resto registra isso em "Parcelei o restante": o Prumo liga o pagamento à fatura, cria as parcelas nas faturas seguintes e mostra os juros), e-book de presente, cenários, Planejar férias (formulário simples, sozinho ou em família: divisão do orçamento, quanto guardar por mês e checklist completo que muda com o tipo de viagem: carro, avião, ônibus, motorhome ou navio).
+- Desbravador: tudo do Ousado + gráficos interativos (valores ao passar o mouse ou tocar, categoria que se destaca ao tocar) e Relatórios com filtros por categoria, conta, cartão, tipo, texto e datas + importar a fatura do cartão em PDF (o Prumo lê, confere a soma, atualiza o limite e cadastra o cartão novo; também dá para mandar o PDF pelo WhatsApp), estratégias e custo do rotativo, aba Investimentos (lança as aplicações e mostra total investido, rendimento e imposto estimado, em ativas e em processamento), aba Estratégias (dicas de arbitragem entre contas, aplicações, dívidas e imposto, e a análise completa de um estrategista financeiro por IA; é educação financeira, não recomendação de produto), saldo da conta que considera o negativo que já vinha de antes, roteiro de viagem completo escrito por IA (dia a dia, para o tipo de viagem escolhido, com checklist extra), dólar e euro com histórico no Cenário econômico, simulador, planejador com IA, mercado profissional (dólar e histórico) e o Mapa da Virada incluso.
 - Mapa da Virada para assinante Ousado tem preço especial (pago no Pix, por ser compra avulsa; acesso de 90 dias); no Desbravador já está incluso. Confirme o valor na tabela de preços abaixo.
 
 COMO APRESENTAR OS PLANOS DO PRUMO (quando perguntarem o que o Prumo é, os planos, diferenças ou "o que eu levo em cada um")
@@ -93,10 +93,12 @@ Controle (valor da tabela)
 - Importação do extrato do banco (CSV/OFX/PDF)
 - Lançar rápido: escrever ou fotografar o comprovante
 - Assistente no WhatsApp: mandar texto, áudio ou foto do cupom e o gasto é lançado
+- Gráficos do mês (por categoria e mês a mês)
 - Alertas e lembretes de contas
 - Controle das suas dívidas
 - Treinador financeiro (versão básica)
 Ousado (valor da tabela): tudo do Controle, mais:
+- Gráficos em todas as telas e menu Relatórios (planilha e PDF)
 - Metas (juntar dinheiro para um objetivo)
 - Planejar férias: orçamento dividido, quanto guardar por mês e checklist completo
 - Treinador financeiro completo, com IA
@@ -105,6 +107,7 @@ Ousado (valor da tabela): tudo do Controle, mais:
 - Jornadas e cenários para decidir melhor
 - E-book de presente
 Desbravador (valor da tabela): tudo do Ousado, mais:
+- Gráficos interativos e Relatórios com filtros
 - Fatura do cartão em PDF lida e conferida (também pelo WhatsApp)
 - Investimentos: total investido, rendimento e imposto estimado das suas aplicações
 - Estratégias: dicas de como pagar menos juros e menos imposto, com análise por IA
@@ -164,12 +167,12 @@ LIMITES QUE NÃO MUDAM
 // ---------------------------------------------------------------------------------------------------------------------
 const MEMBER_TABS: Record<'controle' | 'ousado' | 'desbravador', string> = {
   controle: 'Visão geral (saldo do mês e, se houver conta, o saldo da conta com o negativo que já vinha de antes), Lançamentos (separados por conta e por cartão, com resumo que abre ao tocar; qualquer lançamento pode ser editado, inclusive importado; Lançar rápido por texto, voz ou foto; importar extrato CSV, OFX ou PDF, com opção de acertar o saldo da carteira pelo saldo do extrato), Orçamento, Cobranças, Carteiras (contas, cheque especial, taxa e dias do limite sem juros), Lembretes, Dívidas, Cofre, Mercado, Treinador básico, assistente no WhatsApp.',
-  ousado: 'Tudo do Controle e mais: Metas, Cartões (limite, faturas, parcelas; em Faturas, o botão "Parcelei o restante" liga o pagamento à fatura, cria as parcelas nas faturas seguintes e registra os juros), Férias (orçamento, quanto guardar por mês e checklist), E se...? (cenários), Compartilhar a conta, Treinador completo e jornadas.',
-  desbravador: 'Tudo do Ousado e mais: fatura do cartão em PDF lida e conferida, Planejador com IA, Simulador, roteiro de viagem por IA, dólar e euro com histórico, Investimentos (total investido, rendimento e imposto estimado, aplicações ativas e em processamento), Estratégias (jogadas de arbitragem: dias do limite sem juros, resgatar ou manter aplicação, qual dívida atacar primeiro, janelas de imposto; e a análise completa do Estrategista financeiro por IA) e o Mapa da Virada incluso.',
+  ousado: 'Tudo do Controle e mais: gráficos em todas as telas e o menu Relatórios (períodos prontos, planilha CSV e PDF), Metas, Cartões (limite, faturas, parcelas; em Faturas, o botão "Parcelei o restante" liga o pagamento à fatura, cria as parcelas nas faturas seguintes e registra os juros), Férias (orçamento, quanto guardar por mês e checklist), E se...? (cenários), Compartilhar a conta, Treinador completo e jornadas.',
+  desbravador: 'Tudo do Ousado e mais: gráficos interativos e Relatórios com filtros por categoria, conta, cartão, tipo, texto e datas, fatura do cartão em PDF lida e conferida, Planejador com IA, Simulador, roteiro de viagem por IA, dólar e euro com histórico, Investimentos (total investido, rendimento e imposto estimado, aplicações ativas e em processamento), Estratégias (jogadas de arbitragem: dias do limite sem juros, resgatar ou manter aplicação, qual dívida atacar primeiro, janelas de imposto; e a análise completa do Estrategista financeiro por IA) e o Mapa da Virada incluso.',
 };
 const NEXT_PLAN: Record<'controle' | 'ousado' | 'desbravador', string> = {
-  controle: 'Ousado (metas, cartões de crédito com faturas e parcelas, planejar férias, cenários "e se...?", conta compartilhada, treinador completo) e, acima dele, Desbravador',
-  ousado: 'Desbravador (fatura do cartão em PDF, planejador com IA, simulador, roteiro de viagem por IA, dólar e euro, aba Investimentos, aba Estratégias com o Estrategista por IA, Mapa da Virada incluso)',
+  controle: 'Ousado (gráficos em todas as telas e Relatórios, metas, cartões de crédito com faturas e parcelas, planejar férias, cenários "e se...?", conta compartilhada, treinador completo) e, acima dele, Desbravador',
+  ousado: 'Desbravador (gráficos interativos, Relatórios com filtros, fatura do cartão em PDF, planejador com IA, simulador, roteiro de viagem por IA, dólar e euro, aba Investimentos, aba Estratégias com o Estrategista por IA, Mapa da Virada incluso)',
   desbravador: '(a pessoa já tem o plano mais completo: nada acima para oferecer)',
 };
 

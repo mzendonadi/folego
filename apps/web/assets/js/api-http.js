@@ -306,6 +306,13 @@ export async function redeemInvestment(id, body) {
 export async function processInvestment(id, body) {
   return request('POST', `/account/investments/${id}/process`, { body });
 }
+/** Gráficos das telas e Relatórios. */
+export async function getCharts(month, months = 6) {
+  return request('GET', `/account/charts?month=${month}&months=${months}`);
+}
+export async function getReport(query) {
+  return request('GET', `/account/reports?${query}`);
+}
 export async function getStrategies() {
   return request('GET', '/account/strategies');
 }

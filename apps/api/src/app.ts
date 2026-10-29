@@ -26,6 +26,7 @@ import * as avatar from './avatar.ts';
 import * as cards from './cards.ts';
 import * as trips from './trips.ts';
 import * as investmentsApi from './investments.ts';
+import * as reportsApi from './reports.ts';
 import * as strategiesApi from './strategies.ts';
 import * as debts from './account-debts.ts';
 import { askPlanner } from './planner.ts';
@@ -733,6 +734,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // Carteiras e lembretes
   // Cartões de crédito: Ousado (cadastro, limite, fatura, parcelas) e Desbravador (também fatura em PDF e estratégias)
   // Planejar férias (Ousado) e roteiro com IA (Desbravador)
+  // Gráficos (Controle em diante) e Relatórios (Ousado em diante; com filtros no Desbravador)
+  app.get('/api/account/charts', async (req) => reportsApi.chartsOverview(ctx, await requireSubscriber(req), reportsApi.chartsQuerySchema.parse(req.query)));
+  app.get('/api/account/reports', async (req) => reportsApi.report(ctx, await requireSubscriber(req), reportsApi.reportQuerySchema.parse(req.query)));
   // Investimentos e Estratégias (Desbravador)
   app.get('/api/account/investments', async (req) => investmentsApi.listInvestments(ctx, await requireSubscriber(req)));
   app.post('/api/account/investments', async (req, reply) => reply.status(201).send({ id: await investmentsApi.createInvestment(ctx, await requireSubscriber(req), investmentSchema.parse(req.body)) }));

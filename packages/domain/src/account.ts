@@ -6,7 +6,7 @@ import { addDaysIso, formatBrl } from './calendar.ts';
 // Planos
 // ---------------------------------------------------------------------------
 export type PlanCode = 'controle' | 'ousado' | 'desbravador';
-export type Feature = 'health' | 'debts' | 'reminders' | 'ledger' | 'import' | 'alerts' | 'coach_limited' | 'goals' | 'coach' | 'simulator' | 'planner' | 'journeys' | 'market' | 'market_pro' | 'household' | 'ebook' | 'recurring' | 'scenarios' | 'map_member' | 'map_included' | 'cards' | 'cards_pro' | 'trips' | 'trips_ai' | 'investments' | 'strategies';
+export type Feature = 'health' | 'debts' | 'reminders' | 'ledger' | 'import' | 'alerts' | 'coach_limited' | 'goals' | 'coach' | 'simulator' | 'planner' | 'journeys' | 'market' | 'market_pro' | 'household' | 'ebook' | 'recurring' | 'scenarios' | 'map_member' | 'map_included' | 'cards' | 'cards_pro' | 'trips' | 'trips_ai' | 'investments' | 'strategies' | 'charts' | 'charts_screens' | 'charts_interactive' | 'reports' | 'reports_filters';
 
 export interface Plan {
   code: PlanCode;
@@ -23,19 +23,19 @@ export const PLANS: Plan[] = [
   {
     code: 'controle', name: 'Controle', priceCents: 1999, productCode: 'sub_controle',
     tagline: 'Saber para onde vai o dinheiro e organizar o mês',
-    features: ['health', 'ledger', 'import', 'alerts', 'debts', 'reminders', 'coach_limited', 'market', 'recurring'],
+    features: ['health', 'ledger', 'import', 'alerts', 'debts', 'reminders', 'coach_limited', 'market', 'recurring', 'charts'],
     soon: [],
   },
   {
     code: 'ousado', name: 'Ousado', priceCents: 3999, productCode: 'sub_ousado',
     tagline: 'Sair do vermelho, criar reserva e cumprir metas',
-    features: ['health', 'ledger', 'import', 'alerts', 'debts', 'reminders', 'goals', 'coach', 'market', 'journeys', 'household', 'ebook', 'recurring', 'scenarios', 'cards', 'trips', 'map_member'],
+    features: ['health', 'ledger', 'import', 'alerts', 'debts', 'reminders', 'goals', 'coach', 'market', 'journeys', 'household', 'ebook', 'recurring', 'scenarios', 'cards', 'trips', 'charts', 'charts_screens', 'reports', 'map_member'],
     soon: [],
   },
   {
     code: 'desbravador', name: 'Desbravador', priceCents: 5999, productCode: 'sub_desbravador',
     tagline: 'Tudo, mais planejador com IA, dólar e histórico de mercado',
-    features: ['health', 'ledger', 'import', 'alerts', 'debts', 'reminders', 'goals', 'coach', 'simulator', 'planner', 'market', 'journeys', 'market_pro', 'household', 'ebook', 'recurring', 'scenarios', 'cards', 'cards_pro', 'trips', 'trips_ai', 'investments', 'strategies', 'map_included'],
+    features: ['health', 'ledger', 'import', 'alerts', 'debts', 'reminders', 'goals', 'coach', 'simulator', 'planner', 'market', 'journeys', 'market_pro', 'household', 'ebook', 'recurring', 'scenarios', 'cards', 'cards_pro', 'trips', 'trips_ai', 'investments', 'strategies', 'charts', 'charts_screens', 'charts_interactive', 'reports', 'reports_filters', 'map_included'],
     soon: ['Contas conectadas (Open Finance): depende de parceiro autorizado pelo Banco Central.'],
   },
 ];

@@ -7,6 +7,7 @@ import { PLANS } from '../vendor/engine.js';
 import { FEATURE_LABEL, TABS, VIEWS, NEEDS_MONTH, monthNow } from './account-views.js';
 import { drawCardCheckout, billingHeader, cancelNotice } from './account-billing.js';
 import { installBanner, pushBanner, registerWorker } from './account-app.js';
+import { chartsForTab } from './account-charts-views.js';
 import { hideHeaderAvatar, showHeaderAvatar } from './account-avatar.js';
 
 const card = (...c) => el('section', { class: 'card d-section' }, ...c.filter(Boolean));
@@ -303,6 +304,12 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
         const view = VIEWS[id](ctx);
         const invite = id === 'coach' || id === 'geral' ? installBanner(showTab) : null; // convite para instalar o app (some ao instalar ou dispensar)
         const pushInvite = id === 'coach' || id === 'geral' ? pushBanner(ctx) : null; // convite para ligar as notificações neste aparelho
+        // Gráficos (por plano): entram logo depois de "Para onde foi o dinheiro" na Visão geral e no fim das demais telas; nada que já existia sai
+        const extra = chartsForTab(id, ctx);
+        if (extra && view?.children) {
+          const anchor = id === 'geral' ? [...view.children].find((k) => /Para onde foi/.test(k.querySelector?.('h2')?.textContent ?? '')) : null;
+          if (anchor) anchor.after(extra); else view.append(extra);
+        }
         const invites = [invite, pushInvite].filter(Boolean);
         const kids = id === 'geral' && invites.length ? [...(view.children ?? [])] : [];
         if (kids.length) {
