@@ -115,7 +115,7 @@ await copyFile(rel('robots-open.txt'), path.join(dist, 'robots-open.txt'));
 await copyFile(rel('sitemap.xml'), path.join(dist, 'sitemap.xml'));
 await copyFile(rel('assets/og-image.png'), path.join(dist, 'assets/og-image.png'));
 // Identidade: ícones do app, favicon em PNG e manifesto (instalar na tela inicial)
-for (const n of ['apple-touch-icon.png', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'favicon-32.png']) await copyFile(rel(`assets/${n}`), path.join(dist, `assets/${n}`));
+for (const n of ['apple-touch-icon.png', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'favicon-32.png', 'badge-96.png']) await copyFile(rel(`assets/${n}`), path.join(dist, `assets/${n}`));
 await copyFile(rel('site.webmanifest'), path.join(dist, 'site.webmanifest'));
 await copyFile(rel('sw.js'), path.join(dist, 'sw.js')); // service worker do Prumo instalado: precisa estar na raiz para valer para /conta
 
