@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Página não encontrada — Fôlego</title>
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#F6F3EC" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0E1714" media="(prefers-color-scheme: dark)">
+  <meta name="color-scheme" content="light dark">
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32">
+  <!-- Sem <style> aqui: a CSP do site (deploy/nginx/folego.conf, idêntica à de apps/api/src/security.ts) só
+       libera style-src 'self' (sem 'unsafe-inline') — ela permite inline nos ATRIBUTOS style="" (style-src-attr),
+       então os ajustes deste layout usam atributo, nunca <style>/<link> extra. -->
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+  <main class="wrap center" style="min-height: 100svh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--s5); padding-block: var(--s6);">
+    <svg viewBox="0 0 32 32" aria-hidden="true" focusable="false" style="width: 40px; height: 40px; color: var(--primary);">
+      <circle cx="16" cy="16" r="11.5" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-dasharray="56.05 16.2" transform="rotate(-62 16 16)"/>
+      <circle cx="13.51" cy="4.77" r="1.9" fill="currentColor"/>
+      <circle cx="16" cy="16" r="4.6" fill="currentColor"/>
+    </svg>
+    <h1 style="font-family: var(--font-display); font-size: clamp(28px, 5vw, 40px); margin: 0;">Essa página a gente não achou</h1>
+    <p style="color: var(--muted); max-width: 48ch; margin: 0;">O endereço pode ter mudado ou nunca existiu. Volta pro início ou continua de onde parou no Mapa.</p>
+    <div class="hero-cta">
+      <a class="btn btn-primary" href="/">Ir para a página inicial</a>
+      <a class="btn btn-secondary" href="/conta">Abrir meu Mapa</a>
+    </div>
+  </main>
+</body>
+</html>

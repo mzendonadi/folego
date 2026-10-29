@@ -107,6 +107,9 @@ await copyVendorRuntime(path.join(dist, 'assets/vendor')); // ver função acima
 await copyFile(rel('assets/favicon.svg'), path.join(dist, 'assets/favicon.svg'));
 await copyFile(rel('assets/config.js'), path.join(dist, 'assets/config.js'));
 await copyFile(rel('robots.txt'), path.join(dist, 'robots.txt'));
+// Página de erro 404 com a marca (ver deploy/nginx/folego.conf: error_page 404 /404.html). Sem hash no nome
+// de propósito: é o fallback da própria config do nginx, não pode depender do build atual achar o arquivo certo.
+await copyFile(rel('404.html'), path.join(dist, '404.html'));
 // Usados só quando SEO_OPEN=1 no servidor (deploy.sh troca o robots.txt e publica o sitemap).
 await copyFile(rel('robots-open.txt'), path.join(dist, 'robots-open.txt'));
 await copyFile(rel('sitemap.xml'), path.join(dist, 'sitemap.xml'));
