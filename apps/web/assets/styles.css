@@ -1666,28 +1666,7 @@ body[data-route="partner"] #view-partner .tools-layout { display: block; max-wid
 .form-std .btn[type="submit"], .form-std > .btn { grid-column: 1 / -1; justify-self: center; min-width: 240px; justify-content: center; }
 @media (max-width: 620px) { .form-std .btn[type="submit"], .form-std > .btn { width: 100%; min-width: 0; } }
 
-/* Tela Cartões: cabeçalhos, números e ações centralizados. */
-.cc-screen .card > h2, .cc-screen .card > .section-sub, .cc-screen .card > .muted { text-align: center; }
-.cc-screen .cc-top { flex-direction: column; align-items: center; text-align: center; }
-.cc-screen .cc-top > div, .cc-screen .cc-add { width: 100%; }
-.cc-screen .cc-add > summary { justify-content: center; margin-inline: auto; width: fit-content; min-width: 240px; }
-.cc-screen .lis-block { text-align: center; }
-.cc-screen .cc-tile { position: relative; }
-.cc-screen .cc-head { flex-direction: column; text-align: center; gap: var(--s2); }
-.cc-screen .cc-head .icon-btn { position: absolute; top: 10px; right: 10px; }
-.cc-screen .cc-stat { text-align: center; justify-items: center; }
-.cc-screen .cc-acts { justify-content: center; }
-.cc-screen .cc-area { display: grid; justify-items: center; }
-.cc-screen .cc-area:empty { display: none; }
-.cc-screen .cc-panel-body { width: 100%; max-width: 760px; margin-inline: auto; }
-.cc-screen .cc-panel-body > p, .cc-screen .cc-panel-body > h4 { text-align: center; }
-.cc-screen .button-row { justify-content: center; }
-.cc-screen .locked-box { justify-content: center; text-align: left; }
-.cc-screen .note { justify-content: center; text-align: left; }
-@media (max-width: 620px) {
-  .cc-screen .cc-stat { grid-template-columns: 1fr; justify-items: center; }
-  .cc-screen .cc-stat .fine { grid-column: auto; }
-}
+/* Tela Cartões: segue o mesmo padrão das demais telas (alinhada à esquerda); os ajustes ficam no fim do arquivo. */
 
 /* Tela Metas: título, abertura do formulário e modelos centralizados, no mesmo padrão dos Cartões. */
 .meta-screen .card > h2 { text-align: center; }
@@ -2288,3 +2267,46 @@ h1, h2, h3, .cat-head span, .lg-title strong, .inv-name { text-wrap: balance; }
   width: min(1120px, calc(100% - 2 * var(--gutter))); height: 1px;
   background: linear-gradient(90deg, transparent, var(--line) 18%, var(--line) 82%, transparent);
 }
+
+/* =============================================================================
+   Padronização: cartões, botões, texto do Estrategista e impressão
+   ============================================================================= */
+/* botões: rótulo equilibrado e ícone com tamanho fixo em qualquer tela */
+.btn { text-align: center; text-wrap: balance; }
+.btn .icon { flex: none; }
+summary.btn { list-style: none; }
+summary.btn::-webkit-details-marker { display: none; }
+.btn:focus-visible, .seg-btn:focus-visible, .acc-tab:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+/* cartões: as ações do topo ficam juntas, com o mesmo tamanho e espaço entre elas */
+.cc-top-actions { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.cc-top-actions .cc-add { margin: 0; }
+@media (max-width: 760px) {
+  .cc-top { flex-direction: column; align-items: stretch; }
+  .cc-top-actions { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .cc-top-actions > * { min-width: 0; }
+  .cc-add > summary { width: 100%; justify-content: center; }
+}
+
+/* filhos de grade nunca alargam o cartão (era o que empurrava o texto do Estrategista para fora da tela) */
+.acc-stack > *, .d-section > * { min-width: 0; }
+.md { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.md-table-wrap { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.md-table { min-width: 100%; }
+@media (max-width: 760px) {
+  .md-table-wrap { margin-inline: 0; padding-inline: 0; }
+  .md-table th, .md-table td { padding: 8px; font-size: 0.875rem; overflow-wrap: normal; }
+  .md-table td:first-child, .md-table th:first-child { min-width: 128px; }
+}
+
+/* impressão (Férias, Lançamentos...): a regra antiga escondia todas as telas menos a de entrega, e a conta saía em branco */
+@page { margin: 14mm; }
+@media print {
+  html body main section#view-account:not([hidden]) { display: block !important; }
+  .acc-tabs, .acc-bar, .app-invite, .fl-chat, .cookie-bar, #acc-profile-btn, .acc-avatar { display: none !important; }
+  .acc-shell { display: block; margin: 0; }
+  body[data-route="account"] { padding-bottom: 0; }
+  .acc-panel, .d-section { gap: 12px; }
+}
+@media print { .reveal { opacity: 1 !important; transform: none !important; } }
+
