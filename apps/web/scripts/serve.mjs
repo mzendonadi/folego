@@ -20,7 +20,7 @@ http.createServer(async (req, res) => {
     else {
       let clean = decodeURIComponent(url.pathname);
       // Endereços limpos do site (/conta, /pagamento...) entregam o index.html, como o servidor real.
-      if (/^\/(diagnostico|processando|resultado|pagamento|mapa|complemento|ferramentas|tradutor|guia|parceiros|conta|descadastrar|acesso)(\/.*)?$/.test(clean)) clean = '/';
+      if (/^\/(diagnostico|processando|resultado|pagamento|mapa|complemento|ferramentas|tradutor|guia|parceiros|conta|prumo|descadastrar|acesso)(\/.*)?$/.test(clean)) clean = '/';
       else if (/^\/gestao\/.+/.test(clean)) clean = '/gestao/';
       file = path.resolve(root, `.${clean === '/' ? '/index.html' : clean}`);
       if (!file.startsWith(root) || file.includes(`${path.sep}node_modules${path.sep}`) || file.includes(`${path.sep}scripts${path.sep}`)) {

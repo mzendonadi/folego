@@ -10,6 +10,7 @@ import { renderTranslator } from './translator.js';
 import { renderGuided, renderGuideList, GUIDES } from './guided.js';
 import { renderPartner } from './partner.js';
 import { renderAccount } from './account.js';
+import { renderPrumoLanding } from './prumo-landing.js';
 import { renderUnsubscribe } from './unsubscribe.js';
 import { renderResumeBanner } from './banner.js';
 import { initChat } from './chat.js';
@@ -45,6 +46,7 @@ const ROUTES = {
   guided: '/guia',
   partner: '/parceiros',
   account: '/conta',
+  prumo: '/prumo',
   unsubscribe: '/descadastrar',
 };
 const TITLES = {
@@ -60,9 +62,10 @@ const TITLES = {
   guided: 'Guias sob medida — Fôlego',
   partner: 'Portal do parceiro — Fôlego',
   account: 'Prumo, o app de finanças — Fôlego',
+  prumo: 'Prumo — o app de finanças pessoais do Fôlego',
   unsubscribe: 'Cancelar e-mails — Fôlego',
 };
-const HEADINGS = { intake: '#intake-title', processing: '#processing-title', preview: '#preview-title', checkout: '#checkout-title', addon: '#checkout-title', translator: '#translator-title', guided: '#guided-title', delivery: '#delivery-title', tools: '#tools-title' };
+const HEADINGS = { intake: '#intake-title', processing: '#processing-title', preview: '#preview-title', checkout: '#checkout-title', addon: '#checkout-title', translator: '#translator-title', guided: '#guided-title', delivery: '#delivery-title', tools: '#tools-title', prumo: '#pm-title' };
 
 // Assinante do Prumo: preço e uso do Mapa vêm do servidor (Ousado paga o valor dele, Desbravador usa incluso). Só perguntamos
 // quando este navegador já entrou numa conta, para não gerar chamadas à toa para visitantes.
@@ -260,6 +263,7 @@ async function route() {
     }
   }
   if (view === 'tools') renderTools($('#tools-root'), { onStart: () => startFlow() });
+  if (view === 'prumo') renderPrumoLanding();
   if (view === 'preview' || view === 'checkout') {
     if (!(await ensurePreview())) return replaceWith('intake');
     await loadMapOffer();

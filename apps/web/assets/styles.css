@@ -2411,3 +2411,73 @@ button.ch-h-row:hover, .ch-h-row.is-on { background: var(--sunken); }
   .ch-bar, .ch-fill, .ch-arc, .ch-dot, .ch-area { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   .ch-card, .rel .card { break-inside: avoid; }
 }
+
+/* =============================================================================
+   Marketing do Prumo: banner na home e a landing exclusiva (/prumo). Mesmos tokens, tipografia e ritmo da landing do Fôlego.
+   ============================================================================= */
+.prumo-banner { position: relative; overflow: hidden; display: grid; gap: var(--s5); align-items: center; margin-top: var(--s6); padding: var(--s6) var(--s5); border-radius: 26px; background: var(--cta-bg); color: var(--cta-ink); }
+@media (min-width: 820px) { .prumo-banner { grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.7fr); padding: var(--s7); } }
+.pb-copy { display: grid; gap: var(--s3); justify-items: start; }
+.pb-badge { width: 44px; height: 44px; }
+.pb-copy h3 { color: var(--cta-ink); font-size: clamp(1.65rem, 1.1rem + 2vw, 2.45rem); line-height: 1.12; max-width: 20ch; }
+.pb-copy p { margin: 0; max-width: 46ch; color: color-mix(in srgb, var(--cta-ink) 88%, transparent); }
+.pb-btn { margin-top: var(--s2); background: var(--cta-ink); color: var(--cta-bg); }
+.pb-btn:hover { background: var(--cta-ink); color: var(--cta-bg); box-shadow: 0 10px 24px -10px rgba(0, 0, 0, 0.5); }
+.pb-art { width: 100%; max-width: 320px; height: auto; justify-self: center; }
+
+.pm-top { padding-top: var(--s4); }
+.pm-hero { padding-block: clamp(24px, 5vw, 56px) clamp(48px, 7vw, 88px); }
+.pm-hero-grid { display: grid; gap: var(--s7); align-items: center; }
+@media (min-width: 960px) { .pm-hero-grid { grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr); } }
+.pm-hero-copy { display: grid; gap: var(--s4); justify-items: start; min-width: 0; }
+.pm-hero-copy h1 { font-size: clamp(2.2rem, 1.4rem + 3.6vw, 3.9rem); line-height: 1.05; letter-spacing: -0.02em; max-width: 17ch; }
+.pm-hero-copy .lead { max-width: 52ch; color: var(--ink-2); }
+.pm-hero-demo { min-width: 0; }
+.pm-hero-top { display: flex; justify-content: space-between; align-items: center; gap: var(--s3); }
+.pm-demo { transform: none; align-content: start; min-width: 0; }
+.pm-demo .ch-donut-body { grid-template-columns: minmax(0, 1fr); justify-items: center; }
+.pm-demo .ch-donut-body svg { max-width: 220px; }
+.pm-demo .ch-legend { width: 100%; }
+.pm-demo .ch-l-name { overflow-wrap: normal; }
+
+.pm-benefits { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s4); grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr)); }
+.pm-benefits .card h3 { font-size: 1.2rem; margin: 0 0 var(--s2); }
+.pm-benefits .card p { margin: 0; color: var(--ink-2); }
+
+.pm-tabs { display: flex; gap: 8px; overflow-x: auto; padding: 4px 2px var(--s4); scrollbar-width: none; }
+.pm-tabs::-webkit-scrollbar { display: none; }
+.pm-tab { flex: none; min-height: 44px; padding: 0 18px; border: 1.5px solid var(--field); border-radius: 999px; background: var(--surface); color: var(--ink); font: inherit; font-weight: 700; cursor: pointer; transition: background-color 0.18s var(--ease), color 0.18s var(--ease), border-color 0.18s var(--ease); }
+.pm-tab:hover { border-color: var(--primary); }
+.pm-tab[aria-selected="true"] { background: var(--primary); border-color: var(--primary); color: var(--primary-ink); }
+.pm-tab:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.pm-pane { display: grid; gap: var(--s6); align-items: start; }
+@media (min-width: 900px) { .pm-pane { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: var(--s7); } }
+.pm-pane-copy { display: grid; gap: var(--s3); align-content: start; }
+.pm-pane-copy h3 { font-size: clamp(1.5rem, 1.2rem + 1.2vw, 2rem); }
+.pm-plan { margin: 0; font-weight: 700; font-size: 0.9375rem; color: var(--primary); }
+.pm-stack { display: grid; gap: var(--s4); min-width: 0; }
+.pm-stack h4 { margin: 0; font-family: var(--font-body); font-size: 1rem; }
+.pm-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.pm-fake-actions { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.pm-fake-actions .btn { pointer-events: none; }
+.pm-chat { display: grid; gap: 10px; }
+.pm-msg { max-width: 86%; padding: 10px 14px; border-radius: 16px; }
+.pm-msg p { margin: 0; }
+.pm-msg.me { justify-self: end; background: var(--mint); color: var(--mint-ink); border-bottom-right-radius: 4px; }
+.pm-msg.bot { background: var(--paper); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+
+.pm-stats { list-style: none; margin: 0 0 var(--s4); padding: 0; display: grid; gap: var(--s4); grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); }
+.pm-big { display: block; font-family: var(--font-display); font-size: clamp(1.9rem, 1.4rem + 1.6vw, 2.6rem); font-weight: 500; line-height: 1.1; color: var(--primary); }
+.pm-big span { font-family: var(--font-body); font-size: 0.5em; font-weight: 600; color: var(--muted); }
+.pm-stats p { margin: var(--s2) 0 0; color: var(--ink-2); }
+.pm-final-actions { justify-content: center; }
+.final-cta .pm-login { background: transparent; color: var(--cta-ink); border-color: color-mix(in srgb, var(--cta-ink) 55%, transparent); }
+.final-cta .pm-login:hover { background: color-mix(in srgb, var(--cta-ink) 14%, transparent); box-shadow: none; }
+@media (max-width: 640px) {
+  .pm-hero-copy .hero-actions { width: 100%; }
+  .pm-hero-copy .hero-actions .btn, .pm-final-actions .btn { width: 100%; justify-content: center; }
+  .pm-kpis { grid-template-columns: 1fr; }
+  .prumo-banner { padding: var(--s5) var(--s4); }
+  .pb-btn { width: 100%; justify-content: center; }
+}
+@media print { .pm-tabs { display: none; } }

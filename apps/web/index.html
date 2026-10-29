@@ -327,7 +327,6 @@
                 <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg><span><strong>Lançar rápido:</strong> escreva ou fotografe o comprovante</span></li>
                 <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg><span><strong>Assistente no WhatsApp:</strong> mande texto, áudio ou foto do cupom e já lança</span></li>
               </ul>
-              <a class="btn btn-secondary btn-block" href="/conta">Assinar o Controle</a>
             </article>
             <article class="card plan-card plan-featured">
               <p class="plan-flag">Mais escolhido</p>
@@ -346,7 +345,6 @@
                 <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg><span>Cartões de crédito: limite, fatura, vencimento e parcelas, <strong>sem gasto em dobro</strong> com o extrato; pagou parte e parcelou o resto? O Prumo liga o pagamento à fatura e mostra os juros</span></li>
                 <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg><span><strong>Mapa da Virada por <span data-sub-map="price">R$ 12,99</span></strong> no Pix, com <span data-sub-map="days">90</span> dias de acesso</span></li>
               </ul>
-              <a class="btn btn-primary btn-block" href="/conta">Assinar o Ousado</a>
             </article>
             <article class="card plan-card">
               <h3>Desbravador</h3>
@@ -365,10 +363,25 @@
                 <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg><span><strong>Investimentos:</strong> lance suas aplicações e veja total investido, rendimento e imposto estimado</span></li>
                 <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg><span><strong>Estratégias:</strong> onde mover, resgatar ou quitar primeiro para pagar menos juros e imposto, com análise de um estrategista financeiro por IA</span></li>
               </ul>
-              <a class="btn btn-secondary btn-block" href="/conta">Assinar o Desbravador</a>
             </article>
           </div>
-          <div class="prumo-perks">
+          <aside class="prumo-banner" aria-labelledby="pb-title">
+            <div class="pb-copy">
+              <svg class="prumo-badge pb-badge" viewBox="0 0 32 32" role="img" aria-label="Prumo" focusable="false"><rect width="32" height="32" rx="7" fill="#0A3D31"/><g transform="translate(16 16) scale(.86) translate(-16 -16.2)"><path d="M11.5 6V21.5M11.5 6H17.2A6.2 6.2 0 0 1 17.2 18.4H11.5" stroke="#F6F3EC" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M11.5 21.5V25.4" stroke="#F6F3EC" stroke-width="1.3" stroke-linecap="round" fill="none"/><circle cx="11.5" cy="28.2" r="2.6" fill="#8FE0BE"/><circle cx="24.6" cy="4.4" r="1.5" fill="#F2B24A"/></g></svg>
+              <h3 id="pb-title">Conheça em detalhes o melhor App de Finanças pessoais</h3>
+              <p>Gráficos que você toca, cartão sob controle, relatórios e estratégias. Veja o Prumo por dentro, sem compromisso.</p>
+              <a class="btn btn-lg pb-btn" href="/prumo">Conhecer o Prumo<svg class="icon" aria-hidden="true"><use href="#i-arrow-right"/></svg></a>
+            </div>
+            <svg class="pb-art" viewBox="0 0 220 160" aria-hidden="true" focusable="false">
+              <circle cx="72" cy="80" r="46" fill="none" stroke="#2F7A66" stroke-width="22"/>
+              <circle cx="72" cy="80" r="46" fill="none" stroke="#8FE0BE" stroke-width="22" stroke-dasharray="118 171" transform="rotate(-90 72 80)"/>
+              <circle cx="72" cy="80" r="46" fill="none" stroke="#F2B24A" stroke-width="22" stroke-dasharray="52 237" stroke-dashoffset="-122" transform="rotate(-90 72 80)"/>
+              <text x="72" y="77" text-anchor="middle" font-size="9" fill="#BFD8CF">Gastou</text>
+              <text x="72" y="92" text-anchor="middle" font-size="13" font-weight="700" fill="#F6F3EC">R$ 4.870</text>
+              <rect x="136" y="92" width="14" height="36" rx="4" fill="#8FE0BE"/><rect x="154" y="68" width="14" height="60" rx="4" fill="#F6F3EC"/><rect x="172" y="50" width="14" height="78" rx="4" fill="#8FE0BE"/><rect x="190" y="74" width="14" height="54" rx="4" fill="#F2B24A"/>
+              <path d="M136 46 L154 34 L172 24 L190 38 L204 20" fill="none" stroke="#F6F3EC" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" opacity=".85"/>
+            </svg>
+          </aside>          <div class="prumo-perks">
             <article class="perk"><h3>Um presente para quem assina</h3><p>Assinou o <strong>Ousado</strong> ou o <strong>Desbravador</strong>? Você recebe no e-mail, de presente, o eBook <em>Respira. Organiza. Avança.</em>: um guia ilustrado de mais de 50 páginas, do diagnóstico à liberdade financeira.</p></article>
             <article class="perk"><h3>Indique e ganhe 10%</h3><p>Cada amigo que assinar um plano pelo seu convite vale <strong>10% de desconto na sua próxima fatura</strong>. Os descontos se acumulam: indicou 10 que assinaram, são 10 meses seguidos com desconto.</p></article>
           </div>
@@ -472,6 +485,142 @@
       </div>
     </section>
 
+    <!-- ============================ PRUMO (landing do app) ============================ -->
+    <section id="view-prumo" data-view="prumo" hidden aria-labelledby="pm-title">
+      <div class="pm">
+        <div class="wrap pm-top">
+          <button class="btn btn-quiet btn-sm back-link" type="button" data-nav="landing"><svg class="icon" aria-hidden="true"><use href="#i-arrow-left"/></svg>Início</button>
+        </div>
+
+        <section class="pm-hero" aria-labelledby="pm-title">
+          <div class="wrap pm-hero-grid">
+            <div class="pm-hero-copy">
+              <p class="eyebrow">Prumo, o app de finanças do Fôlego</p>
+              <h1 id="pm-title" tabindex="-1">Veja para onde vai cada real. Decida com a conta feita.</h1>
+              <p class="lead">O Prumo junta contas, cartões, dívidas e investimentos num lugar só, mostra tudo em gráficos que você toca para entender e diz o que fazer a seguir.</p>
+              <div class="hero-actions">
+                <a class="btn btn-primary btn-lg" href="#pm-planos">Ver os planos<svg class="icon" aria-hidden="true"><use href="#i-arrow-right"/></svg></a>
+                <a class="btn btn-quiet btn-lg" href="#pm-tour">Ver o app por dentro</a>
+              </div>
+              <p class="hero-note">Cobrança mensal no cartão. Sem fidelidade; cancele em um clique.</p>
+              <ul class="chips">
+                <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Cancele quando quiser</li>
+                <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Sem senha do banco</li>
+                <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Dados criptografados</li>
+                <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Funciona como app no celular</li>
+              </ul>
+            </div>
+            <figure class="example pm-hero-demo">
+              <p class="example-tag">Exemplo ilustrativo, dados fictícios</p>
+              <div class="example-card pm-demo" id="pm-hero-demo"></div>
+            </figure>
+          </div>
+        </section>
+
+        <section class="section section-tint" id="pm-beneficios" aria-labelledby="pm-ben-title">
+          <div class="wrap">
+            <header class="section-head">
+              <p class="eyebrow">O que muda</p>
+              <h2 id="pm-ben-title">Do extrato bagunçado a um painel que explica</h2>
+              <p class="lead">Cada parte do Prumo existe para responder uma pergunta que você já fez no fim do mês.</p>
+            </header>
+            <ul class="pm-benefits">
+              <li class="card"><h3>Para onde foi o dinheiro?</h3><p>Gastos por categoria, mês a mês e dia a dia, em gráficos que respondem ao toque. Cada lançamento fica na conta ou no cartão certo e dá para corrigir depois de importado.</p></li>
+              <li class="card"><h3>E o cartão, quanto pesa?</h3><p>Limite, fatura, vencimento e parcelas sem gasto em dobro. Pagou parte e parcelou o resto? O Prumo liga o pagamento à fatura e mostra os juros de verdade.</p></li>
+              <li class="card"><h3>Como lançar sem esforço?</h3><p>Escreva, fale ou fotografe o comprovante. No WhatsApp, mande texto, áudio ou a foto do cupom e o gasto já entra no lugar certo.</p></li>
+              <li class="card"><h3>O que fazer primeiro?</h3><p>Dívidas com plano de quitação, metas com aportes, férias planejadas e estratégias que dizem onde mover, resgatar ou quitar para pagar menos juros.</p></li>
+              <li class="card"><h3>Vou esquecer algo?</h3><p>Avisos no celular para fatura perto de vencer, conta no negativo, boleto a pagar e assinatura que ficou mais cara. No máximo dois por dia, nunca de madrugada.</p></li>
+              <li class="card"><h3>Dá para provar e levar?</h3><p>Relatórios por período, com comparação com o período anterior, planilha para abrir no Excel e PDF para guardar ou mostrar a quem divide as contas com você.</p></li>
+            </ul>
+          </div>
+        </section>
+
+        <section class="section" id="pm-tour" aria-labelledby="pm-tour-title">
+          <div class="wrap">
+            <header class="section-head">
+              <p class="eyebrow">Por dentro do app</p>
+              <h2 id="pm-tour-title">Veja o Prumo funcionando</h2>
+              <p class="lead">Telas reais do app, com dados fictícios. Toque nos gráficos: eles respondem.</p>
+            </header>
+            <div id="pm-tour-root"></div>
+          </div>
+        </section>
+
+        <section class="section section-tint" id="pm-conta" aria-labelledby="pm-conta-title">
+          <div class="wrap">
+            <header class="section-head">
+              <p class="eyebrow">A conta que ninguém faz</p>
+              <h2 id="pm-conta-title">Deixar como está também custa</h2>
+              <p class="lead">Juros e assinaturas esquecidas crescem em silêncio. O Prumo põe esses números na sua frente, com as taxas que você de fato paga.</p>
+            </header>
+            <ul class="pm-stats">
+              <li class="card"><strong class="pm-big">R$ 1.000 <span>viram</span> R$ 4.818</strong><p>no rotativo do cartão, a 14% ao mês, depois de 12 meses sem pagar.</p></li>
+              <li class="card"><strong class="pm-big">151,8% <span>ao ano</span></strong><p>é o custo de um cheque especial a 8% ao mês. O Prumo mostra quanto você está usando e quanto isso custa.</p></li>
+              <li class="card"><strong class="pm-big">R$ 240 <span>por ano</span></strong><p>numa assinatura de R$ 20 que ninguém lembra de cancelar. O detector de cobranças recorrentes encontra.</p></li>
+            </ul>
+            <p class="micro">Contas de juros compostos, só para ilustrar. As taxas reais variam por banco; no Prumo você informa as suas.</p>
+          </div>
+        </section>
+
+        <section class="section" id="pm-passos" aria-labelledby="pm-passos-title">
+          <div class="wrap">
+            <header class="section-head">
+              <p class="eyebrow">Como começa</p>
+              <h2 id="pm-passos-title">Do zero ao panorama em uma noite</h2>
+            </header>
+            <ol class="steps3">
+              <li class="reveal"><span class="step-num" aria-hidden="true">1</span><h3>Escolha o plano</h3><p>Pague no cartão, todo mês. Sem contrato: cancele em um clique, dentro do app.</p></li>
+              <li class="reveal"><span class="step-num" aria-hidden="true">2</span><h3>Traga o que você tem</h3><p>Importe o extrato (CSV, OFX ou PDF), fotografe um comprovante ou mande uma mensagem no WhatsApp.</p></li>
+              <li class="reveal"><span class="step-num" aria-hidden="true">3</span><h3>Veja e decida</h3><p>Gráficos, relatórios e jogadas já calculados com os seus números: o que pagar, o que adiar e quanto sobra.</p></li>
+            </ol>
+          </div>
+        </section>
+
+        <section class="section section-tint" id="pm-planos" aria-labelledby="pm-planos-title">
+          <div class="wrap">
+            <header class="section-head">
+              <p class="eyebrow">Planos</p>
+              <h2 id="pm-planos-title">Escolha o ponto de partida</h2>
+              <p class="lead">Comece pelo Controle e suba quando quiser, ou já entre com tudo. <span class="lead-terms">A partir de <span data-price="sub_controle">R$ 29,99</span> por mês, sem fidelidade.</span></p>
+            </header>
+            <div id="pm-plans"></div>
+            <div class="prumo-perks">
+              <article class="perk"><h3>Um presente para quem assina</h3><p>Assinou o <strong>Ousado</strong> ou o <strong>Desbravador</strong>? Você recebe no e-mail, de presente, o eBook <em>Respira. Organiza. Avança.</em>: um guia ilustrado de mais de 50 páginas, do diagnóstico à liberdade financeira.</p></article>
+              <article class="perk"><h3>Indique e ganhe 10%</h3><p>Cada amigo que assinar um plano pelo seu convite vale <strong>10% de desconto na sua próxima fatura</strong>. Os descontos se acumulam: indicou 10 que assinaram, são 10 meses seguidos com desconto.</p></article>
+            </div>
+            <p class="micro center">Cobrança mensal no cartão de crédito, sem contrato e sem fidelidade. Ao cancelar, a cobrança para na hora e você usa o app e baixa seus dados até o fim do mês já pago.</p>
+          </div>
+        </section>
+
+        <section class="section" id="pm-duvidas" aria-labelledby="pm-faq-title">
+          <div class="wrap faq-wrap">
+            <header class="section-head">
+              <p class="eyebrow">Dúvidas</p>
+              <h2 id="pm-faq-title">Antes de assinar</h2>
+            </header>
+            <div class="faq">
+              <details><summary>Preciso instalar alguma coisa?</summary><div><p>Não. O Prumo abre no navegador e, se você quiser, vira um app na tela inicial do celular (Android e iPhone), com notificações opcionais.</p></div></details>
+              <details><summary>Como os meus dados entram no Prumo?</summary><div><p>Sem ligação com o banco: você importa o extrato (CSV, OFX ou PDF), fotografa o comprovante, escreve o gasto ou manda mensagem para o assistente no WhatsApp. No Desbravador, a fatura do cartão em PDF é lida no seu aparelho, conferida pela soma e cadastrada.</p></div></details>
+              <details><summary>Posso mudar de plano ou cancelar?</summary><div><p>Sim, quando quiser. Ao cancelar, a cobrança para na hora e você continua usando o app e baixando seus dados até o fim do mês já pago.</p></div></details>
+              <details><summary>Meus dados estão seguros?</summary><div><p>Ficam criptografados, não são vendidos e podem ser apagados a seu pedido. Nunca pedimos a senha do banco. O CPF é pedido só para o provedor de pagamento cobrar a assinatura.</p></div></details>
+              <details><summary>O Prumo me diz onde investir?</summary><div><p>Não. As Estratégias fazem contas com os seus números (por exemplo, se compensa resgatar uma aplicação para zerar o cheque especial) como educação financeira, sem recomendação individual de produto. Confirme sempre taxas e impostos com a instituição.</p></div></details>
+              <details><summary>Dá para dividir a conta com outra pessoa?</summary><div><p>Sim, a partir do Ousado: uma pessoa a mais no Ousado e até três no Desbravador, cada uma com o seu acesso.</p></div></details>
+            </div>
+          </div>
+        </section>
+
+        <section class="section final-cta" aria-labelledby="pm-final-title">
+          <div class="wrap final-inner">
+            <h2 id="pm-final-title">Seu dinheiro merece prumo.</h2>
+            <p>Escolha o plano e comece hoje. Cancele quando quiser.</p>
+            <div class="hero-actions pm-final-actions">
+              <a class="btn btn-primary btn-lg" href="#pm-planos">Escolher meu plano<svg class="icon" aria-hidden="true"><use href="#i-arrow-right"/></svg></a>
+              <a class="btn btn-quiet btn-lg pm-login" href="/conta">Já tenho conta: entrar</a>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
     <!-- ============================ FERRAMENTAS GRÁTIS ============================ -->
     <section id="view-tools" data-view="tools" hidden aria-labelledby="tools-title">
       <div class="wrap tools-wrap">
