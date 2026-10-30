@@ -2,6 +2,9 @@
 // ao tocar nela, abrir o app na tela certa. Não guarda nada em cache (o site continua sempre atualizado).
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
+// Passa tudo direto para a rede (sem cache). Existe só porque alguns Chrome/Android exigem um fetch handler para
+// oferecer "Instalar app" (WebAPK, com o nome e o ícone do manifesto) em vez de um simples atalho do site.
+self.addEventListener('fetch', () => {});
 
 // Só abrimos telas da própria conta: o endereço vem do servidor, mas nunca confiamos em algo fora de /conta.
 const safeUrl = (u) => (typeof u === 'string' && /^\/conta(\/[a-z]+)?$/.test(u) ? u : '/conta');
@@ -17,8 +20,8 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(typeof d.title === 'string' && d.title ? d.title : 'Prumo Finanças', {
       body: typeof d.body === 'string' ? d.body : '',
-      icon: '/assets/icon-192.png', // o "P" do Prumo
-      badge: '/assets/badge-96.png', // silhueta do "P" (a barra de status só usa a forma, em branco)
+      icon: '/assets/icon-192.png?v=3', // o "P" oficial do Prumo (o ?v= faz o Android largar o ícone antigo em cache)
+      badge: '/assets/badge-96.png?v=3', // silhueta do "P" (a barra de status só usa a forma, em branco)
       tag: typeof d.tag === 'string' ? d.tag : undefined,
       lang: 'pt-BR',
       data: { url: safeUrl(d.url) },
