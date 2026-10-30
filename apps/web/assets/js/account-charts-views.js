@@ -28,6 +28,15 @@ function dailyPoints(from, to, rows) {
   return out;
 }
 
+/** Detalhamento por categoria (Desbravador): os lançamentos de gasto da categoria no período, via o mesmo relatório filtrado. */
+function categoryDrill(ctx, from, to) {
+  if (!ctx.has('reports_filters')) return {};
+  return {
+    drill: (row) => ctx.api.getReport(new URLSearchParams({ from, to, kind: 'gasto', category: row.key }).toString()).then((r) => r.rows ?? []),
+    openIn: ctx.has('reports') ? (row) => { ctx.reportPreset = { preset: from.slice(0, 7) === to.slice(0, 7) ? 'mes' : 'custom', from, to, category: row.key, kind: 'gasto' }; ctx.goTab('relatorios'); } : undefined,
+  };
+}
+
 const catItems = (list) => list.filter((c) => c.spendCents > 0).map((c) => ({ key: c.category, label: catLabel(c.category), value: c.spendCents }));
 
 /** Visão geral: gastos por categoria, entrou e saiu nos últimos meses e (Ousado em diante) gasto por dia e por conta. */
@@ -39,7 +48,7 @@ export function overviewCharts(ctx) {
     const parts = [];
     const jump = el('div', { class: 'no-print', hidden: true });
     parts.push(h3('Gastos por categoria'), donut(catItems(d.byCategory), {
-      interactive: live, label: 'Gastos do mês por categoria', totalLabel: 'Gastou',
+      interactive: live, label: 'Gastos do mês por categoria', totalLabel: 'Gastou', detailTitle: 'De onde veio o gasto do mês', ...categoryDrill(ctx, `${d.month}-01`, lastDay(d.month)),
       onSelect: live && ctx.has('reports') ? (key) => {
         jump.hidden = !key;
         jump.replaceChildren();
@@ -78,7 +87,7 @@ export function entriesCharts(ctx) {
     cats.set(e.category, (cats.get(e.category) ?? 0) - e.amountCents);
   }
   const pts = dailyPoints(`${month}-01`, lastDay(month), [...by].map(([date, spendCents]) => ({ date, spendCents })));
-  return chartCard('O mês em gráficos', 'Dia a dia e por categoria, com o que está lançado acima.', h3('Gasto por dia'), line(pts, { interactive: live, xLabel: (p) => dayShort(p.x), label: 'Gasto por dia' }), h3('Por categoria'), donut([...cats].map(([key, value]) => ({ key, label: catLabel(key), value })), { interactive: live, totalLabel: 'Gastou', label: 'Gastos por categoria' }));
+  return chartCard('O mês em gráficos', 'Dia a dia e por categoria, com o que está lançado acima.', h3('Gasto por dia'), line(pts, { interactive: live, xLabel: (p) => dayShort(p.x), label: 'Gasto por dia' }), h3('Por categoria'), donut([...cats].map(([key, value]) => ({ key, label: catLabel(key), value })), { interactive: live, totalLabel: 'Gastou', label: 'Gastos por categoria', detailTitle: 'De onde veio o gasto do mês', ...categoryDrill(ctx, `${month}-01`, lastDay(month)) }));
 }
 
 export function walletsCharts(ctx) {
@@ -241,7 +250,14 @@ export function viewRelatorios(ctx) {
         el('dl', { class: 'stats' }, stat('Gastou', brl(t.spendCents)), stat('Entrou', brl(t.incomeCents), 'pos'), stat('Saldo do período', brl(t.balanceCents), t.balanceCents < 0 ? 'neg' : 'pos'), stat('Lançamentos', String(t.count))),
         ...lines.map((x) => el('p', { class: 'fine' }, x)), acts),
       chartCard('Gastos por categoria', live ? 'Toque numa categoria para destacar; com filtros, ela vira o filtro do relatório.' : 'Quanto cada categoria pesou no período.', donut(r.byCategory.filter((c) => c.spendCents > 0).map((c) => ({ key: c.category, label: catLabel(c.category), value: c.spendCents })), {
-        interactive: live, totalLabel: 'Gastou', label: 'Gastos por categoria', selected: state.category || null,
+        interactive: live, totalLabel: 'Gastou', label: 'Gastos por categoria', selected: state.category || null, detailTitle: 'De onde veio o gasto do período',
+        drill: filters ? (row) => {
+          const p = new URLSearchParams({ from: r.from, to: r.to, kind: 'gasto', category: row.key });
+          if (state.origin.startsWith('w:')) p.set('walletId', state.origin.slice(2));
+          if (state.origin.startsWith('c:')) p.set('cardId', state.origin.slice(2));
+          if (state.q.trim()) p.set('q', state.q.trim());
+          return ctx.api.getReport(p.toString()).then((x) => x.rows ?? []);
+        } : undefined,
         onSelect: filters ? (key) => { state.category = key ?? ''; load(); } : undefined,
       })),
     ];

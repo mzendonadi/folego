@@ -286,3 +286,14 @@ button.bo-kpi:hover::after, button.bo-kpi:focus-visible::after { color: var(--pr
 .bo-msg-who { font-size: 0.75rem; font-weight: 700; color: var(--muted); }
 .bo-msg-user { justify-self: end; background: var(--mint); }
 .bo-msg-team { justify-self: center; background: var(--paper); border: 1px dashed var(--line); }
+
+/* ===== Revisão visual (D-146): mesmo padrão das landings — tipografia leve, cartões leves, rótulos discretos ===== */
+.bo-big { font-weight: 420; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.bo-brand small, .bo-table th, .bo-col h3 { font-weight: 600; letter-spacing: 0.1em; }
+.bo-nav-link, .bo-tab, .bo-chip { font-weight: 600; }
+.bo-badge, .bo-tab-count { font-weight: 600; }
+.bo-card, .bo-insight, .bo-login-card { border-color: color-mix(in srgb, var(--line) 75%, transparent); }
+.bo-login-card { border-radius: 18px; padding: clamp(24px, 4vw, 40px); }
+.bo-kpi { border-left-width: 3px; }
+.bo-insight { border-left-width: 3px; }
+.bo-table td { padding-block: 12px; } /* linhas com mais respiro */

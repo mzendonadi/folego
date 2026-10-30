@@ -2577,3 +2577,49 @@ h3 { font-weight: 500; letter-spacing: -0.015em; } /* em corpo pequeno a serifa 
 .pm-tab, .btn-secondary { border-width: 1px; }
 .ch-l-val, .ch-l-val strong { font-weight: 600; }
 
+
+/* ===== Detalhamento dos totais dos gráficos (D-146, Desbravador) ===== */
+.ch-total-row { display: flex; margin-top: var(--s3); }
+.ch-c-value.is-link { cursor: pointer; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 4px; text-decoration-color: var(--line); transition: fill 0.18s var(--ease); }
+.ch-c-value.is-link:hover { fill: var(--primary); }
+.ch-c-value.is-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+.dialog-detail { width: min(560px, calc(100% - 32px)); }
+.cd-head { align-items: flex-start; }
+.cd-head h2 { font-size: 1.6rem; }
+.cd-sub { margin: 4px 0 0; font-size: 0.9375rem; }
+.cd-x { flex: none; }
+.cd-body { display: grid; gap: var(--s3); align-content: start; }
+.cd-total { display: grid; gap: 2px; margin: 0; padding: var(--s3) 0 var(--s4); border-bottom: 1px solid var(--line); }
+.cd-total-label { font-size: 0.8125rem; color: var(--muted); }
+.cd-total strong { font-family: var(--font-display); font-size: clamp(2rem, 1.5rem + 2vw, 2.6rem); font-weight: 420; letter-spacing: -0.03em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.cd-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.cd-list > li { border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent); }
+.cd-row { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px 4px; font: inherit; color: var(--ink); }
+.cd-row-btn { cursor: pointer; border-radius: 10px; padding-inline: 8px; margin-inline: -8px; width: calc(100% + 16px); transition: background-color 0.18s var(--ease); }
+.cd-row-btn:hover { background: var(--paper); }
+.cd-row-btn:focus-visible { outline: 3px solid var(--focus); outline-offset: 1px; }
+.cd-name { flex: 1 1 auto; min-width: 0; display: grid; gap: 2px; overflow-wrap: anywhere; }
+.cd-name small { font-size: 0.8125rem; }
+.cd-pct { min-width: 3.5ch; text-align: right; font-size: 0.875rem; }
+.cd-val { white-space: nowrap; font-weight: 600; font-variant-numeric: tabular-nums; }
+.cd-chev { width: 16px; height: 16px; flex: none; color: var(--muted); transition: transform 0.2s var(--ease); }
+.cd-row-btn[aria-expanded="true"] .cd-chev { transform: rotate(180deg); }
+.cd-entries { display: grid; gap: var(--s3); justify-items: start; padding: 2px 0 var(--s4) 22px; }
+.cd-ent-list { list-style: none; margin: 0; padding: 0; display: grid; width: 100%; }
+.cd-ent-list li { display: grid; grid-template-columns: 4ch minmax(0, 1fr) auto; gap: 12px; align-items: baseline; padding: 8px 0; border-bottom: 1px dashed color-mix(in srgb, var(--line) 60%, transparent); }
+.cd-ent-date { color: var(--muted); font-size: 0.875rem; font-variant-numeric: tabular-nums; }
+.cd-ent-note { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.cd-ent-note small { font-size: 0.8125rem; }
+.cd-ent-val { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.cd-hint { margin: var(--s3) 0 0; }
+@media (max-width: 639px) { .dialog-detail { width: 100%; max-width: 100%; margin: auto 0 0; border-radius: 22px 22px 0 0; max-height: 90vh; } }
+@media (prefers-reduced-motion: reduce) { .cd-chev, .cd-row-btn, .ch-c-value.is-link { transition: none; } }
+
+/* ===== Revisão visual (D-146): portal do parceiro (/parceiros) no mesmo padrão ===== */
+.pt-login-card { text-align: left; padding: clamp(24px, 4vw, 40px); border-color: color-mix(in srgb, var(--line) 75%, transparent); }
+.pt-login-form .btn { width: 100%; justify-content: center; } /* botão na largura dos campos */
+.pt-kicker { font-size: 0.75rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; }
+.pt-card { border-color: color-mix(in srgb, var(--line) 75%, transparent); }
+.pt-metric { border-left-width: 2px; }
+.pt-login-form, .pt-login-form .field, .pt-login-form .label { text-align: left; justify-items: stretch; }
+

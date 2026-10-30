@@ -4,6 +4,14 @@
 // Cores, tamanhos e textos seguem o resto do app; nada aqui busca dado: quem chama passa os números.
 import { el } from './dom.js';
 import { brl } from './format.js';
+import { openDetail } from './chart-detail.js';
+
+/** Botão discreto sob o gráfico: abre o detalhamento do valor somado (só no modo interativo, plano Desbravador). */
+const totalButton = (text, onClick) => {
+  const b = el('button', { class: 'btn btn-quiet btn-sm ch-total-btn', type: 'button' }, text);
+  b.addEventListener('click', onClick);
+  return el('div', { class: 'ch-total-row no-print' }, b);
+};
 
 const NS = 'http://www.w3.org/2000/svg';
 const svg = (tag, attrs = {}, ...kids) => {
@@ -130,6 +138,22 @@ export function donut(items, opts = {}) {
     return li;
   }));
   root.append(el('div', { class: 'ch-donut-body' }, graphic, legend));
+  if (opts.interactive) {
+    // Detalhamento do total: usa a lista completa (sem agrupar em "Outras"), da maior para a menor fatia.
+    const full = items.filter((i) => i.value > 0).sort((a, b) => b.value - a.value);
+    const openTotal = () => openDetail({
+      title: opts.detailTitle ?? opts.label ?? 'Detalhamento', subtitle: opts.detailSub, totalLabel: opts.totalLabel ?? 'Total', total, format: fmt,
+      rows: full.map((it, i) => ({ key: it.key, label: it.label, sub: it.sub, value: it.value, color: colorFor(i, it.key) })),
+      drill: opts.drill, openIn: opts.openIn, openInLabel: opts.openInLabel,
+    });
+    cValue.classList.add('is-link');
+    cValue.setAttribute('tabindex', '0');
+    cValue.setAttribute('role', 'button');
+    cValue.setAttribute('aria-label', `Detalhar ${(opts.totalLabel ?? 'Total').toLowerCase()}: ${fmt(total)}`);
+    cValue.addEventListener('click', openTotal);
+    cValue.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTotal(); } });
+    root.append(totalButton(`Detalhar o total · ${fmt(total)}`, openTotal));
+  }
   paint(null);
   return root;
 }
@@ -168,6 +192,20 @@ export function bars(items, opts = {}) {
   });
   const keys = el('p', { class: 'ch-keys fine' }, el('span', {}, el('i', { class: 'ch-dot a' }), opts.aLabel), opts.bLabel ? el('span', {}, el('i', { class: 'ch-dot b' }), opts.bLabel) : null);
   root.append(el('div', { class: 'ch-bars-grid', style: `grid-template-columns:repeat(${items.length},minmax(0,1fr))` }, ...cols), keys);
+  if (opts.interactive) {
+    // Detalhamento dos somatórios: uma linha por período; com duas séries, o valor é a diferença (ex.: sobrou = entrou - saiu).
+    const sumA = items.reduce((s, i) => s + (i.a ?? 0), 0);
+    const sumB = items.reduce((s, i) => s + (i.b ?? 0), 0);
+    const two = Boolean(opts.bLabel);
+    const openTotal = () => openDetail({
+      title: opts.detailTitle ?? opts.label ?? 'Detalhamento', subtitle: opts.detailSub, format: fmt,
+      totalLabel: two ? `Saldo no período (${opts.aLabel.toLowerCase()} − ${opts.bLabel.toLowerCase()})` : `${opts.aLabel} no período`,
+      total: two ? sumA - sumB : sumA,
+      notes: two ? [`${opts.aLabel}: ${fmt(sumA)} · ${opts.bLabel}: ${fmt(sumB)}`] : [],
+      rows: items.map((i) => ({ key: i.key, label: i.label, sub: two ? `${opts.aLabel} ${fmt(i.a ?? 0)} · ${opts.bLabel} ${fmt(i.b ?? 0)}` : undefined, value: two ? (i.a ?? 0) - (i.b ?? 0) : (i.a ?? 0) })),
+    });
+    root.append(totalButton(two ? `Detalhar os totais · ${opts.aLabel} ${fmt(sumA)} e ${opts.bLabel} ${fmt(sumB)}` : `Detalhar o total · ${fmt(sumA)}`, openTotal));
+  }
   return root;
 }
 
@@ -225,6 +263,15 @@ export function line(points, opts = {}) {
   } else {
     root.append(el('p', { class: 'ch-keys fine' }, `Maior valor: ${xl(points[peak])}, ${fmt(points[peak].y)}.`));
   }
+  if (opts.interactive) {
+    // Soma do período: os dias com valor, do maior para o menor.
+    const total = points.reduce((s, p) => s + Math.max(p.y, 0), 0);
+    const openTotal = () => openDetail({
+      title: opts.detailTitle ?? opts.label ?? 'Detalhamento', subtitle: opts.detailSub ?? 'Dias com valor, do maior para o menor.', totalLabel: opts.totalLabel ?? 'Total do período', total, format: fmt,
+      rows: points.filter((p) => p.y > 0).sort((a, b) => b.y - a.y).map((p) => ({ key: String(p.x), label: xl(p), value: p.y })),
+    });
+    root.append(totalButton(`Detalhar o total · ${fmt(total)}`, openTotal));
+  }
   return root;
 }
 
@@ -257,6 +304,15 @@ export function hbars(rows, opts = {}) {
     return b;
   });
   root.append(...items);
+  if (opts.interactive) {
+    const total = list.reduce((s, r) => s + r.value, 0);
+    const openTotal = () => openDetail({
+      title: opts.detailTitle ?? opts.label ?? 'Detalhamento', subtitle: opts.detailSub, totalLabel: opts.totalLabel ?? 'Total', total, format: fmt,
+      rows: [...list].sort((a, b) => b.value - a.value).map((r, i) => ({ key: r.key, label: r.label, sub: [r.sub, r.limit != null ? `Limite ${fmt(r.limit)}` : null].filter(Boolean).join(' · ') || undefined, value: r.value, color: colorFor(i, r.key) })),
+      drill: opts.drill, openIn: opts.openIn, openInLabel: opts.openInLabel,
+    });
+    root.append(totalButton(`Detalhar o total · ${fmt(total)}`, openTotal));
+  }
   return root;
 }
 
