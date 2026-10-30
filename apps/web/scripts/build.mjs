@@ -67,6 +67,9 @@ for (const [pkg, file] of [
   ['@fontsource-variable/fraunces', 'fraunces-latin-wght-normal.woff2'],
   ['@fontsource-variable/fraunces', 'fraunces-latin-wght-italic.woff2'],
   ['@fontsource-variable/figtree', 'figtree-latin-wght-normal.woff2'],
+  ['@fontsource-variable/newsreader', 'newsreader-latin-wght-normal.woff2'],
+  ['@fontsource-variable/newsreader', 'newsreader-latin-wght-italic.woff2'],
+  ['@fontsource-variable/instrument-sans', 'instrument-sans-latin-wght-normal.woff2'],
 ]) {
   await copyFile(rel(`node_modules/${pkg}/files/${file}`), rel(`assets/fonts/${file}`));
 }
