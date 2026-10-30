@@ -23,7 +23,7 @@ const realTransport: Transport = async (sub, payload, ctx) => {
   const p = ctx.config.push;
   if (!p) throw new AppError(409, 'push_off', 'As notificações ainda não estão ligadas neste servidor.');
   webpush.setVapidDetails(p.subject, p.publicKey, p.privateKey);
-  await webpush.sendNotification(sub, JSON.stringify({ ...payload, icon: '/assets/icon-192.png?v=3', badge: '/assets/badge-96.png?v=3' }), { TTL: 6 * 3600, urgency: 'normal' });
+  await webpush.sendNotification(sub, JSON.stringify({ ...payload, icon: '/assets/icon-192.png?v=4', badge: '/assets/badge-96.png?v=4' }), { TTL: 6 * 3600, urgency: 'normal' });
 };
 let transport: Transport = realTransport;
 /** Só para testes: troca o envio de verdade por um falso. Sem argumento, volta ao normal. */

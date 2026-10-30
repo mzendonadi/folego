@@ -20,8 +20,8 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(typeof d.title === 'string' && d.title ? d.title : 'Prumo Finanças', {
       body: typeof d.body === 'string' ? d.body : '',
-      icon: '/assets/icon-192.png?v=3', // o "P" oficial do Prumo (o ?v= faz o Android largar o ícone antigo em cache)
-      badge: '/assets/badge-96.png?v=3', // silhueta do "P" (a barra de status só usa a forma, em branco)
+      icon: '/assets/icon-192.png?v=4', // o "P" oficial do Prumo (o ?v= faz o Android largar o ícone antigo em cache)
+      badge: '/assets/badge-96.png?v=4', // silhueta do "P" (a barra de status só usa a forma, em branco)
       tag: typeof d.tag === 'string' ? d.tag : undefined,
       lang: 'pt-BR',
       data: { url: safeUrl(d.url) },

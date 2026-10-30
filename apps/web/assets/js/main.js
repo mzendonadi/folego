@@ -108,6 +108,26 @@ function viewFromPath(path) {
   return found ? found[0] : null;
 }
 
+// Quem cria o atalho ou instala o app pelo Chrome leva o nome e o ícone da página em que está. Nas telas do Prumo
+// (/prumo e /conta) a página se apresenta como Prumo: ícone "P" e nome "Prumo Finanças"; no resto, como Fôlego.
+const PRUMO_VIEWS = new Set(['account', 'prumo']);
+const headBackup = new Map();
+// O Chrome só oferece "Instalar app" (com o nome e o ícone do manifesto) a páginas com service worker ativo; sem isso
+// ele cria um simples atalho com o título e o favicon da página. Por isso o registramos em qualquer tela do site.
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+function brandHead(view) {
+  const prumo = PRUMO_VIEWS.has(view);
+  document.querySelectorAll('link[rel="icon"], link[rel="apple-touch-icon"]').forEach((l) => {
+    if (!headBackup.has(l)) headBackup.set(l, { href: l.getAttribute('href'), type: l.getAttribute('type') });
+    const orig = headBackup.get(l);
+    l.setAttribute('href', prumo ? (l.rel === 'apple-touch-icon' ? '/assets/apple-touch-icon.png?v=4' : '/assets/icon-192.png?v=4') : orig.href);
+    if (orig.type) l.setAttribute('type', prumo ? 'image/png' : orig.type);
+  });
+  let meta = document.querySelector('meta[name="application-name"]');
+  if (!meta) { meta = document.createElement('meta'); meta.name = 'application-name'; document.head.append(meta); }
+  meta.content = prumo ? 'Prumo Finanças' : 'Fôlego';
+}
+
 function show(view, { focus = true, scroll = true } = {}) {
   if (view === 'preview' && current !== 'preview') pixelTrack('ViewContent', { content_name: 'Resultado do diagnóstico', content_category: 'diagnostico' }); // diagnóstico concluído: sinal do meio do funil
   current = view;
@@ -116,6 +136,7 @@ function show(view, { focus = true, scroll = true } = {}) {
     node.hidden = node.dataset.view !== section;
   });
   document.title = TITLES[view];
+  brandHead(view);
   const inFlow = view !== 'landing';
   $('.header-cta').hidden = inFlow || !heroGone;
   $('.header-exit').hidden = !inFlow;
