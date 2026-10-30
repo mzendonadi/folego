@@ -2428,7 +2428,7 @@ button.ch-h-row:hover, .ch-h-row.is-on { background: var(--sunken); }
 .pm-top { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); padding-top: var(--s4); }
 .pm .section-head .lead { margin-top: var(--s3); }
 .pm-hero { padding-block: clamp(24px, 5vw, 56px) clamp(48px, 7vw, 88px); }
-.pm-hero-grid { display: grid; gap: var(--s7); align-items: center; }
+.pm-hero-grid { display: grid; gap: var(--s7); align-items: start; } /* texto no topo, alinhado ao cartão: com "center" o título descia ~80 px e o cartão alto passava da dobra */
 @media (min-width: 960px) { .pm-hero-grid { grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr); } }
 .pm-hero-copy { display: grid; gap: var(--s4); justify-items: start; min-width: 0; }
 .pm-hero-copy h1 { font-size: clamp(2.2rem, 1.4rem + 3.6vw, 3.9rem); line-height: 1.05; letter-spacing: -0.02em; max-width: 17ch; }
