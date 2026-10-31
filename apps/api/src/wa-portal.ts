@@ -496,7 +496,7 @@ export async function startConversation(ctx: Ctx, partnerId: string, input: z.in
     phone = phones.map((p) => waPhone(p)).find((p): p is string => p !== null && p.length === 13) ?? phones.map((p) => waPhone(p)).find((p): p is string => p !== null) ?? null; // prefere celular
   } else {
     const d = await ctx.db.query<{ full_name_enc: Buffer | null; phone_enc: Buffer | null }>(
-      `SELECT lc.full_name_enc, lc.phone_enc FROM app.lead_deliveries d LEFT JOIN app.lead_contacts lc ON lc.case_id = d.case_id WHERE d.id = $1 AND d.partner_id = $2 AND d.status IN ('delivered','contacted','converted')`,
+      `SELECT coalesce(lc.full_name_enc, d.kept_name_enc) AS full_name_enc, coalesce(lc.phone_enc, d.kept_phone_enc) AS phone_enc FROM app.lead_deliveries d LEFT JOIN app.lead_contacts lc ON lc.case_id = d.case_id WHERE d.id = $1 AND d.partner_id = $2 AND d.status IN ('delivered','contacted','converted')`,
       [input.deliveryId, partnerId],
     );
     if (!d.rows[0]) throw notFound();
@@ -558,7 +558,7 @@ async function audience(ctx: Ctx, partnerId: string, b: Pick<BroadcastInput, 'so
   }
   if (b.source !== 'base' && targets.length < MAX_BROADCAST) {
     const d = await ctx.db.query<{ id: string; full_name_enc: Buffer | null; phone_enc: Buffer | null }>(
-      `SELECT d.id, lc.full_name_enc, lc.phone_enc FROM app.lead_deliveries d LEFT JOIN app.lead_contacts lc ON lc.case_id = d.case_id WHERE d.partner_id = $1 AND d.status IN ('delivered','contacted') ORDER BY d.created_at DESC LIMIT ${MAX_BROADCAST}`,
+      `SELECT d.id, coalesce(lc.full_name_enc, d.kept_name_enc) AS full_name_enc, coalesce(lc.phone_enc, d.kept_phone_enc) AS phone_enc FROM app.lead_deliveries d LEFT JOIN app.lead_contacts lc ON lc.case_id = d.case_id WHERE d.partner_id = $1 AND d.status IN ('delivered','contacted') ORDER BY d.created_at DESC LIMIT ${MAX_BROADCAST}`,
       [partnerId],
     );
     for (const x of d.rows) {

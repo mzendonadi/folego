@@ -593,6 +593,8 @@ export async function wipeCase(q: Queryable, caseId: string): Promise<void> {
   for (const table of ['debts', 'deliverables', 'diagnoses', 'lead_contacts', 'lead_profiles', 'access_tokens', 'entitlements', 'case_access']) {
     await q.query(`DELETE FROM app.${table} WHERE case_id = $1`, [caseId]);
   }
+  // Apagar por pedido do titular leva também a cópia que o parceiro guarda na entrega (o expurgo por prazo não: ali o lead é do parceiro).
+  await q.query(`UPDATE app.lead_deliveries SET kept_name_enc = NULL, kept_phone_enc = NULL, kept_email_enc = NULL, kept_phone_hmac = NULL, kept_uf = NULL, kept_employment_type = NULL, kept_income_band = NULL, kept_debt_band = NULL WHERE case_id = $1`, [caseId]);
   await q.query(`UPDATE app.cases SET status = 'purged', inputs = '{}'::jsonb, purged_at = now() WHERE id = $1`, [caseId]);
 }
 

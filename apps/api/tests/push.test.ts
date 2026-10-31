@@ -154,8 +154,18 @@ test('avisos inteligentes: limite de categoria, assinatura que subiu, cobrança 
   const today = todaySaoPaulo();
   const ago = (n: number) => new Date(Date.parse(`${today}T00:00:00Z`) - n * 86_400_000).toISOString().slice(0, 10);
   // Netflix: três cobranças de 39,90 e a última de 49,90 (subiu); a última também foi cobrada duas vezes no mesmo dia.
+  // As três primeiras caem no mesmo dia dos três meses anteriores à última (com "hoje - 30/60/90 dias" duas delas caíam no
+  // mesmo mês quando o mês anterior tinha 31 dias, e o teste só passava em alguns dias do calendário).
+  const monthsBefore = (k: number) => {
+    const d = new Date(Date.parse(`${ago(2)}T00:00:00Z`));
+    const day = Math.min(d.getUTCDate(), 28);
+    d.setUTCDate(1);
+    d.setUTCMonth(d.getUTCMonth() - k);
+    d.setUTCDate(day);
+    return d.toISOString().slice(0, 10);
+  };
   const entries = [
-    { date: ago(90), amountCents: -3990, note: 'NETFLIX.COM' }, { date: ago(60), amountCents: -3990, note: 'NETFLIX.COM' }, { date: ago(30), amountCents: -3990, note: 'NETFLIX.COM' },
+    { date: monthsBefore(3), amountCents: -3990, note: 'NETFLIX.COM' }, { date: monthsBefore(2), amountCents: -3990, note: 'NETFLIX.COM' }, { date: monthsBefore(1), amountCents: -3990, note: 'NETFLIX.COM' },
     { date: ago(2), amountCents: -4990, note: 'NETFLIX.COM' }, { date: ago(2), amountCents: -4990, note: 'NETFLIX.COM' },
     { date: ago(3), amountCents: -9500, note: 'Supermercado', category: 'mercado' },
   ];

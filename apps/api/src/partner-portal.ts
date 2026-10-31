@@ -343,7 +343,7 @@ export async function createDeal(ctx: Ctx, partnerId: string, input: z.infer<typ
   if (input.source === 'lead') {
     if (!input.refId) throw new AppError(422, 'missing_ref', 'Escolha o contato do Fôlego.');
     const d = await ctx.db.query<{ commission_bps: number; full_name_enc: Buffer | null; status: string }>(
-      `SELECT c.commission_bps, lc.full_name_enc, d.status FROM app.lead_deliveries d JOIN app.partner_campaigns c ON c.id = d.campaign_id LEFT JOIN app.lead_contacts lc ON lc.case_id = d.case_id WHERE d.id = $1 AND d.partner_id = $2`,
+      `SELECT c.commission_bps, coalesce(lc.full_name_enc, d.kept_name_enc) AS full_name_enc, d.status FROM app.lead_deliveries d JOIN app.partner_campaigns c ON c.id = d.campaign_id LEFT JOIN app.lead_contacts lc ON lc.case_id = d.case_id WHERE d.id = $1 AND d.partner_id = $2`,
       [input.refId, partnerId],
     );
     const x = d.rows[0];

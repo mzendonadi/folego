@@ -354,7 +354,7 @@ export async function ensureThread(ctx: Ctx, partnerId: string, e164: string, hi
       const variants = new Set([national, national.length === 10 ? `${national.slice(0, 2)}9${national.slice(2)}` : national.length === 11 ? `${national.slice(0, 2)}${national.slice(3)}` : national]);
       const keys = [...variants].map((n) => hmac(secret, `phone:${n}`).toString('hex'));
       const d = await ctx.db.query<{ id: string }>(
-        `SELECT d.id FROM app.lead_deliveries d JOIN app.lead_contacts lc ON lc.case_id = d.case_id WHERE d.partner_id = $1 AND d.status IN ('delivered','contacted','converted') AND encode(lc.phone_hmac, 'hex') = ANY($2::text[]) LIMIT 1`,
+        `SELECT d.id FROM app.lead_deliveries d LEFT JOIN app.lead_contacts lc ON lc.case_id = d.case_id WHERE d.partner_id = $1 AND d.status IN ('delivered','contacted','converted') AND encode(coalesce(lc.phone_hmac, d.kept_phone_hmac), 'hex') = ANY($2::text[]) LIMIT 1`,
         [partnerId, keys],
       );
       if (d.rows[0]) deliveryId = d.rows[0].id;

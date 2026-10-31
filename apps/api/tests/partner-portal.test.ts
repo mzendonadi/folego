@@ -8,6 +8,7 @@ import { createPgliteDb, ensureSchema } from '../src/db.ts';
 import type { Db } from '../src/db.ts';
 import { FakeGateway } from '../src/gateway.ts';
 import { deliverPendingLeads } from '../src/leads.ts';
+import { purgeExpired } from '../src/services.ts';
 import { buildXlsx } from '../src/xlsx.ts';
 import * as partners from '../src/admin/partners.ts';
 import { cleanCpf, planSheet, readXlsx, SIAPE_LAYOUT } from '../src/engine.ts';
@@ -283,6 +284,42 @@ test('contatos do Fôlego: entrega só no portal, contrato com comissão em %, b
   const names = await db.query<{ client_name: string | null }>(`SELECT client_name FROM app.partner_deals WHERE id = $1`, [deal.json.id]);
   assert.equal(names.rows[0]!.client_name, null);
   assert.equal((await admin('GET', '/api/partner/deals', { headers: auth })).json.totals.folegoVolumeCents, 3_000_000);
+});
+
+test('lead entregue não some do painel do parceiro quando o caso do Fôlego é expurgado por prazo; revogar apaga', async () => {
+  const admin = client();
+  const euro = await db.query<{ id: string }>(`SELECT id FROM app.partners WHERE cnpj = '09242004000150'`);
+  const partnerId = euro.rows[0]!.id;
+  const login = await admin('POST', '/api/partner/login', { body: { email: 'euro@teste.com', password: (await partners.resetPassword(ctx(), 'teste', partnerId)).password } });
+  const auth = { authorization: `Bearer ${login.json.token}` };
+  const digits = (s: string | null) => (s ?? '').replace(/\D/g, '');
+
+  // 1) lead entregue + caso expurgado por prazo (7 dias sem pagar): o contato continua na lista do parceiro
+  const a = await paidCase('expurgo-a');
+  assert.equal((await a.c('POST', `/api/cases/${a.caseId}/leads`, { body: { name: 'Maria Souza', phone: '(11) 91234-5678', categories: ['consignado'], consent: true } })).status, 201);
+  await deliverPendingLeads(ctx());
+  const before = (await admin('GET', '/api/partner/leads', { headers: auth })).json.leads.find((l: any) => l.name === 'Maria Souza');
+  assert.ok(before, 'aparece depois de entregue');
+  await db.query(`UPDATE app.cases SET purge_after = now() - interval '1 minute' WHERE id = $1`, [a.caseId]);
+  assert.ok((await purgeExpired(ctx(), 500)) >= 1, 'o expurgo por prazo rodou');
+  assert.equal((await db.query(`SELECT 1 FROM app.lead_contacts WHERE case_id = $1`, [a.caseId])).rows.length, 0, 'o contato do caso foi apagado');
+  const after = (await admin('GET', '/api/partner/leads', { headers: auth })).json.leads.find((l: any) => l.id === before.id);
+  assert.ok(after, 'o lead NÃO some do painel do parceiro depois do expurgo');
+  assert.equal(after.name, 'Maria Souza');
+  assert.ok(digits(after.phone).endsWith('912345678'));
+  assert.equal(after.status, 'delivered');
+  assert.equal(after.revoked, false);
+  assert.equal(after.uf, 'SP', 'a faixa do perfil também fica com a entrega');
+
+  // 2) o titular revoga: some do painel (e a cópia é apagada, LGPD)
+  const b = await paidCase('expurgo-b');
+  assert.equal((await b.c('POST', `/api/cases/${b.caseId}/leads`, { body: { name: 'Pedro Lima', phone: '(21) 99876-5432', categories: ['consignado'], consent: true } })).status, 201);
+  await deliverPendingLeads(ctx());
+  assert.ok((await admin('GET', '/api/partner/leads', { headers: auth })).json.leads.find((l: any) => l.name === 'Pedro Lima'));
+  assert.equal((await b.c('DELETE', `/api/cases/${b.caseId}/leads`)).status, 204);
+  assert.equal((await admin('GET', '/api/partner/leads', { headers: auth })).json.leads.find((l: any) => l.name === 'Pedro Lima'), undefined, 'revogou: sai da lista');
+  const kept = await db.query<{ kept_phone_enc: Buffer | null }>(`SELECT kept_phone_enc FROM app.lead_deliveries WHERE case_id = $1`, [b.caseId]);
+  assert.ok(kept.rows.every((r) => r.kept_phone_enc === null), 'a cópia guardada na entrega foi apagada');
 });
 
 test('backoffice: editar o cadastro inteiro do parceiro, inclusive o e-mail de acesso ao portal (a senha continua)', async () => {

@@ -205,6 +205,8 @@ export async function revokeLead(ctx: Ctx, sessionId: string, caseId: string): P
     await q.query(`DELETE FROM app.lead_contacts WHERE case_id = $1`, [caseId]);
     await q.query(`DELETE FROM app.lead_profiles WHERE case_id = $1`, [caseId]);
     await q.query(`UPDATE app.lead_deliveries SET status = 'rejected' WHERE case_id = $1 AND status IN ('queued','failed')`, [caseId]);
+    // A cópia que o parceiro guarda na entrega também some: quem revogou deixa de aparecer na lista dele.
+    await q.query(`UPDATE app.lead_deliveries SET kept_name_enc = NULL, kept_phone_enc = NULL, kept_email_enc = NULL, kept_phone_hmac = NULL, kept_uf = NULL, kept_employment_type = NULL, kept_income_band = NULL, kept_debt_band = NULL WHERE case_id = $1`, [caseId]);
     // O contrato fechado continua nos números (valor e comissão), mas sem o nome do titular que revogou.
     await q.query(`UPDATE app.partner_deals SET client_name = NULL WHERE delivery_id IN (SELECT id FROM app.lead_deliveries WHERE case_id = $1)`, [caseId]);
     await q.query(`DELETE FROM app.partner_events WHERE delivery_id IN (SELECT id FROM app.lead_deliveries WHERE case_id = $1)`, [caseId]);
@@ -226,6 +228,21 @@ export function assertPublicHttpsUrl(raw: string): URL {
   const privateHost = host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.internal') || host.endsWith('.local') || /^(\d{1,3}\.){3}\d{1,3}$/.test(host) || host.includes(':') || !host.includes('.');
   if (u.protocol !== 'https:' || privateHost || u.username || u.password) throw new AppError(422, 'invalid_webhook', 'O webhook precisa ser https, com nome de domínio público');
   return u;
+}
+
+/**
+ * O parceiro é dono do contato que recebeu: a entrega guarda a própria cópia (criptografada) para o lead não sumir do painel
+ * dele quando o caso do Fôlego é expurgado por prazo. A revogação do titular e o "apagar meus dados" apagam essa cópia.
+ */
+export async function keepLeadCopy(db: Ctx['db'], deliveryId: string): Promise<void> {
+  await db.query(
+    `UPDATE app.lead_deliveries d
+        SET kept_name_enc = lc.full_name_enc, kept_phone_enc = lc.phone_enc, kept_email_enc = lc.email_enc, kept_phone_hmac = lc.phone_hmac,
+            kept_uf = lp.uf, kept_employment_type = lp.employment_type, kept_income_band = lp.income_band, kept_debt_band = lp.debt_band
+       FROM app.lead_contacts lc LEFT JOIN app.lead_profiles lp ON lp.case_id = lc.case_id
+      WHERE d.id = $1 AND lc.case_id = d.case_id`,
+    [deliveryId],
+  );
 }
 
 export async function deliverPendingLeads(ctx: Ctx, opts: { fetchFn?: typeof fetch; limit?: number; log?: (e: Record<string, unknown>) => void } = {}): Promise<number> {
@@ -258,6 +275,7 @@ export async function deliverPendingLeads(ctx: Ctx, opts: { fetchFn?: typeof fet
     if (!camp.webhook_url || !camp.webhook_secret_enc) {
       // Campanha só de portal (sem webhook): o contato já está disponível na tela do parceiro.
       await ctx.db.query(`UPDATE app.lead_deliveries SET status = 'delivered', delivered_at = now() WHERE id = $1`, [d.id]);
+      await keepLeadCopy(ctx.db, d.id);
       opts.log?.({ evento: 'lead_no_portal', entrega: d.id });
       continue;
     }
@@ -282,6 +300,7 @@ export async function deliverPendingLeads(ctx: Ctx, opts: { fetchFn?: typeof fet
       const res = await fetchFn(url, { method: 'POST', headers: { 'content-type': 'application/json', 'x-folego-signature': `sha256=${signature}` }, body: payload, signal: AbortSignal.timeout(10_000), redirect: 'error' });
       if (res.ok) {
         await ctx.db.query(`UPDATE app.lead_deliveries SET status = 'delivered', delivered_at = now(), last_response_code = $2 WHERE id = $1`, [d.id, res.status]);
+        await keepLeadCopy(ctx.db, d.id);
         opts.log?.({ evento: 'lead_entregue', entrega: d.id });
       } else {
         await ctx.db.query(`UPDATE app.lead_deliveries SET status = 'failed', last_response_code = $2 WHERE id = $1`, [d.id, res.status]);
@@ -374,12 +393,13 @@ export async function partnerLeads(ctx: Ctx, partnerId: string): Promise<Record<
     `SELECT d.id, d.status, d.created_at, d.delivered_at, d.price_cents, c.consent_category AS category, c.name AS campaign, c.commission_bps,
             (SELECT count(*) FROM app.partner_deals pd WHERE pd.delivery_id = d.id AND pd.status = 'fechado')::text AS deals_n,
             (SELECT coalesce(sum(pd.amount_cents), 0) FROM app.partner_deals pd WHERE pd.delivery_id = d.id AND pd.status = 'fechado')::text AS deals_cents,
-            lc.full_name_enc, lc.phone_enc, lc.email_enc, lp.uf, lp.employment_type, lp.income_band, lp.debt_band
+            coalesce(lc.full_name_enc, d.kept_name_enc) AS full_name_enc, coalesce(lc.phone_enc, d.kept_phone_enc) AS phone_enc, coalesce(lc.email_enc, d.kept_email_enc) AS email_enc,
+            coalesce(lp.uf, d.kept_uf) AS uf, coalesce(lp.employment_type, d.kept_employment_type) AS employment_type, coalesce(lp.income_band, d.kept_income_band) AS income_band, coalesce(lp.debt_band, d.kept_debt_band) AS debt_band
        FROM app.lead_deliveries d
        JOIN app.partner_campaigns c ON c.id = d.campaign_id
        LEFT JOIN app.lead_contacts lc ON lc.case_id = d.case_id
        LEFT JOIN app.lead_profiles lp ON lp.case_id = d.case_id
-      WHERE d.partner_id = $1 AND lc.case_id IS NOT NULL ORDER BY d.created_at DESC LIMIT 200`, // quem revogou perde o contato (revokeLead apaga lead_contacts) e some da lista
+      WHERE d.partner_id = $1 AND (lc.case_id IS NOT NULL OR d.kept_phone_enc IS NOT NULL) ORDER BY d.created_at DESC LIMIT 200`, // sem contato nem cópia = o titular revogou ou apagou os dados (a cópia da entrega é apagada junto) e some da lista; o expurgo por prazo NÃO tira o lead do parceiro
     [partnerId],
   );
   return r.rows.map((x) => {
