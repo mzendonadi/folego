@@ -275,7 +275,7 @@ test('carteiras e lembretes: carteira isolada por dono, saldo por carteira, lemb
   const w = await c('POST', '/api/account/wallets', { body: { name: 'Nubank', kind: 'conta' } });
   assert.equal(w.status, 201);
   assert.equal((await c('POST', '/api/account/wallets', { body: { name: '', kind: 'conta' } })).status, 400);
-  const month = new Date().toISOString().slice(0, 7);
+  const month = todaySaoPaulo().slice(0, 7); // mesmo fuso do app (em UTC, perto da virada do mês o teste lançava no mês seguinte)
   await c('POST', '/api/account/entries', { body: { entries: [{ date: `${month}-02`, amountCents: 100_000, note: 'Salario', walletId: w.json.id }, { date: `${month}-03`, amountCents: -20_000, note: 'Mercado' }] } });
   const list = (await c('GET', '/api/account/wallets')).json;
   assert.equal(list.wallets[0].balanceCents, 100_000);
@@ -288,7 +288,7 @@ test('carteiras e lembretes: carteira isolada por dono, saldo por carteira, lemb
   assert.equal((await other('POST', '/api/account/entries', { body: { entries: [{ date: `${month}-04`, amountCents: 1000, note: 'x', walletId: w.json.id }] } })).status, 404, 'carteira alheia');
   assert.equal((await other('DELETE', `/api/account/wallets/${w.json.id}`)).status, 404);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todaySaoPaulo();
   const r = await c('POST', '/api/account/reminders', { body: { title: 'Conta de luz', dueOn: today, amountCents: 18_000, repeatMonthly: true, emailDaysBefore: 1 } });
   assert.equal(r.status, 201);
   assert.equal((await c('POST', '/api/account/reminders', { body: { title: 'X', dueOn: 'amanhã' } })).status, 400);
@@ -325,7 +325,7 @@ test('dívidas da conta: saldo cai com pagamento, plano recomenda o foco, orçam
   assert.equal(over.json.paidOff, true, 'pagamento maior que o saldo quita sem passar');
   assert.equal((await c('POST', `/api/account/debts/${card.json.id}/payments`, { body: { amountCents: 100 } })).status, 409);
 
-  const month = new Date().toISOString().slice(0, 7);
+  const month = todaySaoPaulo().slice(0, 7); // mesmo fuso do app (em UTC, perto da virada do mês o teste lançava no mês seguinte)
   await c('POST', '/api/account/limits/mercado', { body: { limitCents: 80_000 } });
   assert.equal((await c('POST', `/api/account/budget/${month}/limits/mercado`, { body: { limitCents: 50_000 } })).status, 200);
   assert.equal((await c('GET', `/api/account/month/${month}`)).json.limits.mercado, 50_000, 'o do mês vence o padrão');
@@ -356,7 +356,7 @@ test('planejador: só Desbravador, responde com os fatos da conta (sem chave de 
   await login(c, 'plan-desbrav@exemplo.com');
   const o2 = await c('POST', '/api/account/subscription-order', { body: { plan: 'desbravador' }, headers: { 'idempotency-key': 'sub-planej-00002' } });
   await pay(o2.json.orderId, 'sub-planej2');
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todaySaoPaulo();
   await c('POST', '/api/account/entries', { body: { entries: [{ date: today, amountCents: 300_000, note: 'Salario' }, { date: today, amountCents: -120_000, note: 'Aluguel' }] } });
   await c('POST', '/api/account/debts', { body: { name: 'Cartão', balanceCents: 400_000, monthlyRateBps: 1000, minPaymentCents: 40_000 } });
   assert.equal((await c('POST', '/api/account/planner', { body: { question: 'ok' } })).status, 400);
