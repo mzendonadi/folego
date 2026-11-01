@@ -25,7 +25,7 @@ test('posição: informada vale mais que a estimada; CDI a 102% rende um pouco m
   const informed = viewInvestment({ ...cdb, positionCents: 25_774 }, '2026-10-26', rates);
   assert.equal(informed.estimated, false);
   assert.equal(informed.yieldCents, 398);
-  assert.equal(informed.yieldPct, 1.57);
+  assert.equal(informed.yieldPct, 1.56, 'corta as casas, como o app do banco (398/25376 = 1,5683%)');
 });
 
 test('posição informada é um marco com data: no dia vale o informado e depois segue o índice (não fica parada)', () => {
@@ -37,6 +37,21 @@ test('posição informada é um marco com data: no dia vale o informado e depois
   assert.equal(depois.yieldCents, depois.positionCents - 25_376);
   // sem CDI conhecido não dá para atualizar: mantém o informado
   assert.equal(viewInvestment(marco, '2026-10-30', { cdiAnnualPct: null }).positionCents, 25_774);
+});
+
+test('carteira do dono em 31/10/2026: posições do banco valem no dia e o total fecha em R$ 1.030,40, +R$ 6,64 (0,64%)', () => {
+  const dia = '2026-10-31';
+  const a = { ...cdb, appliedCents: 25_376, appliedOn: '2026-09-11', positionCents: 25_841, positionOn: dia };
+  const b = { ...cdb, appliedCents: 77_000, appliedOn: '2026-10-26', positionCents: 77_199, positionOn: dia };
+  const va = viewInvestment(a, dia, rates);
+  const vb = viewInvestment(b, dia, rates);
+  assert.deepEqual([va.positionCents, va.yieldCents], [25_841, 465]);
+  assert.deepEqual([vb.positionCents, vb.yieldCents], [77_199, 199]);
+  assert.ok(va.irPct === 22.5 && va.netYieldCents < va.yieldCents, 'IR de hoje sobre o rendimento');
+  const t = summarizeInvestments([{ input: a }, { input: b }], dia, rates);
+  assert.equal(t.positionCents, 103_040);
+  assert.equal(t.yieldCents, 664);
+  assert.equal(t.yieldPct, 0.64);
 });
 
 test('totais: ativo entra no investido, processando fica à parte, resgatado some', () => {

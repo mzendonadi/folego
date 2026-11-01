@@ -105,7 +105,7 @@ export function viewInvestment(inv: InvestmentInput, today: string, rates: Marke
   const irPct = irPctForDays(daysHeld);
   return {
     positionCents, yieldCents,
-    yieldPct: inv.appliedCents > 0 ? Math.round((yieldCents / inv.appliedCents) * 10_000) / 100 : 0,
+    yieldPct: inv.appliedCents > 0 ? Math.trunc((yieldCents / inv.appliedCents) * 10_000) / 100 : 0, // corta as casas (como o app do banco), não arredonda
     estimated,
     daysHeld, irPct,
     netYieldCents: yieldCents > 0 ? Math.round(yieldCents * (1 - irPct / 100)) : yieldCents,
@@ -138,6 +138,6 @@ export function summarizeInvestments(list: Array<{ input: InvestmentInput }>, to
     out.yieldCents += v.yieldCents;
     out.count += 1;
   }
-  out.yieldPct = out.appliedCents > 0 ? Math.round((out.yieldCents / out.appliedCents) * 10_000) / 100 : 0;
+  out.yieldPct = out.appliedCents > 0 ? Math.trunc((out.yieldCents / out.appliedCents) * 10_000) / 100 : 0; // corta as casas (como o app do banco)
   return out;
 }

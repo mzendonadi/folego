@@ -88,13 +88,17 @@ export function viewInvestimentos(ctx) {
       const applied = g.reduce((s, x) => s + x.appliedCents, 0);
       const position = g.reduce((s, x) => s + x.view.positionCents, 0);
       const gain = position - applied;
+      const gainPct = applied > 0 ? Math.trunc((gain / applied) * 10_000) / 100 : 0; // corta as casas, como o app do banco
+      const irCents = g.reduce((s, x) => s + (x.view.yieldCents > 0 ? x.view.yieldCents - x.view.netYieldCents : 0), 0);
+      const netGain = g.reduce((s, x) => s + x.view.netYieldCents, 0);
       const head = el('button', { class: 'inv-card-head', type: 'button', 'aria-expanded': 'false' },
         el('span', { class: 'inv-pill' }, `${g.length} ${g.length === 1 ? 'APLICAÇÃO' : 'APLICAÇÕES'}`),
         el('strong', { class: 'inv-name' }, g[0].name),
         el('dl', { class: 'inv-dl' },
           el('div', {}, el('dt', {}, 'Posição'), el('dd', {}, money(position))),
           el('div', {}, el('dt', {}, 'Valor aplicado'), el('dd', {}, money(applied))),
-          el('div', {}, el('dt', {}, 'Rendimento'), el('dd', { class: gain >= 0 ? 'pos' : 'neg' }, hidden.on ? 'R$ ••••' : brl(gain))),
+          el('div', {}, el('dt', {}, 'Rendimento'), el('dd', { class: gain >= 0 ? 'pos' : 'neg' }, hidden.on ? 'R$ ••••' : `${gain >= 0 ? '+' : ''}${brl(gain)} (${fmtPct(gainPct)})`)),
+          el('div', {}, el('dt', {}, 'IR hoje'), el('dd', {}, hidden.on ? 'R$ ••••' : irCents > 0 ? `−${brl(irCents)} · líquido ${brl(netGain)}` : 'sem IR a descontar')),
           el('div', {}, el('dt', {}, 'Rentabilidade'), el('dd', {}, rateText(g[0])))),
         icon('chevron', 'icon lg-chev'));
       const body = el('div', { class: 'inv-card-body', hidden: true }, el('ul', { class: 'entries' }, ...g.map((x) => row(x))));
@@ -135,7 +139,7 @@ export function viewInvestimentos(ctx) {
       el('div', {},
         el('strong', {}, `${money(x.appliedCents)} em ${dayBr(x.appliedOn)}`),
         el('p', { class: 'muted fine' }, v
-          ? `Posição ${money(v.positionCents)}${v.estimated ? ' (estimada)' : ''} · rendimento ${hidden.on ? '••••' : brl(v.yieldCents)} · IR hoje ${fmtPct(v.irPct)}, líquido ${hidden.on ? '••••' : brl(v.netYieldCents)} · ${x.liquidity === 'diaria' ? 'liquidez diária' : `vence ${x.maturesOn ? dayBr(x.maturesOn) : 'no vencimento'}`}`
+          ? `Posição ${money(v.positionCents)}${v.estimated ? ' (estimada)' : ''} · rendimento ${hidden.on ? '••••' : `${v.yieldCents >= 0 ? '+' : ''}${brl(v.yieldCents)} (${fmtPct(v.yieldPct)})`} · IR hoje ${fmtPct(v.irPct)}${!hidden.on && v.yieldCents > 0 ? ` (−${brl(v.yieldCents - v.netYieldCents)})` : ''}, líquido ${hidden.on ? '••••' : brl(v.netYieldCents)} · ${x.liquidity === 'diaria' ? 'liquidez diária' : `vence ${x.maturesOn ? dayBr(x.maturesOn) : 'no vencimento'}`}`
           : `Resgatada · ${money(x.appliedCents)} aplicados em ${dayBr(x.appliedOn)}`)),
       el('span', {}), el('span', { class: 'ledger-actions' }, ...(x.status === 'ativo' ? [redeemBtn(x)] : []), edit, del));
   }
