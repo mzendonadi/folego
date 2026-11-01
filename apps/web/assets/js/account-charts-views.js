@@ -265,7 +265,7 @@ export function viewRelatorios(ctx) {
     const until = r.to > todayISO() ? todayISO() : r.to;
     sections.push(chartCard('Gasto por dia', null, line(dailyPoints(r.from, until, r.daily), { interactive: live, xLabel: (p) => (r.from.slice(0, 4) === r.to.slice(0, 4) ? dayShort(p.x) : `${dayShort(p.x)}/${p.x.slice(2, 4)}`), label: 'Gasto por dia' })));
     if (r.byOrigin.some((o) => o.spendCents > 0)) sections.push(chartCard('Por conta e cartão', null, hbars(r.byOrigin.filter((o) => o.spendCents > 0).map((o) => ({ key: `${o.kind}:${o.name}`, label: o.name, value: o.spendCents, sub: o.kind === 'cartao' ? 'Cartão de crédito' : o.kind === 'conta' ? 'Conta ou carteira' : 'Sem conta definida' })), { interactive: live, label: 'Gasto por conta e cartão' })));
-    if (r.top.length) sections.push(el('section', { class: 'card d-section' }, el('h2', {}, 'Maiores gastos do período'), el('ol', { class: 'rel-top' }, ...r.top.map((x) => el('li', {}, el('span', { class: 'rel-top-note' }, el('strong', {}, x.note), el('span', { class: 'fine muted' }, `${dayShort(x.date)} · ${catLabel(x.category)}`)), el('strong', { class: 'neg' }, brl(x.cents)))))));
+    if (r.top.length) sections.push(el('section', { class: 'card d-section' }, el('h2', {}, 'Maiores gastos do período'), el('ol', { class: 'rel-top' }, ...r.top.map((x) => el('li', {}, el('span', { class: 'rel-top-note' }, el('strong', {}, x.note), el('span', { class: 'fine muted' }, x.count > 1 ? `${x.count} lançamentos · ${(x.dates ?? []).map(dayShort).join(', ')}${x.count > (x.dates ?? []).length ? '…' : ''} · ${catLabel(x.category)}` : `${dayShort(x.date)} · ${catLabel(x.category)}`)), el('strong', { class: 'neg' }, brl(x.cents)))))));
     root.replaceChildren(controls(), ...sections);
   }
 

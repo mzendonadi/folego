@@ -28,6 +28,17 @@ test('posição: informada vale mais que a estimada; CDI a 102% rende um pouco m
   assert.equal(informed.yieldPct, 1.57);
 });
 
+test('posição informada é um marco com data: no dia vale o informado e depois segue o índice (não fica parada)', () => {
+  const marco = { ...cdb, positionCents: 25_774, positionOn: '2026-10-23' };
+  assert.equal(viewInvestment({ ...marco, positionOn: '2026-10-30' }, '2026-10-30', rates).positionCents, 25_774, 'no dia em que foi informada vale como está');
+  const depois = viewInvestment(marco, '2026-10-30', rates); // 5 dias úteis depois
+  assert.equal(depois.estimated, true);
+  assert.ok(depois.positionCents > 25_774 && depois.positionCents < 25_774 + 100, String(depois.positionCents));
+  assert.equal(depois.yieldCents, depois.positionCents - 25_376);
+  // sem CDI conhecido não dá para atualizar: mantém o informado
+  assert.equal(viewInvestment(marco, '2026-10-30', { cdiAnnualPct: null }).positionCents, 25_774);
+});
+
 test('totais: ativo entra no investido, processando fica à parte, resgatado some', () => {
   const t = summarizeInvestments([
     { input: { ...cdb, positionCents: 25_774 } },

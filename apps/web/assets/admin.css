@@ -304,3 +304,7 @@ button.bo-kpi:hover::after, button.bo-kpi:focus-visible::after { color: var(--pr
 .bo-me > span { margin-bottom: var(--s2); }
 .bo-me > .btn { width: auto; min-height: 36px; padding-inline: 14px; justify-content: center; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); font-weight: 600; }
 .bo-me > .btn:hover { border-color: var(--primary); color: var(--primary); background: var(--surface); }
+
+/* D-151: os dois botões do bloco do usuário com exatamente o mesmo tamanho (largura toda do bloco), conteúdo à esquerda */
+.bo-me > .btn { flex: 1 1 100%; width: 100%; justify-content: flex-start; }
+

@@ -310,6 +310,9 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
           const anchor = id === 'geral' ? [...view.children].find((k) => /Para onde foi/.test(k.querySelector?.('h2')?.textContent ?? '')) : null;
           if (anchor) anchor.after(extra); else view.append(extra);
         }
+        // O convite "Quer ter ainda mais tranquilidade financeira?" é sempre o último card da tela, depois dos gráficos e de tudo o mais.
+        const promo = view?.children ? [...view.children].find((k) => k.id === 'pb-title' || k.querySelector?.('#pb-title')) : null;
+        if (promo && view.lastElementChild !== promo) view.append(promo);
         const invites = [invite, pushInvite].filter(Boolean);
         const kids = id === 'geral' && invites.length ? [...(view.children ?? [])] : [];
         if (kids.length) {

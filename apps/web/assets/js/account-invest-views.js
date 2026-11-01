@@ -218,7 +218,7 @@ export function viewInvestimentos(ctx) {
       field('Tipo', kind), field('Rende como', indexer),
       field('Taxa', rate, 'CDI: 102 vale 102% do CDI. Prefixado e IPCA+: % ao ano.'),
       field('Valor aplicado (R$)', applied.input), field('Data da aplicação', on),
-      field('Posição atual (R$)', position.input, 'Opcional: o valor que o app da corretora mostra hoje. Sem ele, o Prumo estima.'),
+      field('Posição atual (R$)', position.input, 'Opcional: o valor que o app da corretora mostra hoje. O Prumo guarda o dia de hoje e, dali em diante, atualiza pelo índice. Sem ele, o Prumo estima pela data e pela taxa. Se você mudar o valor aplicado, a data ou a taxa e deixar esta posição como está, ela é recalculada.'),
       field('Liquidez', liq), field('Vencimento', matures), field('Situação', status),
       el('div', { class: 'field field-wide' }, el('label', { class: 'label', for: 'iv-obs' }, 'Observação'), note),
       el('div', { class: 'button-row' }, save, back));
@@ -239,7 +239,10 @@ export function viewInvestimentos(ctx) {
       save.disabled = true;
       try {
         if (existing) await ctx.api.updateInvestment(existing.id, body); else await ctx.api.createInvestment(body);
-        toast(existing ? 'Aplicação atualizada.' : 'Aplicação lançada.');
+        // Mesma regra do servidor: posição de antes mantida com valor, data ou taxa mudados = recalculada pelas condições novas
+        const recalculated = existing && existing.positionInformedCents != null && body.positionCents === existing.positionInformedCents
+          && (existing.appliedCents !== body.appliedCents || existing.appliedOn !== body.appliedOn || existing.indexer !== body.indexer || Math.round(existing.ratePct * 100) !== Math.round(body.ratePct * 100));
+        toast(existing ? (recalculated ? 'Aplicação atualizada. A posição foi recalculada pelas novas condições; para fixar o valor do app da corretora, informe a posição.' : 'Aplicação atualizada.') : 'Aplicação lançada.');
         show();
       } catch (err) {
         save.disabled = false;
@@ -277,7 +280,7 @@ export function mdToNodes(md) {
       while (i < lines.length && lines[i].trim().startsWith('|')) { rows.push(lines[i].trim()); i += 1; }
       const cells = (r) => r.replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
       const [head, ...rest] = rows.map(cells).filter((r) => !r.every((c) => /^:?-{2,}:?$/.test(c)));
-      if (head) nodes.push(el('div', { class: 'md-table-wrap' }, el('table', { class: 'cc-table md-table' }, el('thead', {}, el('tr', {}, ...head.map((c) => el('th', { scope: 'col' }, ...inline(c))))), el('tbody', {}, ...rest.map((r) => el('tr', {}, ...r.map((c) => el('td', {}, ...inline(c)))))))));
+      if (head && rest.length > 0) nodes.push(el('div', { class: 'md-table-wrap' }, el('table', { class: 'cc-table md-table' }, el('thead', {}, el('tr', {}, ...head.map((c) => el('th', { scope: 'col' }, ...inline(c))))), el('tbody', {}, ...rest.map((r) => el('tr', {}, ...r.map((c) => el('td', {}, ...inline(c)))))))));
       continue;
     }
     if (listLine.test(line)) {

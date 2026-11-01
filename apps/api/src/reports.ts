@@ -41,6 +41,41 @@ function clause(sub: string, from: string, to: string, f: Filters): { where: str
 const SPEND = `coalesce(sum(-l.amount_cents) FILTER (WHERE l.amount_cents < 0), 0)::text`;
 const INCOME = `coalesce(sum(l.amount_cents) FILTER (WHERE l.amount_cents > 0), 0)::text`;
 
+/**
+ * Chave para reconhecer a mesma despesa escrita de jeitos parecidos pelo banco: caixa, acentos, pontuação, espaços e o
+ * "(500,00 EURO)" da compra em moeda estrangeira não contam; "l" e "i" valem o mesmo (a leitura de PDF troca "IEDUC" por "leduc").
+ */
+export function spendKey(note: string): string {
+  return note.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+    .replace(/\(\s*[\d.,]+\s*[a-z]{3,5}\s*\)/g, ' ')
+    .replace(/l/g, 'i')
+    .replace(/[^a-z0-9*]+/g, ' ').trim();
+}
+
+interface SpendRow { id: string; d: string; note: string; category: string; cents: string }
+
+/**
+ * "Maiores gastos": cada despesa aparece uma vez só. Lançamentos com a mesma descrição (ou o mesmo texto cortado em pontos
+ * diferentes) viram uma linha com o total, quantos foram e as datas; o título e a categoria vêm do maior lançamento do grupo.
+ */
+export function groupTopSpend(rows: SpendRow[], limit = 10) {
+  interface G { key: string; id: string; note: string; category: string; total: number; biggest: number; dates: string[] }
+  const groups: G[] = [];
+  for (const r of rows) {
+    const key = spendKey(r.note);
+    const cents = num(r.cents);
+    const g = groups.find((x) => x.key === key || (Math.min(x.key.length, key.length) >= 20 && (x.key.startsWith(key) || key.startsWith(x.key))));
+    if (!g) { groups.push({ key, id: r.id, note: r.note, category: r.category, total: cents, biggest: cents, dates: [r.d] }); continue; }
+    g.total += cents;
+    g.dates.push(r.d);
+    if (cents > g.biggest) { g.biggest = cents; g.note = r.note; g.category = r.category; g.id = r.id; }
+  }
+  return groups.sort((a, b) => b.total - a.total).slice(0, limit).map((g) => {
+    const dates = [...g.dates].sort().reverse();
+    return { id: g.id, date: dates[0]!, note: g.note, category: g.category, cents: g.total, count: g.dates.length, dates: dates.slice(0, 6) };
+  });
+}
+
 async function aggregate(ctx: Ctx, sub: string, from: string, to: string, f: Filters, opts: { top: boolean; rows: boolean }) {
   const { where, params } = clause(sub, from, to, f);
   const q = <T>(sql: string) => ctx.db.query<T>(sql, params);
@@ -53,7 +88,7 @@ async function aggregate(ctx: Ctx, sub: string, from: string, to: string, f: Fil
     q<{ kind: string; name: string | null; spend: string; income: string }>(
       `SELECT CASE WHEN c.id IS NOT NULL THEN 'cartao' WHEN w.id IS NOT NULL THEN 'conta' ELSE 'solto' END AS kind, coalesce(c.name, w.name) AS name, ${SPEND} AS spend, ${INCOME} AS income
          FROM app.ledger_entries l LEFT JOIN app.wallets w ON w.id = l.wallet_id LEFT JOIN app.credit_cards c ON c.id = l.card_id WHERE ${where} GROUP BY 1, 2 ORDER BY sum(-l.amount_cents) FILTER (WHERE l.amount_cents < 0) DESC NULLS LAST`),
-    opts.top ? q<{ id: string; d: string; note: string; category: string; cents: string }>(`SELECT l.id, to_char(l.occurred_on, 'YYYY-MM-DD') AS d, l.note, l.category, (-l.amount_cents)::text AS cents FROM app.ledger_entries l WHERE ${where} AND l.amount_cents < 0 ORDER BY l.amount_cents ASC LIMIT 10`) : none<{ id: string; d: string; note: string; category: string; cents: string }>(),
+    opts.top ? q<{ id: string; d: string; note: string; category: string; cents: string }>(`SELECT l.id, to_char(l.occurred_on, 'YYYY-MM-DD') AS d, l.note, l.category, (-l.amount_cents)::text AS cents FROM app.ledger_entries l WHERE ${where} AND l.amount_cents < 0 ORDER BY l.amount_cents ASC LIMIT 3000`) : none<{ id: string; d: string; note: string; category: string; cents: string }>(),
     opts.rows ? q<{ d: string; note: string; category: string; cents: string; origin: string | null }>(`SELECT to_char(l.occurred_on, 'YYYY-MM-DD') AS d, l.note, l.category, l.amount_cents::text AS cents, coalesce(c.name, w.name) AS origin FROM app.ledger_entries l LEFT JOIN app.wallets w ON w.id = l.wallet_id LEFT JOIN app.credit_cards c ON c.id = l.card_id WHERE ${where} ORDER BY l.occurred_on DESC, l.created_at DESC LIMIT 3000`) : none<{ d: string; note: string; category: string; cents: string; origin: string | null }>(),
   ]);
   const t = tot.rows[0];
@@ -63,7 +98,7 @@ async function aggregate(ctx: Ctx, sub: string, from: string, to: string, f: Fil
     series: ser.rows.map((r) => ({ month: r.month, spendCents: num(r.spend), incomeCents: num(r.income) })),
     daily: dly.rows.map((r) => ({ date: r.d, spendCents: num(r.spend), incomeCents: num(r.income) })),
     byOrigin: org.rows.map((r) => ({ kind: r.kind, name: r.name ?? 'Sem conta definida', spendCents: num(r.spend), incomeCents: num(r.income) })),
-    top: top.rows.map((r) => ({ id: r.id, date: r.d, note: r.note, category: r.category, cents: num(r.cents) })),
+    top: groupTopSpend(top.rows),
     rows: rows.rows.map((r) => ({ date: r.d, note: r.note, category: r.category, cents: num(r.cents), origin: r.origin })),
   };
 }

@@ -11,8 +11,10 @@ export interface InvestmentInput {
   ratePct: number;
   appliedOn: string; // AAAA-MM-DD
   status: InvestStatus;
-  /** Posição informada pela pessoa (a do app da corretora). Se vier, vale mais que a estimativa. */
+  /** Posição informada pela pessoa (a do app da corretora): vale na data `positionOn` e, dali em diante, segue o índice até hoje. */
   positionCents?: number | null;
+  /** Dia em que a posição foi informada (AAAA-MM-DD). Sem ele, a posição vale como está (como era antes). */
+  positionOn?: string | null;
 }
 
 export interface MarketRates {
@@ -65,31 +67,46 @@ export function annualYieldPct(inv: Pick<InvestmentInput, 'indexer' | 'ratePct'>
   return null;
 }
 
-/** Posição estimada (bruta de IR) hoje, por dias úteis (252 ao ano). */
-export function estimatePositionCents(inv: InvestmentInput, today: string, rates: MarketRates): number | null {
-  if (inv.status === 'processando') return inv.appliedCents;
-  const bd = businessDays(inv.appliedOn, today);
+/** Faz `baseCents` render `bd` dias úteis (252 ao ano) pelo índice da aplicação; null se não dá para estimar (sem CDI, p.ex.). */
+function growCents(inv: Pick<InvestmentInput, 'indexer' | 'ratePct'>, baseCents: number, bd: number, rates: MarketRates): number | null {
   if (inv.indexer === 'cdi' || inv.indexer === 'selic') {
     if (rates.cdiAnnualPct === null) return null;
     const daily = Math.pow(1 + rates.cdiAnnualPct / 100, 1 / 252) - 1;
-    return Math.round(inv.appliedCents * Math.pow(1 + (daily * inv.ratePct) / 100, bd));
+    return Math.round(baseCents * Math.pow(1 + (daily * inv.ratePct) / 100, bd));
   }
   const a = annualYieldPct(inv, rates);
   if (a === null) return null;
-  return Math.round(inv.appliedCents * Math.pow(1 + a / 100, bd / 252));
+  return Math.round(baseCents * Math.pow(1 + a / 100, bd / 252));
+}
+
+/** Posição estimada (bruta de IR) hoje, por dias úteis (252 ao ano). */
+export function estimatePositionCents(inv: InvestmentInput, today: string, rates: MarketRates): number | null {
+  if (inv.status === 'processando') return inv.appliedCents;
+  return growCents(inv, inv.appliedCents, businessDays(inv.appliedOn, today), rates);
 }
 
 export function viewInvestment(inv: InvestmentInput, today: string, rates: MarketRates): InvestmentView {
   const informed = inv.positionCents ?? null;
-  const est = informed === null ? estimatePositionCents(inv, today, rates) : null;
-  const positionCents = informed ?? est ?? inv.appliedCents;
+  let positionCents: number;
+  let estimated: boolean;
+  if (informed === null) {
+    const est = estimatePositionCents(inv, today, rates);
+    positionCents = est ?? inv.appliedCents;
+    estimated = est !== null;
+  } else {
+    // Posição informada = marco com data: vale no dia em que foi informada e daí em diante segue o índice (não fica parada).
+    const bd = inv.positionOn && inv.positionOn < today ? businessDays(inv.positionOn, today) : 0;
+    const grown = bd > 0 ? growCents(inv, informed, bd, rates) : null;
+    positionCents = grown ?? informed;
+    estimated = grown !== null;
+  }
   const yieldCents = positionCents - inv.appliedCents;
   const daysHeld = investDaysBetween(inv.appliedOn, today);
   const irPct = irPctForDays(daysHeld);
   return {
     positionCents, yieldCents,
     yieldPct: inv.appliedCents > 0 ? Math.round((yieldCents / inv.appliedCents) * 10_000) / 100 : 0,
-    estimated: informed === null && est !== null,
+    estimated,
     daysHeld, irPct,
     netYieldCents: yieldCents > 0 ? Math.round(yieldCents * (1 - irPct / 100)) : yieldCents,
   };

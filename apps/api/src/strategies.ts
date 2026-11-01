@@ -78,7 +78,35 @@ export async function strategyOverview(ctx: Ctx, subscriberId: string) {
   };
 }
 
-const clean = (s: string): string => s.replace(/https?:\/\/\S+|www\.\S+/gi, '').replace(/\n{3,}/g, '\n\n').trim().slice(0, 20_000);
+// O limite antigo (20.000 caracteres) cortava a análise exatamente no cabeçalho da seção 5, deixando o Resumo Executivo sem linhas.
+const clean = (s: string): string => s.replace(/https?:\/\/\S+|www\.\S+/gi, '').replace(/\n{3,}/g, '\n\n').trim().slice(0, 60_000);
+
+const SUMMARY_HEAD = /#{2,4}\s*5\.?\s*Resumo Executivo/i;
+
+/** Quantas linhas de dados tem a tabela do "5. Resumo Executivo" (0 = faltou, veio só o cabeçalho ou a resposta foi cortada). */
+export function summaryRows(text: string): number {
+  const at = text.search(SUMMARY_HEAD);
+  if (at < 0) return 0;
+  const lines = text.slice(at).split(/\r?\n/).map((l) => l.trim()).filter((l) => l.startsWith('|'));
+  const data = lines.filter((l) => !/^\|[\s:|-]+\|?$/.test(l)); // tira a linha de separação |---|---|
+  return Math.max(0, data.length - 1); // menos o cabeçalho
+}
+
+/** Se a análise veio sem o resumo (cortada ou incompleta), pede só a seção 5 com base no que já foi escrito. */
+async function askSummary(ctx: Ctx, before: string): Promise<string> {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'x-api-key': ctx.config.anthropicApiKey!, 'anthropic-version': '2023-06-01', 'content-type': 'application/json', ...(ctx.config.anthropicWorkspaceId ? { 'anthropic-workspace-id': ctx.config.anthropicWorkspaceId } : {}) },
+    body: JSON.stringify({
+      model: ctx.config.aiModel, max_tokens: 2500, system: STRATEGIST_PROMPT,
+      messages: [{ role: 'user', content: `Esta é a análise que você escreveu (seções 1 a 4):\n\n${before.slice(-24_000)}\n\nEscreva SOMENTE a seção final, começando exatamente com "### 5. Resumo Executivo", com a tabela Markdown de 3 colunas [Ação imediata] | [Resultado esperado] | [Prioridade (Alto/Médio/Baixo)] e de 4 a 6 linhas objetivas, e uma frase final lembrando de confirmar taxas, tributos e condições com a instituição. Nada além disso.` }],
+    }),
+    signal: AbortSignal.timeout(90_000),
+  });
+  if (!res.ok) throw new Error(`anthropic_http_${res.status}`);
+  const data = (await res.json()) as { content?: Array<{ type: string; text?: string }> };
+  return clean((data.content ?? []).filter((c) => c.type === 'text').map((c) => c.text ?? '').join('\n'));
+}
 
 async function askStrategist(ctx: Ctx, snapshot: StrategySnapshot): Promise<string> {
   const facts = {
@@ -89,14 +117,23 @@ async function askStrategist(ctx: Ctx, snapshot: StrategySnapshot): Promise<stri
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'x-api-key': ctx.config.anthropicApiKey!, 'anthropic-version': '2023-06-01', 'content-type': 'application/json', ...(ctx.config.anthropicWorkspaceId ? { 'anthropic-workspace-id': ctx.config.anthropicWorkspaceId } : {}) },
-    body: JSON.stringify({ model: ctx.config.aiModel, max_tokens: 8000, system: STRATEGIST_PROMPT, messages: [{ role: 'user', content: `Dados consolidados da pessoa (valores em centavos):\n${JSON.stringify(facts, null, 1)}\n\nEntregue a análise completa na estrutura obrigatória.` }] }),
+    body: JSON.stringify({ model: ctx.config.aiModel, max_tokens: 12_000, system: STRATEGIST_PROMPT, messages: [{ role: 'user', content: `Dados consolidados da pessoa (valores em centavos):\n${JSON.stringify(facts, null, 1)}\n\nEntregue a análise completa na estrutura obrigatória.` }] }),
     signal: AbortSignal.timeout(170_000),
   });
   if (!res.ok) throw new Error(`anthropic_http_${res.status}`);
   const data = (await res.json()) as { content?: Array<{ type: string; text?: string }>; stop_reason?: string };
   const text = (data.content ?? []).filter((c) => c.type === 'text').map((c) => c.text ?? '').join('\n').trim();
   if (text.length < 600) throw new Error(`resposta_curta_${text.length}_${data.stop_reason ?? 'sem_parada'}_${(data.content ?? []).map((c) => c.type).join('+') || 'vazio'}`);
-  return clean(text);
+  let full = clean(text);
+  // Resposta cortada (limite de tamanho) ou sem as linhas do resumo: pede só a seção 5 e a coloca no lugar da incompleta.
+  if (data.stop_reason === 'max_tokens' || summaryRows(full) === 0) {
+    const at = full.search(SUMMARY_HEAD);
+    const before = (at >= 0 ? full.slice(0, at) : full).trimEnd();
+    const tail = await askSummary(ctx, before);
+    if (summaryRows(tail) === 0) throw new Error('resumo_sem_linhas');
+    full = `${before}\n\n${tail}`;
+  }
+  return full;
 }
 
 export async function requestStrategyReport(ctx: Ctx, subscriberId: string): Promise<{ status: 'running' }> {

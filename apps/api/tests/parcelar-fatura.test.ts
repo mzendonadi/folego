@@ -9,7 +9,7 @@ import { createPgliteDb, ensureSchema } from '../src/db.ts';
 import type { Db } from '../src/db.ts';
 import { FakeGateway } from '../src/gateway.ts';
 import { MemorySender } from '../src/email.ts';
-import { handleWebhook } from '../src/services.ts';
+import { handleWebhook, todaySaoPaulo } from '../src/services.ts';
 import { memberSection } from '../src/chatbot.ts';
 
 let db: Db;
@@ -164,6 +164,33 @@ test('investimentos: lançar, ver total e rendimento, processando à parte; só 
   const o = await assinante('invest-ousado@exemplo.com', 'ousado');
   assert.equal((await o('GET', '/api/account/investments')).status, 403);
   assert.equal((await o('GET', '/api/account/strategies')).status, 403);
+});
+
+test('investimentos: lista da mais antiga para a mais recente; editar a data recalcula a posição; posição nova vira marco de hoje', async () => {
+  const c = await assinante('invest-ordem@exemplo.com');
+  const mk = (appliedOn: string, appliedCents: number, positionCents?: number) => c('POST', '/api/account/investments', { body: { name: 'CDB Ordem', kind: 'renda_fixa', indexer: 'cdi', ratePct: 102, appliedCents, appliedOn, liquidity: 'diaria', status: 'ativo', ...(positionCents ? { positionCents } : {}) } });
+  const recente = (await mk('2026-10-26', 77_000)).json.id;
+  const meio = (await mk('2026-09-01', 25_376, 25_774)).json.id;
+  const antiga = (await mk('2026-08-03', 10_000)).json.id;
+  const get = async () => (await c('GET', '/api/account/investments')).json.investments as any[];
+  assert.deepEqual((await get()).map((x) => x.id), [antiga, meio, recente], 'da aplicação mais antiga (em cima) para a mais recente (embaixo)');
+
+  const bodyOf = (x: any, patch: object) => ({ name: x.name, kind: x.kind, indexer: x.indexer, ratePct: x.ratePct, appliedCents: x.appliedCents, appliedOn: x.appliedOn, liquidity: x.liquidity, status: x.status, positionCents: x.positionInformedCents, ...patch });
+  // mudar a data deixando a posição de antes: a posição antiga deixa de valer e o card passa a refletir as condições novas
+  const antes = (await get()).find((x) => x.id === meio);
+  assert.equal(antes.positionInformedCents, 25_774);
+  assert.equal((await c('PUT', `/api/account/investments/${meio}`, { body: bodyOf(antes, { appliedOn: '2026-09-11' }) })).status, 200);
+  const editada = (await get()).find((x) => x.id === meio);
+  assert.equal(editada.appliedOn, '2026-09-11');
+  assert.equal(editada.positionInformedCents, null, 'a posição congelada não segura mais o card');
+  // posição nova informada: vale a partir de hoje
+  assert.equal((await c('PUT', `/api/account/investments/${meio}`, { body: bodyOf(editada, { positionCents: 25_841 }) })).status, 200);
+  const nova = (await get()).find((x) => x.id === meio);
+  assert.equal(nova.positionInformedCents, 25_841);
+  assert.equal(nova.positionOn, todaySaoPaulo());
+  // só mexer na observação não derruba a posição informada
+  assert.equal((await c('PUT', `/api/account/investments/${meio}`, { body: bodyOf(nova, { note: 'ok' }) })).status, 200);
+  assert.equal((await get()).find((x) => x.id === meio).positionInformedCents, 25_841);
 });
 
 test('estratégias: as jogadas usam o saldo negativo da conta, os dias sem juros e o aplicado', async () => {

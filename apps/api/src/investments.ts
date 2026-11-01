@@ -14,6 +14,7 @@ const MAX_INVESTMENTS = 60;
 interface Row {
   id: string; name: string; kind: string; indexer: InvestIndexer; rate_bp: number; applied_cents: string; position_cents: string | null;
   applied_on: Date | string; matures_on: Date | string | null; liquidity: 'diaria' | 'vencimento'; status: InvestStatus; note: string | null;
+  position_on: Date | string | null;
 }
 
 export interface InvestmentBody {
@@ -24,12 +25,13 @@ export interface InvestmentBody {
 export const inputOf = (r: Row): InvestmentInput => ({
   appliedCents: num(r.applied_cents), indexer: r.indexer, ratePct: r.rate_bp / 100, appliedOn: iso(r.applied_on), status: r.status,
   positionCents: r.position_cents === null ? null : num(r.position_cents),
+  positionOn: r.position_on ? iso(r.position_on) : null,
 });
 
 export async function loadInvestmentRows(ctx: Ctx, subscriberId: string): Promise<Row[]> {
   const r = await ctx.db.query<Row>(
-    `SELECT id, name, kind, indexer, rate_bp, applied_cents::text AS applied_cents, position_cents::text AS position_cents, applied_on, matures_on, liquidity, status, note
-       FROM app.investments WHERE subscriber_id = $1 ORDER BY (status = 'resgatado'), applied_on DESC, created_at DESC`,
+    `SELECT id, name, kind, indexer, rate_bp, applied_cents::text AS applied_cents, position_cents::text AS position_cents, position_on, applied_on, matures_on, liquidity, status, note
+       FROM app.investments WHERE subscriber_id = $1 ORDER BY (status = 'resgatado'), applied_on ASC, created_at ASC`, // da aplicação mais antiga (em cima) para a mais recente (embaixo)
     [subscriberId],
   );
   return r.rows;
@@ -43,7 +45,7 @@ export async function listInvestments(ctx: Ctx, subscriberId: string) {
   const items = rows.map((r) => {
     const input = inputOf(r);
     return {
-      id: r.id, name: r.name, kind: r.kind, indexer: r.indexer, ratePct: r.rate_bp / 100, appliedCents: input.appliedCents, positionInformedCents: input.positionCents ?? null,
+      id: r.id, name: r.name, kind: r.kind, indexer: r.indexer, ratePct: r.rate_bp / 100, appliedCents: input.appliedCents, positionInformedCents: input.positionCents ?? null, positionOn: input.positionOn ?? null,
       appliedOn: input.appliedOn, maturesOn: r.matures_on ? iso(r.matures_on) : null, liquidity: r.liquidity, status: r.status, note: r.note,
       view: r.status === 'resgatado' ? null : viewInvestment(input, today, rates),
     };
@@ -60,18 +62,35 @@ export async function createInvestment(ctx: Ctx, subscriberId: string, b: Invest
   const n = await ctx.db.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.investments WHERE subscriber_id = $1`, [subscriberId]);
   if (num(n.rows[0]?.n ?? 0) >= MAX_INVESTMENTS) throw new AppError(422, 'too_many', `Limite de ${MAX_INVESTMENTS} aplicações. Apague as resgatadas que não precisa mais.`);
   const r = await ctx.db.query<{ id: string }>(
-    `INSERT INTO app.investments(subscriber_id, name, kind, indexer, rate_bp, applied_cents, position_cents, applied_on, matures_on, liquidity, status, note) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
-    params(subscriberId, b),
+    `INSERT INTO app.investments(subscriber_id, name, kind, indexer, rate_bp, applied_cents, position_cents, applied_on, matures_on, liquidity, status, note, position_on) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
+    [...params(subscriberId, b), b.positionCents == null ? null : todaySaoPaulo()], // posição informada vale a partir de hoje
   );
   return r.rows[0]!.id;
 }
 
 export async function updateInvestment(ctx: Ctx, subscriberId: string, id: string, b: InvestmentBody): Promise<void> {
   await requireFeature(ctx, subscriberId, 'investments');
+  const cur = await ctx.db.query<Row>(
+    `SELECT id, name, kind, indexer, rate_bp, applied_cents::text AS applied_cents, position_cents::text AS position_cents, position_on, applied_on, matures_on, liquidity, status, note FROM app.investments WHERE id = $1 AND subscriber_id = $2`,
+    [id, subscriberId],
+  );
+  const old = cur.rows[0];
+  if (!old) throw notFound();
+  const was = inputOf(old);
+  const termsChanged = was.appliedCents !== b.appliedCents || was.appliedOn !== b.appliedOn || was.indexer !== b.indexer || Math.round(was.ratePct * 100) !== Math.round(b.ratePct * 100);
+  // A posição informada é um marco com data. Valor novo = marco de hoje. Se a pessoa mudou valor, data ou taxa e deixou a posição
+  // de antes, ela deixa de valer (era o retrato das condições antigas) e o Prumo recalcula pelas condições novas.
+  let positionCents: number | null = b.positionCents ?? null;
+  let positionOn: string | null = null;
+  if (positionCents !== null) {
+    if (positionCents !== was.positionCents) positionOn = todaySaoPaulo();
+    else if (termsChanged) positionCents = null;
+    else positionOn = was.positionOn ?? todaySaoPaulo();
+  }
   const r = await ctx.db.query(
-    `UPDATE app.investments SET name = $2, kind = $3, indexer = $4, rate_bp = $5, applied_cents = $6, position_cents = $7, applied_on = $8, matures_on = $9, liquidity = $10, status = $11, note = $12, updated_at = now()
-      WHERE id = $13 AND subscriber_id = $1`,
-    [...params(subscriberId, b), id],
+    `UPDATE app.investments SET name = $2, kind = $3, indexer = $4, rate_bp = $5, applied_cents = $6, position_cents = $7, applied_on = $8, matures_on = $9, liquidity = $10, status = $11, note = $12, position_on = $13, updated_at = now()
+      WHERE id = $14 AND subscriber_id = $1`,
+    [...params(subscriberId, { ...b, positionCents }), positionOn, id],
   );
   if (r.rowCount === 0) throw notFound();
 }
@@ -87,7 +106,7 @@ export async function redeemInvestment(ctx: Ctx, subscriberId: string, id: strin
   const rates = await loadIndicators(ctx).then((m) => ({ cdiAnnualPct: m.indicators.cdiPct, ipcaAnnualPct: m.indicators.ipca12Pct })).catch(() => ({ cdiAnnualPct: null, ipcaAnnualPct: null }));
   return ctx.db.tx(async (q) => {
     const cur = await q.query<Row>(
-      `SELECT id, name, kind, indexer, rate_bp, applied_cents::text AS applied_cents, position_cents::text AS position_cents, applied_on, matures_on, liquidity, status, note FROM app.investments WHERE id = $1 AND subscriber_id = $2 FOR UPDATE`,
+      `SELECT id, name, kind, indexer, rate_bp, applied_cents::text AS applied_cents, position_cents::text AS position_cents, position_on, applied_on, matures_on, liquidity, status, note FROM app.investments WHERE id = $1 AND subscriber_id = $2 FOR UPDATE`,
       [id, subscriberId],
     );
     const r = cur.rows[0];
