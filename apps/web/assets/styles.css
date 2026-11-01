@@ -2650,3 +2650,12 @@ h3 { font-weight: 500; letter-spacing: -0.015em; } /* em corpo pequeno a serifa 
   .acc-shell { overflow-x: clip; margin-inline: calc(var(--gutter) * -1); padding-inline: var(--gutter); }
   .acc-panel.swipe-next, .acc-panel.swipe-prev { will-change: transform, opacity; }
 }
+
+/* ===== Selos do herói também no computador (D-150): grade 2x2 de larguras iguais, como no celular; e bloco do usuário do portal do parceiro ===== */
+.pm-hero-copy .chips, .hero .chips { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 10px; width: min(100%, 540px); }
+.pm-hero-copy .chips li, .hero .chips li { justify-content: flex-start; }
+.pt-me { gap: 2px; }
+.pt-me > .fine { margin-bottom: var(--s2); }
+.pt-exit { min-height: 36px; padding-inline: 14px; border-radius: 999px; font-weight: 600; }
+.pm-hero-copy .chips li, .hero .chips li { border-radius: 16px; line-height: 1.25; }
+

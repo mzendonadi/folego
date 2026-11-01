@@ -297,3 +297,10 @@ button.bo-kpi:hover::after, button.bo-kpi:focus-visible::after { color: var(--pr
 .bo-kpi { border-left-width: 3px; }
 .bo-insight { border-left-width: 3px; }
 .bo-table td { padding-block: 12px; } /* linhas com mais respiro */
+
+/* ===== Bloco do usuário no menu lateral (D-150): nome e papel à esquerda, botões em pílula alinhados à esquerda e lado a lado ===== */
+.bo-me { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; }
+.bo-me > strong, .bo-me > span { flex: 0 0 100%; }
+.bo-me > span { margin-bottom: var(--s2); }
+.bo-me > .btn { width: auto; min-height: 36px; padding-inline: 14px; justify-content: center; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); font-weight: 600; }
+.bo-me > .btn:hover { border-color: var(--primary); color: var(--primary); background: var(--surface); }
