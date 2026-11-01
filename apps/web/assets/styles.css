@@ -2623,3 +2623,9 @@ h3 { font-weight: 500; letter-spacing: -0.015em; } /* em corpo pequeno a serifa 
 .pt-metric { border-left-width: 2px; }
 .pt-login-form, .pt-login-form .field, .pt-login-form .label { text-align: left; justify-items: stretch; }
 
+
+/* ===== Marca do Prumo no topo de /prumo (D-148): símbolo oficial + logotipo, alinhados à esquerda do conteúdo ===== */
+.pm-brand { display: inline-flex; align-items: center; gap: 12px; color: var(--primary); line-height: 1; }
+.pm-brand-mark { height: 44px; width: auto; flex: none; overflow: visible; } /* viewBox recortado rente ao desenho: a borda esquerda alinha com o logo do Fôlego e o título */
+.pm-brand-word { font-family: var(--font-brand); font-weight: 560; font-size: 2.1rem; letter-spacing: -0.02em; padding-bottom: 2px; }
+@media (max-width: 480px) { .pm-brand-mark { height: 36px; } .pm-brand-word { font-size: 1.7rem; } .pm-brand { gap: 10px; } }
