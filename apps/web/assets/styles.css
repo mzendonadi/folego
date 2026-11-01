@@ -2629,3 +2629,24 @@ h3 { font-weight: 500; letter-spacing: -0.015em; } /* em corpo pequeno a serifa 
 .pm-brand-mark { height: 44px; width: auto; flex: none; overflow: visible; } /* viewBox recortado rente ao desenho: a borda esquerda alinha com o logo do Fôlego e o título */
 .pm-brand-word { font-family: var(--font-brand); font-weight: 560; font-size: 2.1rem; letter-spacing: -0.02em; padding-bottom: 2px; }
 @media (max-width: 480px) { .pm-brand-mark { height: 36px; } .pm-brand-word { font-size: 1.7rem; } .pm-brand { gap: 10px; } }
+
+/* ===== Marca do Prumo = lockup oficial (marca/svg/prumo-horizontal.svg), centralizado no mesmo eixo do Login (D-149) ===== */
+.pm-brand-lockup { display: block; height: 44px; width: auto; overflow: visible; } /* viewBox cortado rente ao desenho: borda esquerda alinha com o logo do Fôlego e o título */
+.pm-word { fill: #0E5B49; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pm-word { fill: #F6F3EC; } }
+:root[data-theme="dark"] .pm-word { fill: #F6F3EC; }
+@media (max-width: 480px) { .pm-brand-lockup { height: 36px; } }
+
+/* Selos do herói no celular: grade de 2 colunas com larguras iguais, em vez de pílulas soltas de larguras diferentes */
+@media (max-width: 520px) {
+  .pm-hero-copy .chips, .hero .chips { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; width: 100%; }
+  .pm-hero-copy .chips li, .hero .chips li { border-radius: 14px; padding: 9px 12px 9px 10px; font-size: 0.875rem; line-height: 1.25; }
+  .pm-hero-copy .hero-note, .hero .hero-note { margin-bottom: var(--s1); }
+}
+
+/* Trocar de tela com o dedo (celular): a animação empurrava o painel para fora da largura da tela e a página inteira
+   "pulava" no sentido direita-para-esquerda. O recorte vai até as bordas da tela, então só o conteúdo desliza. */
+@media (max-width: 959px) {
+  .acc-shell { overflow-x: clip; margin-inline: calc(var(--gutter) * -1); padding-inline: var(--gutter); }
+  .acc-panel.swipe-next, .acc-panel.swipe-prev { will-change: transform, opacity; }
+}
