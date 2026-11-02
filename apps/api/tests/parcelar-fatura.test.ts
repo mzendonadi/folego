@@ -88,8 +88,8 @@ test('parcelar a fatura: liga o pagamento, a fatura vira "parcelada", as parcela
   const nov = (await c('GET', `/api/account/cards/${id}/invoices/2026-11`)).json;
   assert.ok(nov.entries.some((e: any) => e.installmentNo === 1 && e.installmentTotal === 4 && e.amountCents === 216_092), JSON.stringify(nov.entries));
 
-  // os juros entram como gasto (e as parcelas não contam em dobro na conta)
-  const mes = (await c('GET', '/api/account/month/2026-10')).json;
+  // os juros entram como gasto (e as parcelas não contam em dobro na conta), no mês em que o parcelamento é feito (hoje)
+  const mes = (await c('GET', `/api/account/month/${todaySaoPaulo().slice(0, 7)}`)).json;
   assert.ok(mes.entries.some((e: any) => /juros do parcelamento/i.test(e.note) && e.amountCents === -283_490), JSON.stringify(mes.entries));
 });
 

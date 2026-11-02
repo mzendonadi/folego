@@ -15,11 +15,16 @@ interface Row {
   id: string; name: string; kind: string; indexer: InvestIndexer; rate_bp: number; applied_cents: string; position_cents: string | null;
   applied_on: Date | string; matures_on: Date | string | null; liquidity: 'diaria' | 'vencimento'; status: InvestStatus; note: string | null;
   position_on: Date | string | null;
+  scope?: 'pf' | 'pj';
 }
+
+export type InvestScope = 'pf' | 'pj';
 
 export interface InvestmentBody {
   name: string; kind: string; indexer: InvestIndexer; ratePct: number; appliedCents: number; positionCents?: number | null | undefined;
   appliedOn: string; maturesOn?: string | null | undefined; liquidity: 'diaria' | 'vencimento'; status: InvestStatus; note?: string | null | undefined;
+  /** 'pf' (pessoal, padrão) ou 'pj' (da empresa): nunca se misturam. */
+  scope?: 'pf' | 'pj' | undefined;
 }
 
 export const inputOf = (r: Row): InvestmentInput => ({
@@ -28,19 +33,20 @@ export const inputOf = (r: Row): InvestmentInput => ({
   positionOn: r.position_on ? iso(r.position_on) : null,
 });
 
-export async function loadInvestmentRows(ctx: Ctx, subscriberId: string): Promise<Row[]> {
+/** Aplicações da pessoa (scope 'pf', o padrão) ou da empresa (scope 'pj'): uma consulta nunca traz as duas. */
+export async function loadInvestmentRows(ctx: Ctx, subscriberId: string, scope: InvestScope = 'pf'): Promise<Row[]> {
   const r = await ctx.db.query<Row>(
     `SELECT id, name, kind, indexer, rate_bp, applied_cents::text AS applied_cents, position_cents::text AS position_cents, position_on, applied_on, matures_on, liquidity, status, note
-       FROM app.investments WHERE subscriber_id = $1 ORDER BY (status = 'resgatado'), applied_on ASC, created_at ASC`, // da aplicação mais antiga (em cima) para a mais recente (embaixo)
-    [subscriberId],
+       FROM app.investments WHERE subscriber_id = $1 AND scope = $2 ORDER BY (status = 'resgatado'), applied_on ASC, created_at ASC`, // da aplicação mais antiga (em cima) para a mais recente (embaixo)
+    [subscriberId, scope],
   );
   return r.rows;
 }
 
-export async function listInvestments(ctx: Ctx, subscriberId: string) {
-  await requireFeature(ctx, subscriberId, 'investments');
+export async function listInvestments(ctx: Ctx, subscriberId: string, scope: InvestScope = 'pf') {
+  await requireFeature(ctx, subscriberId, scope === 'pj' ? 'business_pro' : 'investments');
   const today = todaySaoPaulo();
-  const rows = await loadInvestmentRows(ctx, subscriberId);
+  const rows = await loadInvestmentRows(ctx, subscriberId, scope);
   const rates = await loadIndicators(ctx).then((m) => ({ cdiAnnualPct: m.indicators.cdiPct, ipcaAnnualPct: m.indicators.ipca12Pct })).catch(() => ({ cdiAnnualPct: null, ipcaAnnualPct: null }));
   const items = rows.map((r) => {
     const input = inputOf(r);
@@ -58,12 +64,13 @@ const params = (subscriberId: string, b: InvestmentBody) => [
 ];
 
 export async function createInvestment(ctx: Ctx, subscriberId: string, b: InvestmentBody): Promise<string> {
-  await requireFeature(ctx, subscriberId, 'investments');
+  const scope: InvestScope = b.scope ?? 'pf';
+  await requireFeature(ctx, subscriberId, scope === 'pj' ? 'business_pro' : 'investments');
   const n = await ctx.db.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.investments WHERE subscriber_id = $1`, [subscriberId]);
   if (num(n.rows[0]?.n ?? 0) >= MAX_INVESTMENTS) throw new AppError(422, 'too_many', `Limite de ${MAX_INVESTMENTS} aplicações. Apague as resgatadas que não precisa mais.`);
   const r = await ctx.db.query<{ id: string }>(
-    `INSERT INTO app.investments(subscriber_id, name, kind, indexer, rate_bp, applied_cents, position_cents, applied_on, matures_on, liquidity, status, note, position_on) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
-    [...params(subscriberId, b), b.positionCents == null ? null : todaySaoPaulo()], // posição informada vale a partir de hoje
+    `INSERT INTO app.investments(subscriber_id, name, kind, indexer, rate_bp, applied_cents, position_cents, applied_on, matures_on, liquidity, status, note, position_on, scope) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
+    [...params(subscriberId, b), b.positionCents == null ? null : todaySaoPaulo(), scope], // posição informada vale a partir de hoje
   );
   return r.rows[0]!.id;
 }
@@ -106,13 +113,14 @@ export async function redeemInvestment(ctx: Ctx, subscriberId: string, id: strin
   const rates = await loadIndicators(ctx).then((m) => ({ cdiAnnualPct: m.indicators.cdiPct, ipcaAnnualPct: m.indicators.ipca12Pct })).catch(() => ({ cdiAnnualPct: null, ipcaAnnualPct: null }));
   return ctx.db.tx(async (q) => {
     const cur = await q.query<Row>(
-      `SELECT id, name, kind, indexer, rate_bp, applied_cents::text AS applied_cents, position_cents::text AS position_cents, position_on, applied_on, matures_on, liquidity, status, note FROM app.investments WHERE id = $1 AND subscriber_id = $2 FOR UPDATE`,
+      `SELECT id, name, kind, indexer, rate_bp, applied_cents::text AS applied_cents, position_cents::text AS position_cents, position_on, applied_on, matures_on, liquidity, status, note, scope FROM app.investments WHERE id = $1 AND subscriber_id = $2 FOR UPDATE`,
       [id, subscriberId],
     );
     const r = cur.rows[0];
     if (!r) throw notFound();
     if (r.status !== 'ativo') throw new AppError(422, 'not_active', 'Só dá para resgatar uma aplicação ativa.');
-    const wallet = await q.query(`SELECT 1 FROM app.wallets WHERE id = $1 AND subscriber_id = $2`, [p.walletId, subscriberId]);
+    const pj = r.scope === 'pj'; // aplicação da empresa: o dinheiro volta para uma conta da EMPRESA, nunca para uma pessoal
+    const wallet = await q.query(pj ? `SELECT 1 FROM app.biz_wallets WHERE id = $1 AND subscriber_id = $2` : `SELECT 1 FROM app.wallets WHERE id = $1 AND subscriber_id = $2`, [p.walletId, subscriberId]);
     if (wallet.rows.length === 0) throw new AppError(422, 'invalid_wallet', 'Escolha a conta em que o dinheiro entrou.');
     const input = inputOf(r);
     const position = viewInvestment(input, today, rates).positionCents;
@@ -126,10 +134,17 @@ export async function redeemInvestment(ctx: Ctx, subscriberId: string, id: strin
       const informed = input.positionCents == null ? null : Math.max(0, Math.round(input.positionCents * (1 - ratio)));
       await q.query(`UPDATE app.investments SET applied_cents = $2, position_cents = $3, updated_at = now() WHERE id = $1`, [id, applied, informed]);
     }
-    await q.query(
-      `INSERT INTO app.ledger_entries(subscriber_id, occurred_on, amount_cents, category, note, source, wallet_id, transfer_kind) VALUES ($1,$2,$3,'outros',$4,'manual',$5,'investment_redeem')`,
-      [subscriberId, p.date, p.amountCents, `Resgate ${r.name}`.slice(0, 100), p.walletId],
-    );
+    if (pj) {
+      await q.query(
+        `INSERT INTO app.biz_entries(subscriber_id, occurred_on, amount_cents, category, note, wallet_id, transfer_kind) VALUES ($1,$2,$3,'outros',$4,$5,'investment')`,
+        [subscriberId, p.date, p.amountCents, `Resgate ${r.name}`.slice(0, 100), p.walletId],
+      );
+    } else {
+      await q.query(
+        `INSERT INTO app.ledger_entries(subscriber_id, occurred_on, amount_cents, category, note, source, wallet_id, transfer_kind) VALUES ($1,$2,$3,'outros',$4,'manual',$5,'investment_redeem')`,
+        [subscriberId, p.date, p.amountCents, `Resgate ${r.name}`.slice(0, 100), p.walletId],
+      );
+    }
     return { closed: full, remainingCents: full ? 0 : Math.max(0, position - p.amountCents) };
   });
 }

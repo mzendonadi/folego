@@ -167,7 +167,7 @@ test('avisos inteligentes: limite de categoria, assinatura que subiu, cobrança 
   const entries = [
     { date: monthsBefore(3), amountCents: -3990, note: 'NETFLIX.COM' }, { date: monthsBefore(2), amountCents: -3990, note: 'NETFLIX.COM' }, { date: monthsBefore(1), amountCents: -3990, note: 'NETFLIX.COM' },
     { date: ago(2), amountCents: -4990, note: 'NETFLIX.COM' }, { date: ago(2), amountCents: -4990, note: 'NETFLIX.COM' },
-    { date: ago(3), amountCents: -9500, note: 'Supermercado', category: 'mercado' },
+    { date: today, amountCents: -9500, note: 'Supermercado', category: 'mercado' }, // hoje (e não "hoje - 3 dias", que nos primeiros dias do mês cai no mês anterior e não conta para o limite)
   ];
   assert.equal((await c('POST', '/api/account/entries', { body: { entries } })).status, 200);
   assert.equal((await c('POST', '/api/account/limits/mercado', { body: { limitCents: 10_000 } })).status, 200);

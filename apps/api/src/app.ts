@@ -28,6 +28,7 @@ import * as trips from './trips.ts';
 import * as investmentsApi from './investments.ts';
 import * as reportsApi from './reports.ts';
 import * as strategiesApi from './strategies.ts';
+import * as businessApi from './business.ts';
 import * as debts from './account-debts.ts';
 import { askPlanner } from './planner.ts';
 import * as program from './coach-program.ts';
@@ -738,7 +739,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.get('/api/account/charts', async (req) => reportsApi.chartsOverview(ctx, await requireSubscriber(req), reportsApi.chartsQuerySchema.parse(req.query)));
   app.get('/api/account/reports', async (req) => reportsApi.report(ctx, await requireSubscriber(req), reportsApi.reportQuerySchema.parse(req.query)));
   // Investimentos e Estratégias (Desbravador)
-  app.get('/api/account/investments', async (req) => investmentsApi.listInvestments(ctx, await requireSubscriber(req)));
+  app.get('/api/account/investments', async (req) => investmentsApi.listInvestments(ctx, await requireSubscriber(req), (req.query as { scope?: string } | undefined)?.scope === 'pj' ? 'pj' : 'pf'));
   app.post('/api/account/investments', async (req, reply) => reply.status(201).send({ id: await investmentsApi.createInvestment(ctx, await requireSubscriber(req), investmentSchema.parse(req.body)) }));
   app.put('/api/account/investments/:id', async (req) => {
     await investmentsApi.updateInvestment(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id), investmentSchema.parse(req.body));
@@ -753,6 +754,33 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     await investmentsApi.deleteInvestment(ctx, await requireSubscriber(req), idParam((req.params as { id: string }).id));
     return reply.status(204).send();
   });
+  // Empresa (PJ): contas, cartões, lançamentos e movimentos com o sócio, sempre separados dos pessoais. Ousado: 1 conta + 1 cartão; Desbravador: ilimitado + relatório + movimentos.
+  const bizId = (req: { params: unknown }) => idParam((req.params as { id: string }).id);
+  app.get('/api/account/business', async (req) => businessApi.businessOverview(ctx, await requireSubscriber(req), businessApi.bizMonthQuery.parse(req.query).month));
+  app.post('/api/account/business/wallets', async (req, reply) => reply.status(201).send({ id: await businessApi.createBizWallet(ctx, await requireSubscriber(req), businessApi.bizWalletSchema.parse(req.body)) }));
+  app.delete('/api/account/business/wallets/:id', async (req, reply) => {
+    await businessApi.deleteBizWallet(ctx, await requireSubscriber(req), bizId(req));
+    return reply.status(204).send();
+  });
+  app.post('/api/account/business/cards', async (req, reply) => reply.status(201).send({ id: await businessApi.createBizCard(ctx, await requireSubscriber(req), businessApi.bizCardSchema.parse(req.body)) }));
+  app.put('/api/account/business/cards/:id', async (req) => {
+    await businessApi.updateBizCard(ctx, await requireSubscriber(req), bizId(req), businessApi.bizCardSchema.parse(req.body));
+    return { ok: true };
+  });
+  app.delete('/api/account/business/cards/:id', async (req, reply) => {
+    await businessApi.deleteBizCard(ctx, await requireSubscriber(req), bizId(req));
+    return reply.status(204).send();
+  });
+  app.get('/api/account/business/entries', async (req) => businessApi.listBizEntries(ctx, await requireSubscriber(req), businessApi.bizMonthQuery.parse(req.query).month));
+  app.post('/api/account/business/entries', async (req, reply) => reply.status(201).send({ id: await businessApi.createBizEntry(ctx, await requireSubscriber(req), businessApi.bizEntrySchema.parse(req.body)) }));
+  app.delete('/api/account/business/entries/:id', async (req, reply) => {
+    await businessApi.deleteBizEntry(ctx, await requireSubscriber(req), bizId(req));
+    return reply.status(204).send();
+  });
+  app.post('/api/account/business/movements', async (req, reply) => reply.status(201).send(await businessApi.createBizMovement(ctx, await requireSubscriber(req), businessApi.bizMovementSchema.parse(req.body))));
+  app.get('/api/account/business/suggestions', async (req) => businessApi.businessSuggestions(ctx, await requireSubscriber(req)));
+  app.post('/api/account/business/links', async (req, reply) => reply.status(201).send({ id: await businessApi.linkBizMovement(ctx, await requireSubscriber(req), businessApi.bizLinkSchema.parse(req.body)) }));
+  app.get('/api/account/business/report', async (req) => businessApi.businessReport(ctx, await requireSubscriber(req), businessApi.bizReportQuery.parse(req.query)));
   app.get('/api/account/strategies', async (req) => strategiesApi.strategyOverview(ctx, await requireSubscriber(req)));
   app.post('/api/account/strategies/report', { config: { rateLimit: { max: 6 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => reply.status(202).send(await strategiesApi.requestStrategyReport(ctx, await requireSubscriber(req))));
   app.get('/api/account/trips', async (req) => trips.listTrips(ctx, await requireSubscriber(req)));

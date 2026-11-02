@@ -288,8 +288,49 @@ export async function anchorWallet(id, body) {
   return request('POST', `/account/wallets/${id}/anchor`, { body });
 }
 /** Investimentos e Estratégias (Desbravador). */
-export async function getInvestments() {
-  return request('GET', '/account/investments');
+/** scope 'pj' = aplicações da empresa (Desbravador); sem ele, as pessoais. Nunca vêm misturadas. */
+export async function getInvestments(scope = 'pf') {
+  return request('GET', `/account/investments${scope === 'pj' ? '?scope=pj' : ''}`);
+}
+/** Empresa (PJ): contas, cartões, lançamentos e movimentos com o sócio, sempre separados dos pessoais. */
+export async function getBusiness(month) {
+  return request('GET', `/account/business?month=${month}`);
+}
+export async function createBizWallet(body) {
+  return request('POST', '/account/business/wallets', { body });
+}
+export async function deleteBizWallet(id) {
+  return request('DELETE', `/account/business/wallets/${id}`);
+}
+export async function createBizCard(body) {
+  return request('POST', '/account/business/cards', { body });
+}
+export async function updateBizCard(id, body) {
+  return request('PUT', `/account/business/cards/${id}`, { body });
+}
+export async function deleteBizCard(id) {
+  return request('DELETE', `/account/business/cards/${id}`);
+}
+export async function getBizEntries(month) {
+  return request('GET', `/account/business/entries?month=${month}`);
+}
+export async function createBizEntry(body) {
+  return request('POST', '/account/business/entries', { body });
+}
+export async function deleteBizEntry(id) {
+  return request('DELETE', `/account/business/entries/${id}`);
+}
+export async function createBizMovement(body) {
+  return request('POST', '/account/business/movements', { body });
+}
+export async function getBizSuggestions() {
+  return request('GET', '/account/business/suggestions');
+}
+export async function linkBizMovement(body) {
+  return request('POST', '/account/business/links', { body });
+}
+export async function getBizReport(from, to) {
+  return request('GET', `/account/business/report?from=${from}&to=${to}`);
 }
 export async function createInvestment(body) {
   return request('POST', '/account/investments', { body });

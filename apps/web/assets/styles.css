@@ -2663,3 +2663,30 @@ h3 { font-weight: 500; letter-spacing: -0.015em; } /* em corpo pequeno a serifa 
 /* D-151: botão Sair do portal do parceiro com a mesma largura/altura dos botões do menu do backoffice */
 .pt-me > .pt-exit { justify-self: stretch; width: 100%; justify-content: flex-start; }
 
+
+/* ===== Empresa (PJ) no Prumo (D-153): contas, cartões, lançamentos, movimentos com o sócio e o bloco da Visão geral ===== */
+.biz-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); flex-wrap: wrap; }
+.biz-head h2 { margin: 0; }
+.biz-list { list-style: none; margin: var(--s3) 0 0; padding: 0; display: grid; }
+.biz-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: var(--s3); padding: 12px 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent); }
+.biz-row:last-child { border-bottom: 0; }
+.biz-row strong { font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.biz-row p { margin: 2px 0 0; }
+.biz-row-card { grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
+.biz-row-card .progress { margin: 8px 0 4px; max-width: 420px; }
+.biz-row-sugg { grid-template-columns: minmax(0, 1fr) minmax(150px, 230px) auto; }
+.biz-sugg { display: grid; gap: var(--s2); margin-top: var(--s3); }
+.biz .stats, .biz-home .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (min-width: 900px) { .biz .stats, .biz-home .stats { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 639px) {
+  .biz-row-sugg { grid-template-columns: minmax(0, 1fr) auto; }
+  .biz-row-sugg > .input { grid-column: 1 / -1; order: 3; }
+}
+.rel-scope { justify-self: start; }
+.check { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; font-weight: 600; }
+.check input { margin-top: 4px; flex: none; }
+.field[hidden] { display: none; }
+
+/* D-153: a vitrine do /prumo ganhou a aba Empresa (11 abas): 6 colunas no computador, 6 + 5 */
+@media (min-width: 900px) { .pm-tabs { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+

@@ -347,6 +347,8 @@ export const investmentSchema = z.strictObject({
   liquidity: z.enum(['diaria', 'vencimento']).default('diaria'),
   status: z.enum(['ativo', 'processando', 'resgatado']).default('ativo'),
   note: z.string().trim().max(200).nullable().optional(),
+  /** 'pf' = pessoal (padrão); 'pj' = da empresa (Desbravador). Nunca se misturam. */
+  scope: z.enum(['pf', 'pj']).default('pf'),
 });
 
 /** Resgate (total ou parcial): quanto, quando e em qual conta o dinheiro entrou. */

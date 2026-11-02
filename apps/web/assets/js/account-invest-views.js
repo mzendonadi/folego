@@ -23,7 +23,8 @@ const hidden = { on: (() => { try { return localStorage.getItem('prumo.invest.hi
 const money = (cents) => (hidden.on ? 'R$ ••••' : brl(cents));
 
 // ---------------------------------------------------------------- Investimentos
-export function viewInvestimentos(ctx) {
+/** `scope: 'pj'` = aplicações da empresa (mesma tela, outros dados): nunca se misturam com as pessoais e o resgate volta para uma conta da empresa. */
+export function viewInvestimentos(ctx, { scope = 'pf' } = {}) {
   const root = el('div', { class: 'acc-stack inv' });
   let tab = 'ativos';
 
@@ -31,7 +32,7 @@ export function viewInvestimentos(ctx) {
     root.replaceChildren(card(el('p', { class: 'muted', role: 'status' }, 'Carregando…')));
     let data;
     try {
-      data = await ctx.api.getInvestments();
+      data = await ctx.api.getInvestments(scope);
     } catch {
       return root.replaceChildren(card(el('h2', {}, 'Não consegui carregar'), el('p', { class: 'muted' }, 'Confira a conexão e tente de novo.')));
     }
@@ -153,8 +154,8 @@ export function viewInvestimentos(ctx) {
   /** Resgate: quanto saiu da aplicação, em que dia e em qual conta o dinheiro entrou. */
   async function redeemForm(x) {
     let wallets = [];
-    try { wallets = (await ctx.api.getWallets()).wallets ?? []; } catch { /* sem carteiras: o servidor avisa */ }
-    if (wallets.length === 0) return toast('Cadastre antes a conta em que o dinheiro entrou, em Carteiras.');
+    try { wallets = (scope === 'pj' ? await ctx.api.getBusiness(ctx.month) : await ctx.api.getWallets()).wallets ?? []; } catch { /* sem carteiras: o servidor avisa */ }
+    if (wallets.length === 0) return toast(scope === 'pj' ? 'Cadastre antes a conta da empresa em que o dinheiro entrou.' : 'Cadastre antes a conta em que o dinheiro entrou, em Carteiras.');
     const value = moneyInput({ id: 'rs-valor', ariaLabel: 'Valor resgatado', value: x.view.positionCents });
     const day = el('input', { class: 'input', id: 'rs-data', type: 'date', max: todayISO(), value: todayISO() });
     const wallet = select('rs-conta', wallets.map((w) => [w.id, w.name]), (wallets.find((w) => w.kind === 'conta') ?? wallets[0]).id);
@@ -239,6 +240,7 @@ export function viewInvestimentos(ctx) {
       const body = {
         name: name.value.trim(), kind: kind.value, indexer: indexer.value, ratePct: ratePct ?? 0, appliedCents: cents,
         positionCents: position.cents() || null, appliedOn: on.value, maturesOn: matures.value || null, liquidity: liq.value, status: status.value, note: note.value.trim() || null,
+        ...(scope === 'pj' ? { scope: 'pj' } : {}),
       };
       save.disabled = true;
       try {

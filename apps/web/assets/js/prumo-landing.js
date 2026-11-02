@@ -56,6 +56,20 @@ function cardsDemo() {
     el('p', { class: 'note note-amber' }, icon('alert'), el('span', {}, 'A fatura do Cartão Bradesco vence em 3 dias: R$ 2.310,00. Pagar em dia evita o rotativo.')));
 }
 
+/** A empresa (PJ) à parte: números inventados que fecham (30.100 de saída = soma das categorias; resultado = 42.000 - 30.100). */
+function businessDemo() {
+  const cats = [
+    { key: 'marketing', label: 'Marketing e anúncios', value: R(9000) }, { key: 'fornecedores', label: 'Fornecedores', value: R(8200) }, { key: 'impostos', label: 'Impostos e guias', value: R(6000) },
+    { key: 'pro_labore', label: 'Pró-labore do sócio', value: R(5000) }, { key: 'software', label: 'Software e assinaturas', value: R(1900) },
+  ];
+  return el('div', { class: 'pm-stack' },
+    el('p', { class: 'note' }, icon('info'), el('span', {}, 'Só da empresa: nada disso entra nos seus números pessoais.')),
+    el('dl', { class: 'stats pm-kpis' }, kpi('Entrou', brl(R(42000)), 'pos'), kpi('Saiu', brl(R(30100))), kpi('Resultado', brl(R(11900)), 'pos')),
+    el('h4', {}, 'Saídas da empresa por categoria'), donut(cats, { interactive: true, totalLabel: 'Saiu', label: 'Saídas da empresa por categoria', max: 6 }),
+    el('h4', {}, 'Entre a empresa e você'),
+    el('dl', { class: 'stats pm-kpis' }, kpi('Pró-labore', brl(R(5000))), kpi('Lucros', brl(R(3000))), kpi('Aportes seus', brl(R(2000)))));
+}
+
 function reportsDemo() {
   const state = { cat: null };
   const out = el('div', { class: 'pm-stack' });
@@ -191,6 +205,7 @@ function whatsappDemo() {
 const TABS = [
   { id: 'geral', label: 'Visão geral', plan: 'Gráficos do mês a partir do Controle', title: 'Para onde foi o dinheiro, de relance', points: ['Gastos por categoria e entrou/saiu mês a mês, com os valores escritos.', 'No Desbravador os gráficos são interativos: toque e veja o valor de cada fatia e de cada mês.', 'Saldo da conta que já conta o negativo de antes, não só entrou menos saiu.'], demo: overviewDemo },
   { id: 'cartoes', label: 'Cartões', plan: 'A partir do Ousado', title: 'Cartão sem susto', points: ['Limite, fatura, vencimento e parcelas sem gasto em dobro com o extrato.', 'Pagou parte da fatura e parcelou o resto? O Prumo liga o pagamento e mostra os juros.', 'Fatura em PDF lida e conferida no Desbravador, também pelo WhatsApp.'], demo: cardsDemo },
+  { id: 'empresa', label: 'Empresa', plan: '1 conta e 1 cartão no Ousado; completo no Desbravador', title: 'A empresa à parte, sem misturar com você', points: ['Cadastre a conta e o cartão da empresa e veja saldo, entradas, saídas e resultado do mês, separados dos seus números pessoais.', 'No Desbravador: contas e cartões sem limite, investimentos e relatório da empresa.', 'Pró-labore, lucros, aportes e retiradas: o Prumo lê os dois lados e lança cada um com a regra certa.'], demo: businessDemo },
   { id: 'relatorios', label: 'Relatórios', plan: 'Ousado, com filtros no Desbravador', title: 'Relatório do período, em um toque', points: ['Mês, 3 meses, 12 meses ou ano, com comparação com o período anterior.', 'Planilha (CSV) e PDF para guardar ou levar a quem divide as contas.', 'No Desbravador, filtre por categoria, conta, cartão, tipo e texto.'], demo: reportsDemo },
   { id: 'investimentos', label: 'Investimentos', plan: 'Desbravador', title: 'O que você já construiu', points: ['Lance suas aplicações e veja total investido e rendimento atual.', 'Imposto de renda estimado se resgatar hoje e quando ele cai de faixa.', 'Aplicações em processamento ficam à parte até serem creditadas.'], demo: investmentsDemo },
   { id: 'estrategias', label: 'Estratégias', plan: 'Desbravador', title: 'Onde mover, resgatar ou quitar primeiro', points: ['Jogadas calculadas com contas, cartões, dívidas e aplicações juntos.', 'Análise completa de um estrategista financeiro por IA, com plano de ação.', 'Educação financeira com os seus números, sem recomendação de produto.'], demo: strategiesDemo },

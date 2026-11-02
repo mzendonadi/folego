@@ -22,6 +22,7 @@ export * from './invoice.ts';
 export * from './trip.ts';
 export * from './cards.ts';
 export * from './investments.ts';
+export * from './business.ts';
 export * from './strategy.ts';
 export * from './partner-import.ts';
 export { buildStrategies } from './strategies.ts';

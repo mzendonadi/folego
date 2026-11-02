@@ -8,6 +8,7 @@ import { FEATURE_LABEL, TABS, VIEWS, NEEDS_MONTH, monthNow } from './account-vie
 import { drawCardCheckout, billingHeader, cancelNotice } from './account-billing.js';
 import { installBanner, pushBanner, registerWorker } from './account-app.js';
 import { chartsForTab } from './account-charts-views.js';
+import { businessHomeCard } from './account-business-views.js';
 import { hideHeaderAvatar, showHeaderAvatar } from './account-avatar.js';
 
 const card = (...c) => el('section', { class: 'card d-section' }, ...c.filter(Boolean));
@@ -292,6 +293,7 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
           [ctx.debts, ctx.mapOffer] = await Promise.all([ctx.api.getDebts(ctx.debtExtra ?? 0), ctx.api.getMapOffer().catch(() => ({ eligible: false }))]);
         }
         if (id === 'carteiras') ctx.wallets = await ctx.api.getWallets();
+        if (id === 'geral') ctx.business = ctx.has('business') ? await ctx.api.getBusiness(ctx.month).catch(() => null) : null; // a empresa (PJ) aparece à parte, nunca somada ao pessoal
         if (id === 'cartoes' && ctx.has('cards')) {
           let cats = null;
           [ctx.cards, ctx.wallets, cats] = await Promise.all([ctx.api.getCards(), ctx.api.getWallets().catch(() => null), ctx.api.getCategories().catch(() => null)]);
@@ -310,6 +312,9 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
           const anchor = id === 'geral' ? [...view.children].find((k) => /Para onde foi/.test(k.querySelector?.('h2')?.textContent ?? '')) : null;
           if (anchor) anchor.after(extra); else view.append(extra);
         }
+        // Visão geral: o bloco da empresa (PJ) entra por último, separado, só com os números da empresa
+        const bizCard = id === 'geral' && view?.append ? businessHomeCard(ctx, ctx.business) : null;
+        if (bizCard) view.append(bizCard);
         // O convite "Quer ter ainda mais tranquilidade financeira?" é sempre o último card da tela, depois dos gráficos e de tudo o mais.
         const promo = view?.children ? [...view.children].find((k) => k.id === 'pb-title' || k.querySelector?.('#pb-title')) : null;
         if (promo && view.lastElementChild !== promo) view.append(promo);
