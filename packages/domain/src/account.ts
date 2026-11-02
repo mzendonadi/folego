@@ -204,7 +204,7 @@ export function parseOfx(text: string): { entries: ImportedEntry[]; skipped: num
 // ---------------------------------------------------------------------------
 const PDF_MONTHS: Record<string, number> = { jan: 1, fev: 2, mar: 3, abr: 4, mai: 5, jun: 6, jul: 7, ago: 8, set: 9, out: 10, nov: 11, dez: 12 };
 const PDF_MONEY = /(?<s1>[-+])?\s*(?:R\$)?\s*(?<s2>[-+])?\s*(?<par>\()?(?<num>\d{1,3}(?:\.\d{3})+,\d{2}|\d+,\d{2})\)?(?<trail>-)?(?:\s+(?<dc>DB|CR|D|C)(?![A-Za-zÀ-ú]))?/gi;
-const PDF_INCOME_WORDS = /recebid|receb\.|cr[eé]dito em conta|dep[oó]sito|sal[aá]rio|rendimento|estorno|reembolso|cashback|devolu|provento|resgate/i;
+const PDF_INCOME_WORDS = /recebid|recebimento|pix_cred|receb\.|cr[eé]dito em conta|dep[oó]sito|sal[aá]rio|rendimento|estorno|reembolso|cashback|devolu|provento|resgate/i;
 const PDF_SKIP_DESC = /^(saldo|total|subtotal|limite|vencimento|pagamento m[ií]nimo|valor da fatura)/i;
 
 function pdfDate(line: string, refYear: number | null, now: Date): { iso: string; rest: string } | null {
@@ -346,6 +346,14 @@ export function parsePdfExtract(text: string, now: Date = new Date()): { entries
   let pending: string[] = [];
   let openDated = false; // começou um lançamento (linha com data) que ainda não achou o valor
   const balances: Array<{ cents: number; at: number }> = [];
+  // Corrente de saldos: quando o extrato traz o saldo depois de cada lançamento (Sicredi, Inter...) e começa por "saldo anterior",
+  // o sinal de cada valor sai da própria conta (saldo novo - saldo anterior), e não de adivinhar pelo texto. Crédito sem sinal fica certo.
+  let chainStart: number | null = null;
+  let chainPrev: number | null = null;
+  let chainOk = true;
+  let chainCount = 0;
+  let chainLast: { cents: number; on: string } | null = null;
+  const signedBal = (a: string, d: string | undefined): number => (/-\s*$/.test(a) || /^-/.test(a) || /^(D|DB)$/i.test(d ?? '') ? -1 : 1) * centsOf(a);
 
   for (const raw of lines) {
     if (PDF_HEADER.test(raw)) {
@@ -399,6 +407,8 @@ export function parsePdfExtract(text: string, now: Date = new Date()): { entries
     // linha de saldo = a descrição COMEÇA com "saldo" ("SALDO EM 31/08", "Saldo anterior"); "JUROS SALDO UTILIZ" é um lançamento
     if (/^(?:\(=\)\s*)?saldo\b/i.test(label)) {
       balances.push({ cents: explicitNeg ? -cents : cents, at: entries.length }); // saldo anterior/final: serve para conferir, não é lançamento
+      if (entries.length === 0 && chainStart === null) { chainStart = signedBal(a1, g.d1); chainPrev = chainStart; }
+      else if (chainPrev !== null && chainPrev !== signedBal(a1, g.d1)) chainOk = false;
       pending = [];
       continue;
     }
@@ -419,7 +429,13 @@ export function parsePdfExtract(text: string, now: Date = new Date()): { entries
       .replace(/^[-–:\s]+|[-–:\s]+$/g, '')
       .trim();
     const negative = trailingStyle ? explicitNeg : explicitNeg || (!explicitPos && !PDF_INCOME_WORDS.test(note));
-    entries.push({ date: currentDate, amountCents: negative ? -cents : cents, note: (note || 'Lançamento').slice(0, 120) });
+    let amountCents = negative ? -cents : cents;
+    if (chainPrev !== null && g.a2) {
+      const bal = signedBal(g.a2.trim(), g.d2);
+      const delta = bal - chainPrev;
+      if (Math.abs(delta) === cents) { amountCents = delta; chainPrev = bal; chainCount += 1; chainLast = { cents: bal, on: currentDate }; } else { chainOk = false; chainPrev = null; }
+    } else if (chainPrev !== null) { chainOk = false; chainPrev = null; }
+    entries.push({ date: currentDate, amountCents, note: (note || 'Lançamento').slice(0, 120) });
     pending = [];
   }
 
@@ -432,6 +448,10 @@ export function parsePdfExtract(text: string, now: Date = new Date()): { entries
   if (entries.length > 0 && balances.length >= 2 && first && last && first.at === 0 && last.at === entries.length) {
     const expectedCents = last.cents - first.cents;
     check = { ok: expectedCents === parsedCents, source: 'saldo', expectedCents, parsedCents };
+  }
+  // corrente de saldos fechando linha a linha: é a conferência mais forte, e o saldo final serve para acertar a conta
+  if (chainOk && chainStart !== null && chainLast && chainCount === entries.length && entries.length > 0) {
+    check = { ok: true, source: 'saldo', expectedCents: chainLast.cents - chainStart, parsedCents, endBalance: chainLast };
   }
   if (!check?.ok && entries.length > 0) {
     const total = (re: RegExp) => {
