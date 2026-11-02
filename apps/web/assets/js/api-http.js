@@ -332,6 +332,34 @@ export async function linkBizMovement(body) {
 export async function getBizReport(from, to) {
   return request('GET', `/account/business/report?from=${from}&to=${to}`);
 }
+/** Empresa: cheque especial e saldo do extrato, importação de extrato e fatura, dívidas (sempre separadas das pessoais). */
+export async function updateBizWallet(id, body) {
+  return request('PUT', `/account/business/wallets/${id}`, { body });
+}
+export async function anchorBizWallet(id, body) {
+  return request('POST', `/account/business/wallets/${id}/anchor`, { body });
+}
+export async function importBizEntries(body) {
+  return request('POST', '/account/business/import', { body });
+}
+export async function importBizInvoice(id, body) {
+  return request('POST', `/account/business/cards/${id}/import`, { body });
+}
+export async function getBizDebts(extraCents = 0) {
+  return request('GET', `/account/business/debts${extraCents > 0 ? `?extra=${extraCents}` : ''}`);
+}
+export async function createBizDebt(body) {
+  return request('POST', '/account/business/debts', { body });
+}
+export async function updateBizDebt(id, body) {
+  return request('PUT', `/account/business/debts/${id}`, { body });
+}
+export async function deleteBizDebt(id) {
+  return request('DELETE', `/account/business/debts/${id}`);
+}
+export async function payBizDebt(id, body) {
+  return request('POST', `/account/business/debts/${id}/payments`, { body });
+}
 export async function createInvestment(body) {
   return request('POST', '/account/investments', { body });
 }

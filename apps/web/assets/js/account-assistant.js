@@ -31,6 +31,7 @@ export function assistantCard(ctx) {
           ...(s.abilities?.voice ? ['Mande um áudio falando: "mercado quarenta e cinco reais"'] : []),
           ...(s.abilities?.photo ? ['Mande a foto do cupom ou da nota e diga a categoria: "despesas mercado"'] : []),
           ...(s.abilities?.invoice && ctx.has('cards_pro') ? ['Mande o PDF da fatura e diga "lançar fatura em anexo em cartão de crédito"'] : []),
+          ...(ctx.has('business') ? ['Da empresa? Comece com "empresa:" ("empresa: fornecedor 850"). Vale para texto, áudio, foto e PDF. MODO EMPRESA manda tudo para a empresa, MODO PESSOAL volta ao normal, e os dois nunca se misturam'] : []),
           'SALDO mostra o mês', 'CONTAS lista o que vence em 7 dias', 'DESFAZER apaga o último lançamento',
         ].map((t) => el('li', {}, icon('check'), t))),
         off,

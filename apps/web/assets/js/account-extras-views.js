@@ -16,7 +16,7 @@ const bpsToField = (bps) => String(bps / 100).replace('.', ',');
 const OVERDRAFT_TONE = { none: '', low: 'note', high: 'note note-amber', over: 'note note-amber' };
 
 /** Faixa do cheque especial (LIS) de uma conta bancária: limite, quanto está em uso e o custo estimado. */
-function overdraftBlock(x) {
+export function overdraftBlock(x) {
   const o = x.overdraft;
   if (!o || (x.overdraftLimitCents === 0 && o.usedCents === 0)) return null;
   const pct = Math.min(100, o.usedPct);
@@ -33,7 +33,7 @@ function overdraftBlock(x) {
 }
 
 /** Formulário de cheque especial / saldo (usado ao criar e ao ajustar uma conta bancária). */
-function accountFields(init = {}) {
+export function accountFields(init = {}) {
   const opening = moneyInput({ id: init.prefix ? `${init.prefix}-saldo` : 'cw-saldo', ariaLabel: 'Saldo de partida', value: Math.abs(init.openingBalanceCents ?? 0) || null, placeholder: '0,00' });
   const negative = el('input', { type: 'checkbox', id: init.prefix ? `${init.prefix}-neg` : 'cw-neg' });
   negative.checked = (init.openingBalanceCents ?? 0) < 0;
@@ -235,7 +235,9 @@ export function viewLembretes(ctx) {
 const KIND_NOTE = { avalanche: 'Avalanche: ataca primeiro a dívida com juros mais altos. É a que menos custa.', snowball: 'Bola de neve: ataca primeiro a menor dívida. Custa um pouco mais, mas dá vitórias rápidas.' };
 const monthsText = (m) => (m >= 600 ? 'nunca, neste ritmo' : m === 0 ? 'já está tudo pago' : m < 12 ? `${m} meses` : `${Math.floor(m / 12)} ${Math.floor(m / 12) === 1 ? 'ano' : 'anos'}${m % 12 ? ` e ${m % 12} meses` : ''}`);
 
-export function viewDividas(ctx) {
+/** `opts.scope === 'pj'`: as dívidas da EMPRESA (a tela da aba Empresa passa um ctx com as dívidas e as chamadas da empresa); sem o banner do mapa nem o convite ao parceiro. */
+export function viewDividas(ctx, opts = {}) {
+  const pj = opts.scope === 'pj';
   const d = ctx.debts;
   const name = el('input', { class: 'input', id: 'dv-nome', type: 'text', maxlength: '60', placeholder: 'Ex.: cartão do banco, financiamento' });
   const balance = moneyInput({ id: 'dv-saldo', ariaLabel: 'Quanto falta pagar' });
@@ -287,8 +289,8 @@ export function viewDividas(ctx) {
       const share = el('li', { class: 'debt-row' },
         el('div', { class: 'debt-top' }, el('strong', {}, x.name), d.plan?.focusId === x.id ? el('span', { class: 'pill tone-ok' }, 'Foco agora') : null, el('span', { class: 'pill tone-attention' }, 'Cheque especial (LIS)')),
         el('p', { class: 'muted fine' }, `Usando ${brl(x.balanceCents)} · juros ${(x.monthlyRateBps / 100).toLocaleString('pt-BR')}% ao mês (cerca de ${brl(Math.round((x.balanceCents * x.monthlyRateBps) / 10_000))} por mês).`),
-        el('p', { class: 'fine' }, 'Este valor vem da sua conta bancária na aba Carteiras. Para pagar, lance uma entrada nessa conta: o saldo volta ao positivo e a dívida some daqui.'),
-        el('div', { class: 'button-row no-print' }, (() => { const go = el('button', { class: 'btn btn-secondary btn-sm', type: 'button' }, 'Ir para Carteiras'); go.addEventListener('click', () => ctx.goTab('carteiras')); return go; })()),
+        el('p', { class: 'fine' }, pj ? 'Este valor vem da conta bancária da empresa, mais acima nesta aba. Para pagar, lance uma entrada nessa conta: o saldo volta ao positivo e a dívida some daqui.' : 'Este valor vem da sua conta bancária na aba Carteiras. Para pagar, lance uma entrada nessa conta: o saldo volta ao positivo e a dívida some daqui.'),
+        pj ? null : el('div', { class: 'button-row no-print' }, (() => { const go = el('button', { class: 'btn btn-secondary btn-sm', type: 'button' }, 'Ir para Carteiras'); go.addEventListener('click', () => ctx.goTab('carteiras')); return go; })()),
       );
       return share;
     }
@@ -339,12 +341,12 @@ export function viewDividas(ctx) {
   const t = d.totals;
   return el(
     'div', { class: 'acc-stack' },
-    mapBanner(ctx),
-    t.initialCents ? card(el('h2', {}, 'Para sair do vermelho'), el('p', {}, el('strong', {}, brl(t.owedCents)), ' ainda a pagar. Você já pagou ', el('strong', {}, brl(t.paidCents)), ` (${t.progressPct}%).`)) : null,
+    pj ? null : mapBanner(ctx),
+    t.initialCents ? card(el('h2', {}, pj ? 'Dívidas da empresa' : 'Para sair do vermelho'), el('p', {}, el('strong', {}, brl(t.owedCents)), ' ainda a pagar. Você já pagou ', el('strong', {}, brl(t.paidCents)), ` (${t.progressPct}%).`)) : null,
     planBox,
-    card(el('h2', {}, 'Nova dívida'), el('p', { class: 'muted' }, 'Cadastre o que você deve. O saldo cai a cada pagamento registrado, e o pagamento entra nos seus lançamentos como gasto em "Dívidas".'), form),
-    card(el('h2', {}, 'Suas dívidas'), rows.length ? el('ul', { class: 'entries' }, ...rows) : el('p', { class: 'muted' }, 'Nenhuma dívida cadastrada ainda.')),
-    partnerPrompt(ctx),
+    card(el('h2', {}, pj ? 'Nova dívida da empresa' : 'Nova dívida'), el('p', { class: 'muted' }, pj ? 'Cadastre o que a empresa deve (empréstimo, financiamento, parcelamento de imposto). O saldo cai a cada pagamento e a saída entra nos lançamentos da empresa como "Dívidas". Nada disso aparece nas suas dívidas pessoais.' : 'Cadastre o que você deve. O saldo cai a cada pagamento registrado, e o pagamento entra nos seus lançamentos como gasto em "Dívidas".'), form),
+    card(el('h2', {}, pj ? 'Dívidas da empresa' : 'Suas dívidas'), rows.length ? el('ul', { class: 'entries' }, ...rows) : el('p', { class: 'muted' }, pj ? 'Nenhuma dívida da empresa cadastrada ainda.' : 'Nenhuma dívida cadastrada ainda.')),
+    pj ? null : partnerPrompt(ctx),
   );
 }
 

@@ -11,6 +11,7 @@ import { effectiveAccountId, memberAccess } from './household.ts';
 import { addEntries, monthView, requireFeature } from './subscriptions.ts';
 import { credOf, loadAccount, transportOf, waPhone } from './whatsapp.ts';
 import { ensureHouseAccount, HOUSE_PARTNER_ID } from './wa-bird.ts';
+import { createBizEntry, businessOverview } from './business.ts';
 import { finishInvoice, finishReceipt, getPending, handleDocument, handleImage, hearAudio, mediaOf, setPending } from './assistant-media.ts';
 import type { MediaEnv, MediaRef } from './assistant-media.ts';
 
@@ -94,6 +95,7 @@ const HELP = [
   '• Foto de cupom ou nota: mande a foto e diga a categoria ("despesas mercado")',
   '• Fatura do cartão: mande o PDF e diga "lançar fatura em anexo em cartão de crédito"',
   '• Consultar: SALDO, CONTAS (o que vence nos próximos dias), METAS',
+  '• Empresa (planos Ousado e Desbravador): comece com "empresa:" ("empresa: fornecedor 850"; vale também para foto, áudio e PDF) ou escreva MODO EMPRESA para tudo ir para a empresa. MODO PESSOAL volta ao normal. Os dois ficam sempre separados.',
   '• Errou? Responda DESFAZER logo depois.',
   '• Para desconectar este WhatsApp: SAIR',
 ].join('\n');
@@ -105,7 +107,15 @@ async function firstTime(ctx: Ctx, messageId: string | null): Promise<boolean> {
   return (r.rowCount ?? 0) > 0;
 }
 
-type Link = { subscriber_id: string; last_entry_id: string | null; last_entry_at: Date | null };
+type Link = { subscriber_id: string; last_entry_id: string | null; last_entry_at: Date | null; scope: string };
+
+/** "empresa: ...", "pj ..." ou "pessoal: ...", "pf ...": diz, só para esta mensagem, de que lado o lançamento é. Sem os dois-pontos, "empresa de luz 80" continua sendo um gasto. */
+function stripScope(s: string): { scope: 'pf' | 'pj' | null; text: string } {
+  const m = /^\s*(?:(empresa|pessoal)\s*[:\-–]|(pj|pf)\s*[:\-–]?\s)\s*/i.exec(s);
+  if (!m) return { scope: null, text: s };
+  const w = (m[1] ?? m[2] ?? '').toLowerCase();
+  return { scope: w === 'empresa' || w === 'pj' ? 'pj' : 'pf', text: s.slice(m[0].length) };
+}
 
 /**
  * Chamado para toda mensagem recebida no número do Fôlego. Devolve true se era do assistente (vínculo ou número já vinculado);
@@ -120,7 +130,7 @@ export async function handleAssistantInbound(ctx: Ctx, data: Record<string, unkn
   const text = String((data.text as { body?: unknown } | undefined)?.body ?? '').trim();
   const media = mediaOf(data);
   const key = phoneKey(ctx, digits);
-  const link = (await ctx.db.query<Link>(`SELECT subscriber_id, last_entry_id, last_entry_at FROM app.assistant_links WHERE phone_hmac = $1`, [key])).rows[0];
+  const link = (await ctx.db.query<Link>(`SELECT subscriber_id, last_entry_id, last_entry_at, scope FROM app.assistant_links WHERE phone_hmac = $1`, [key])).rows[0];
 
   if (!link) {
     const m = /^\s*vincular\s+([a-z0-9]{6})\s*$/i.exec(text);
@@ -167,23 +177,55 @@ async function saveEntry(ctx: Ctx, digits: string, person: string, account: stri
   ].filter(Boolean).join('\n'));
 }
 
-async function converse(ctx: Ctx, digits: string, link: Link, rawText: string, media: MediaRef | null): Promise<void> {
+/** Lançamento da EMPRESA (tabelas biz_*, nunca o livro pessoal). Com uma só conta da empresa, o lançamento já cai nela. */
+async function saveBizEntry(ctx: Ctx, digits: string, account: string, entry: { date: string; amountCents: number; note: string }): Promise<void> {
+  const wallets = (await ctx.db.query<{ id: string }>(`SELECT id FROM app.biz_wallets WHERE subscriber_id = $1 ORDER BY created_at`, [account])).rows;
+  await createBizEntry(ctx, account, { date: entry.date, amountCents: entry.amountCents, note: entry.note, walletId: wallets.length === 1 ? wallets[0]!.id : null }, 'whatsapp');
+  const spend = entry.amountCents < 0;
+  const ov = await businessOverview(ctx, account, entry.date.slice(0, 7));
+  const when = entry.date === todaySaoPaulo() ? 'hoje' : new Date(`${entry.date}T12:00:00`).toLocaleDateString('pt-BR');
+  await reply(ctx, digits, [
+    `Lancei na EMPRESA: ${spend ? '' : 'entrada de '}${formatBrl(Math.abs(entry.amountCents))} (${when}).`,
+    `Em ${monthName(entry.date)} a empresa ${spend ? 'já gastou' : 'já recebeu'} ${formatBrl(spend ? ov.month.spendCents : ov.month.incomeCents)}.`,
+    'Errou? Responda DESFAZER.',
+  ].join('\n'));
+}
+
+async function converse(ctx: Ctx, digits: string, link: Link, rawIn: string, mediaIn: MediaRef | null): Promise<void> {
   const person = link.subscriber_id;
   const account = await effectiveAccountId(ctx, person);
   const today = todaySaoPaulo();
   const month = today.slice(0, 7);
+  // De que lado a mensagem vai: "empresa:"/"pj" ou "pessoal:"/"pf" no começo (vale só para ela); senão o lado do que ficou esperando resposta; senão o modo do vínculo (pessoal por padrão).
+  const tagged = stripScope(rawIn);
+  const rawText = tagged.text;
+  const capTag = mediaIn ? stripScope(mediaIn.caption) : null;
+  const media = mediaIn && capTag ? { ...mediaIn, caption: capTag.text } : mediaIn;
+  const pending = await getPending(ctx, person);
+  // O lado do que ficou esperando só vale para a resposta ("lançar", "despesas mercado"); um lançamento novo com valor segue o modo do vínculo.
+  let scope: 'pf' | 'pj' = tagged.scope ?? capTag?.scope ?? (pending && !/\d/.test(rawText) ? pending.scope : undefined) ?? (link.scope === 'pj' ? 'pj' : 'pf');
   let text = rawText;
 
   const env: MediaEnv = {
-    ctx, person, account,
+    ctx, person, account, scope,
     say: (m) => reply(ctx, digits, m),
-    record: (entry) => saveEntry(ctx, digits, person, account, entry, today),
+    record: (entry) => (scope === 'pj' ? saveBizEntry(ctx, digits, account, entry) : saveEntry(ctx, digits, person, account, entry, today)),
     canWrite: async () => (await memberAccess(ctx, person)) !== 'consulta',
   };
 
+  // Modo do vínculo: "modo empresa" / "modo pessoal" (ou só "empresa" / "pessoal").
+  const mode = /^(?:modo\s+)?(empresa|pj|pessoal|pf)$/.exec(fold(rawText));
+  if (!media && mode) {
+    const to = mode[1] === 'empresa' || mode[1] === 'pj' ? 'pj' : 'pf';
+    if (to === 'pj') await requireFeature(ctx, account, 'business');
+    await ctx.db.query(`UPDATE app.assistant_links SET scope = $2 WHERE subscriber_id = $1`, [person, to]);
+    return reply(ctx, digits, to === 'pj' ? 'Pronto: a partir de agora o que você mandar vai para a EMPRESA. Para um lançamento pessoal avulso, comece com "pessoal:". MODO PESSOAL volta ao normal.' : 'Pronto: voltei para o modo PESSOAL. Para um lançamento avulso da empresa, comece com "empresa:".');
+  }
+  if (scope === 'pj') await requireFeature(ctx, account, 'business');
+
   if (media) {
     if (media.kind === 'video' || media.kind === 'sticker') return reply(ctx, digits, 'Por aqui eu entendo texto, áudio, foto de cupom e o PDF da fatura do cartão. Digite AJUDA para ver como.');
-    await requireFeature(ctx, account, 'ledger');
+    await requireFeature(ctx, account, scope === 'pj' ? 'business' : 'ledger');
     if (media.kind === 'image' || media.kind === 'document') {
       if (!(await env.canWrite())) return reply(ctx, digits, 'Seu acesso a esta conta é só de consulta: quem lança é o titular.');
       return media.kind === 'image' ? handleImage(env, media, media.caption || rawText) : handleDocument(env, media, media.caption || rawText);
@@ -191,10 +233,15 @@ async function converse(ctx: Ctx, digits: string, link: Link, rawText: string, m
     // áudio: vira texto e segue como se tivesse sido digitado
     const heard = await hearAudio(env, media);
     if (heard === null) return;
-    text = heard;
+    const spoken = stripScope(heard);
+    text = spoken.text;
+    if (spoken.scope) {
+      scope = spoken.scope;
+      env.scope = scope;
+      if (scope === 'pj') await requireFeature(ctx, account, 'business');
+    }
   }
   const t = fold(text);
-  const pending = await getPending(ctx, person);
 
   if (pending && /^(cancelar|cancela|nao|descartar|deixa|esquece|deixa pra la)$/.test(t)) {
     await setPending(ctx, person, null);
@@ -206,6 +253,17 @@ async function converse(ctx: Ctx, digits: string, link: Link, rawText: string, m
     return reply(ctx, digits, 'Tudo certo: este WhatsApp foi desconectado do Prumo. Para conectar de novo, gere um código no app.');
   }
 
+  if (scope === 'pj' && /^(saldo|resumo|gastos|quanto gastei|mes|extrato)$/.test(t)) {
+    const ov = await businessOverview(ctx, account, month);
+    const top = ov.month.byCategory.filter((c) => c.spendCents > 0).slice(0, 3).map((c) => `${c.label} ${formatBrl(c.spendCents)}`);
+    return reply(ctx, digits, [
+      `EMPRESA em ${monthName(today)}: entrou ${formatBrl(ov.month.incomeCents)}, saiu ${formatBrl(ov.month.spendCents)}, resultado ${formatBrl(ov.month.resultCents)}.`,
+      ov.wallets.length ? `Saldo nas contas da empresa: ${formatBrl(ov.totals.balanceCents)}.` : '',
+      top.length ? `Maiores gastos: ${top.join('; ')}.` : 'Ainda não há lançamentos da empresa neste mês.',
+      ov.debts.count > 0 ? `Dívidas da empresa: ${formatBrl(ov.debts.owedCents)}.` : '',
+      ...ov.alerts.map((a) => `Atenção: ${a.title}.`),
+    ].filter(Boolean).join('\n'));
+  }
   if (/^(saldo|resumo|gastos|quanto gastei|mes|extrato)$/.test(t)) {
     await requireFeature(ctx, account, 'ledger');
     const s = (await monthView(ctx, account, month)).summary;
@@ -229,6 +287,13 @@ async function converse(ctx: Ctx, digits: string, link: Link, rawText: string, m
     return reply(ctx, digits, ['Suas metas:', ...g.rows.map((x) => `• ${x.name}: ${Math.floor((num(x.saved_cents) / num(x.target_cents)) * 100)}% (${formatBrl(num(x.saved_cents))} de ${formatBrl(num(x.target_cents))})`)].join('\n'));
   }
 
+  if (scope === 'pj' && /^desfazer$/.test(t)) {
+    if ((await memberAccess(ctx, person)) === 'consulta') return reply(ctx, digits, 'Seu acesso a esta conta é só de consulta.');
+    const d = await ctx.db.query(
+      `DELETE FROM app.biz_entries WHERE id = (SELECT id FROM app.biz_entries WHERE subscriber_id = $1 AND source = 'whatsapp' AND created_at > now() - make_interval(mins => $2) ORDER BY created_at DESC LIMIT 1)`,
+      [account, UNDO_MINUTES]);
+    return reply(ctx, digits, (d.rowCount ?? 0) > 0 ? 'Desfeito: apaguei o último lançamento da empresa.' : 'Não há lançamento recente da empresa para desfazer (só dá até 1 hora depois).');
+  }
   if (/^desfazer$/.test(t)) {
     if (!link.last_entry_id || !link.last_entry_at || Date.now() - new Date(link.last_entry_at).getTime() > UNDO_MINUTES * 60_000) return reply(ctx, digits, 'Não há lançamento recente para desfazer (só dá até 1 hora depois).');
     if ((await memberAccess(ctx, person)) === 'consulta') return reply(ctx, digits, 'Seu acesso a esta conta é só de consulta.');
@@ -249,5 +314,6 @@ async function converse(ctx: Ctx, digits: string, link: Link, rawText: string, m
   if (!entry) return reply(ctx, digits, 'Não achei o valor. Escreva junto o quanto foi, por exemplo: "mercado 45". Digite AJUDA para ver o que eu entendo.');
   if (!(await env.canWrite())) return reply(ctx, digits, 'Seu acesso a esta conta é só de consulta: quem lança é o titular.');
   if (pending) await setPending(ctx, person, null); // lançamento novo substitui o que estava esperando
+  if (scope === 'pj') return saveBizEntry(ctx, digits, account, entry);
   await saveEntry(ctx, digits, person, account, entry, today);
 }

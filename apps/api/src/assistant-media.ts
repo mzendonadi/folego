@@ -9,6 +9,7 @@ import { todaySaoPaulo } from './services.ts';
 import { categorize, cardFromInvoice, detectDocumentKind, formatBrl, invoiceCardChanges, invoiceImportBody, matchInvoiceCard, parseInvoiceDocument } from './engine.ts';
 import type { InvoiceDoc } from './engine.ts';
 import { createCard, importInvoice } from './cards.ts';
+import { bizCardImportSchema, createBizCard, importBizInvoice } from './business.ts';
 import { credOf, loadAccount, transportOf } from './whatsapp.ts';
 import { ensureHouseAccount, HOUSE_PARTNER_ID } from './wa-bird.ts';
 
@@ -20,6 +21,8 @@ type Billable = 'image' | 'document' | 'audio';
 const DAILY_LIMIT: Record<Billable, number> = { image: 20, document: 8, audio: 40 };
 const MAX_BYTES: Record<Billable, number> = { image: 5_000_000, document: 12_000_000, audio: 6_000_000 };
 const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+const BRANDS = ['visa', 'mastercard', 'elo', 'amex', 'hipercard'] as const;
+const bizBrand = (b: string): (typeof BRANDS)[number] | 'outra' => BRANDS.find((x) => x === b) ?? 'outra';
 const dayBr = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 const monthName = (ym: string) => new Date(`${ym}-01T12:00:00`).toLocaleDateString('pt-BR', { month: 'long' });
 
@@ -215,8 +218,8 @@ export function spokenToText(heard: string): string {
 // Estado "esperando resposta" (guardado no vínculo por poucos minutos)
 // ---------------------------------------------------------------------------
 export type Pending =
-  | { kind: 'receipt'; receipt: Receipt }
-  | { kind: 'invoice'; doc: InvoiceDoc; cardId: string | null; verified: boolean };
+  | { kind: 'receipt'; receipt: Receipt; scope?: 'pf' | 'pj' }
+  | { kind: 'invoice'; doc: InvoiceDoc; cardId: string | null; verified: boolean; scope?: 'pf' | 'pj' };
 
 export async function setPending(ctx: Ctx, person: string, p: Pending | null): Promise<void> {
   await ctx.db.query(`UPDATE app.assistant_links SET pending = $2, pending_at = ${p ? 'now()' : 'NULL'} WHERE subscriber_id = $1`, [person, p ? JSON.stringify(p) : null]);
@@ -231,6 +234,8 @@ export async function getPending(ctx: Ctx, person: string): Promise<Pending | nu
 // ---------------------------------------------------------------------------
 export interface MediaEnv {
   ctx: Ctx; person: string; account: string;
+  /** Onde a mensagem lança: 'pf' (pessoal, padrão) ou 'pj' (empresa). Cartões e faturas seguem o mesmo lado. */
+  scope?: 'pf' | 'pj';
   say(text: string): Promise<void>;
   /** Registra o lançamento e responde com o recibo (o mesmo do texto "mercado 45"). */
   record(entry: { date: string; amountCents: number; note: string; category: string }): Promise<void>;
@@ -249,7 +254,7 @@ export async function handleImage(env: MediaEnv, ref: MediaRef, caption: string)
   if (!receipt) return say('Não consegui ler um cupom ou nota nessa foto. Tire de novo, de perto e com boa luz, ou escreva o valor: "mercado 45".');
   const desc = descriptionFrom(caption);
   if (desc && !/\d/.test(caption)) return record(env, receipt, desc);
-  await setPending(ctx, person, { kind: 'receipt', receipt });
+  await setPending(ctx, person, { kind: 'receipt', receipt, scope: env.scope ?? 'pf' });
   await say(`Li ${receipt.merchant ? `${receipt.merchant}: ` : ''}${formatBrl(receipt.totalCents)} em ${dayBr(receipt.date)}.\nEm que categoria eu lanço? Responda, por exemplo, "despesas mercado". Ou LANÇAR para eu escolher pelo nome do lugar. CANCELAR descarta.`);
 }
 
@@ -283,20 +288,20 @@ export async function handleDocument(env: MediaEnv, ref: MediaRef, caption: stri
   const doc = kind === 'fatura' ? parseInvoiceDocument(text, new Date()) : null;
   if (!doc || doc.entries.length === 0 || !doc.invoice.key) return say('Não achei uma fatura de cartão nesse PDF. Confira se é a fatura (e não o comprovante de pagamento) e mande de novo.');
 
-  const card = matchInvoiceCard(await cardsOf(ctx, env.account), doc);
+  const card = matchInvoiceCard(await cardsOf(ctx, env.account, env.scope), doc);
   const wants = /(lan[cç]|import|registr|adicion|cart[aã]o|fatura)/i.test(caption);
   const verified = Boolean(doc.check?.ok);
   const sum = invoiceSummary(doc, card?.name ?? null);
   if (!card) {
     const want = cardFromInvoice(doc);
-    await setPending(ctx, person, { kind: 'invoice', doc, cardId: null, verified });
-    return say(`${sum}\n\nEste cartão ainda não está cadastrado no Prumo. Responda CADASTRAR para eu cadastrar com estes dados (limite ${formatBrl(want.limitCents)}, fecha dia ${want.closingDay}, vence dia ${want.dueDay}) e lançar a fatura. CANCELAR descarta.`);
+    await setPending(ctx, person, { kind: 'invoice', doc, cardId: null, verified, scope: env.scope ?? 'pf' });
+    return say(`${sum}\n\nEste cartão ${env.scope === 'pj' ? 'da empresa ' : ''}ainda não está cadastrado no Prumo. Responda CADASTRAR para eu cadastrar com estes dados (limite ${formatBrl(want.limitCents)}, fecha dia ${want.closingDay}, vence dia ${want.dueDay}) e lançar a fatura. CANCELAR descarta.`);
   }
   if (wants && verified) {
     if (!(await env.canWrite())) return say('Seu acesso a esta conta é só de consulta: quem lança é o titular.');
     return importDoc(env, doc, card.id);
   }
-  await setPending(ctx, person, { kind: 'invoice', doc, cardId: card.id, verified });
+  await setPending(ctx, person, { kind: 'invoice', doc, cardId: card.id, verified, scope: env.scope ?? 'pf' });
   const warn = verified ? '' : `\n⚠ A soma das compras (${formatBrl(doc.check?.parsedCents ?? 0)}) não bate com o que a fatura informa (${formatBrl(doc.check?.expectedCents ?? 0)}). Pode ter ficado compra de fora.`;
   return say(`${sum}${warn}\n\nResponda LANÇAR para colocar esta fatura no cartão ${card.name}. CANCELAR descarta.`);
 }
@@ -312,9 +317,9 @@ function invoiceSummary(doc: InvoiceDoc, cardName: string | null): string {
   return lines.join('\n');
 }
 
-async function cardsOf(ctx: Ctx, account: string) {
+async function cardsOf(ctx: Ctx, account: string, scope: 'pf' | 'pj' = 'pf') {
   const r = await ctx.db.query<{ id: string; name: string; last4: string | null; limit_cents: string; closing_day: number; due_day: number }>(
-    `SELECT id, name, last4, limit_cents::text AS limit_cents, closing_day, due_day FROM app.credit_cards WHERE subscriber_id = $1 ORDER BY created_at`, [account]);
+    `SELECT id, name, last4, limit_cents::text AS limit_cents, closing_day, due_day FROM ${scope === 'pj' ? 'app.biz_cards' : 'app.credit_cards'} WHERE subscriber_id = $1 ORDER BY created_at`, [account]);
   return r.rows.map((c) => ({ id: c.id, name: c.name, last4: c.last4, limitCents: Number(c.limit_cents), closingDay: c.closing_day, dueDay: c.due_day }));
 }
 
@@ -326,7 +331,8 @@ export async function finishInvoice(env: MediaEnv, p: Extract<Pending, { kind: '
   if (!cardId) {
     if (command !== 'cadastrar') return say('Este cartão ainda não está cadastrado. Responda CADASTRAR para eu cadastrar e lançar a fatura, ou CANCELAR.');
     const want = cardFromInvoice(p.doc);
-    cardId = await createCard(ctx, env.account, { name: want.name, brand: want.brand, last4: want.last4, limitCents: want.limitCents, closingDay: want.closingDay, dueDay: want.dueDay });
+    const novo = { name: want.name, brand: want.brand, last4: want.last4, limitCents: want.limitCents, closingDay: want.closingDay, dueDay: want.dueDay };
+    cardId = env.scope === 'pj' ? await createBizCard(ctx, env.account, { ...novo, brand: bizBrand(novo.brand) }) : await createCard(ctx, env.account, novo);
     await say(`Cartão ${want.name} cadastrado.`);
   }
   return importDoc(env, p.doc, cardId);
@@ -334,10 +340,11 @@ export async function finishInvoice(env: MediaEnv, p: Extract<Pending, { kind: '
 
 async function importDoc(env: MediaEnv, doc: InvoiceDoc, cardId: string): Promise<void> {
   const { ctx, person, say } = env;
-  const card = (await cardsOf(ctx, env.account)).find((c) => c.id === cardId);
+  const card = (await cardsOf(ctx, env.account, env.scope)).find((c) => c.id === cardId);
   if (!card) return say('Não achei esse cartão. Cadastre em Cartões no app e mande a fatura de novo.');
   const changes = invoiceCardChanges(card, doc);
-  const r = await importInvoice(ctx, env.account, cardId, invoiceImportBody(doc, { card: changes }));
+  const body = invoiceImportBody(doc, { card: changes });
+  const r = env.scope === 'pj' ? await importBizInvoice(ctx, env.account, cardId, bizCardImportSchema.parse(body), 'whatsapp') : await importInvoice(ctx, env.account, cardId, body);
   await setPending(ctx, person, null);
   const inv = doc.invoice;
   const out = [`Fatura lançada no cartão ${card.name}: ${r.added} compras novas${r.duplicates ? `, ${r.duplicates} já estavam lançadas` : ''}${inv.totalCents !== null ? ` (total da fatura ${formatBrl(inv.totalCents)}${inv.dueOn ? `, vence em ${dayBr(inv.dueOn)}` : ''})` : ''}.`];

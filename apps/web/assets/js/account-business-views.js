@@ -9,6 +9,9 @@ import { moneyInput } from './money.js';
 import { confirmDialog } from './confirm.js';
 import { donut, bars, hbars, chartCard } from './charts.js';
 import { viewInvestimentos } from './account-invest-views.js';
+import { accountFields, overdraftBlock, viewDividas } from './account-extras-views.js';
+import { invoiceImportPanel } from './account-invoice.js';
+import { cardPaymentHint, detectDocumentKind, parseExtract, parsePdfExtract } from '../vendor/engine.js';
 
 const card = (...c) => el('section', { class: 'card d-section' }, ...c.filter(Boolean));
 const MONTHS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
@@ -37,11 +40,13 @@ export function viewEmpresa(ctx) {
   const root = el('div', { class: 'acc-stack biz' });
   let data = null;
   let entries = [];
+  let debts = null;
+  let debtExtra = 0;
 
   async function show() {
     root.replaceChildren(card(el('p', { class: 'muted', role: 'status' }, 'Carregando a empresa…')));
     try {
-      [data, { entries }] = await Promise.all([ctx.api.getBusiness(ctx.month), ctx.api.getBizEntries(ctx.month)]);
+      [data, { entries }, debts] = await Promise.all([ctx.api.getBusiness(ctx.month), ctx.api.getBizEntries(ctx.month), ctx.api.getBizDebts(debtExtra)]);
     } catch {
       return root.replaceChildren(card(el('h2', {}, 'Não consegui carregar'), el('p', { class: 'muted' }, 'Confira a conexão e tente de novo.')));
     }
@@ -65,12 +70,23 @@ export function viewEmpresa(ctx) {
     const name = el('input', { class: 'input', id: 'bw-nome', type: 'text', maxlength: '40', placeholder: 'Ex.: Conta Inter PJ' });
     const kind = select('bw-tipo', WALLET_KINDS, 'conta');
     const opening = moneyInput({ id: 'bw-saldo', ariaLabel: 'Saldo de hoje', placeholder: '0,00' });
+    const openingField = field('Saldo de hoje (R$)', opening.input, 'Opcional. A partir daqui o Prumo soma os lançamentos da empresa.');
+    const acc = accountFields({ prefix: 'bw' }); // conta bancária: saldo (pode ser negativo), cheque especial (LIS), taxa e dias sem juros
+    const accBox = el('div', { class: 'field field-wide' }, acc.node);
+    const sync = () => { const bank = kind.value === 'conta'; accBox.hidden = !bank; openingField.hidden = bank; };
+    kind.addEventListener('change', sync);
+    sync();
     const b = buttons('Adicionar conta');
     const f = el('form', { class: 'entry-form form-std' }, el('div', { class: 'field field-wide' }, el('label', { class: 'label', for: 'bw-nome' }, 'Nome da conta'), name),
-      field('Tipo', kind), field('Saldo de hoje (R$)', opening.input, 'Opcional. A partir daqui o Prumo soma os lançamentos da empresa.'), b.row);
+      field('Tipo', kind), openingField, accBox, b.row);
     f.addEventListener('submit', (e) => {
       e.preventDefault();
       if (name.value.trim().length < 2) return toast('Dê um nome à conta.');
+      if (kind.value === 'conta') {
+        const v = acc.read();
+        if (!v.rateOk) return toast('Informe a taxa do cheque especial em % ao mês, por exemplo 8.');
+        return run(b.ok, () => ctx.api.createBizWallet({ name: name.value.trim(), kind: 'conta', openingBalanceCents: v.openingBalanceCents, overdraftLimitCents: v.overdraftLimitCents, overdraftRateBps: v.overdraftRateBps, ...(v.overdraftFreeDays ? { overdraftFreeDays: v.overdraftFreeDays } : {}) }), 'Conta da empresa adicionada.');
+      }
       run(b.ok, () => ctx.api.createBizWallet({ name: name.value.trim(), kind: kind.value, openingBalanceCents: opening.cents() ?? 0 }), 'Conta da empresa adicionada.');
     });
     shell('Nova conta da empresa', f, 'Fica só na empresa: não entra nos seus números pessoais.');
@@ -94,6 +110,118 @@ export function viewEmpresa(ctx) {
       run(b.ok, () => (existing ? ctx.api.updateBizCard(existing.id, body) : ctx.api.createBizCard(body)), existing ? 'Cartão atualizado.' : 'Cartão da empresa adicionado.');
     });
     shell(existing ? 'Editar cartão da empresa' : 'Novo cartão da empresa', f, 'As compras no cartão da empresa usam o limite dele e não saem da conta na hora.');
+  }
+
+  /** Ajusta o nome, o saldo de partida e o cheque especial (LIS) da conta: negativo na conta é cheque especial em uso, igual ao pessoal. */
+  function walletEditForm(w) {
+    const name = el('input', { class: 'input', id: 'bwe-nome', type: 'text', maxlength: '40', value: w.name });
+    const isAccount = w.kind === 'conta';
+    const acc = accountFields({ prefix: `bwe-${w.id.slice(0, 8)}`, openingBalanceCents: w.openingBalanceCents, overdraftLimitCents: w.overdraftLimitCents, overdraftRateBps: w.overdraftRateBps, overdraftFreeDays: w.overdraftFreeDays });
+    const b = buttons('Salvar');
+    const f = el('form', { class: 'entry-form form-std' }, el('div', { class: 'field field-wide' }, el('label', { class: 'label', for: 'bwe-nome' }, 'Nome da conta'), name), isAccount ? acc.node : null, b.row);
+    f.addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (name.value.trim().length < 2) return toast('Dê um nome à conta.');
+      const v = acc.read();
+      if (isAccount && !v.rateOk) return toast('Informe a taxa do cheque especial em % ao mês, por exemplo 8.');
+      const body = { name: name.value.trim(), ...(isAccount ? { openingBalanceCents: v.openingBalanceCents, overdraftLimitCents: v.overdraftLimitCents, overdraftRateBps: v.overdraftRateBps, overdraftFreeDays: v.overdraftFreeDays } : {}) };
+      run(b.ok, () => ctx.api.updateBizWallet(w.id, body), 'Conta atualizada.');
+    });
+    shell(`Editar ${w.name}`, f, 'Quando o saldo da conta fica negativo, o Prumo mostra o cheque especial em uso, o custo dos juros e inclui o valor nas dívidas da empresa.');
+  }
+
+  // ---- importar extrato (CSV, OFX, PDF): mesmos leitores do pessoal, a gravação é só da empresa
+  function importBox() {
+    if (data.wallets.length === 0) return null;
+    const wallet = select('bi-conta', data.wallets.map((w) => [w.id, w.name]), data.wallets[0].id);
+    const input = el('input', { type: 'file', accept: '.csv,.ofx,.txt,.pdf', hidden: true, 'aria-label': 'Arquivo do extrato da empresa' });
+    const btn = el('button', { class: 'btn btn-secondary btn-sm', type: 'button' }, icon('list'), 'Importar extrato (CSV, OFX ou PDF)');
+    btn.addEventListener('click', () => input.click());
+    const preview = el('div', { class: 'import-preview', hidden: true });
+    const reset = () => { preview.hidden = true; preview.replaceChildren(); input.value = ''; };
+
+    async function doImport(parsed, skipped, anchor) {
+      try {
+        let added = 0, duplicates = 0, transfers = 0;
+        for (let i = 0; i < parsed.length; i += 400) {
+          const r = await ctx.api.importBizEntries({ walletId: wallet.value || null, entries: parsed.slice(i, i + 400).map((x) => ({ date: x.date, amountCents: x.amountCents, note: x.note.slice(0, 120), ...(x.transfer ? { transfer: true } : {}) })) });
+          added += r.added; duplicates += r.duplicates ?? 0; transfers += r.transfers ?? 0;
+        }
+        if (anchor && wallet.value) {
+          try { await ctx.api.anchorBizWallet(wallet.value, { asOf: anchor.on, balanceCents: anchor.cents }); } catch { toast('Importei, mas não consegui acertar o saldo da conta.'); }
+        }
+        const months = new Map();
+        for (const x of parsed) months.set(x.date.slice(0, 7), (months.get(x.date.slice(0, 7)) ?? 0) + 1);
+        const top = [...months.entries()].sort((p, q) => q[1] - p[1])[0]?.[0];
+        if (added > 0 && top) ctx.month = top;
+        toast(`${added} lançamentos importados na empresa${transfers ? `, ${transfers} pagamento(s) de fatura fora das despesas` : ''}${duplicates ? `, ${duplicates} repetidos ignorados` : ''}${skipped ? `, ${skipped} linhas não reconhecidas` : ''}.`);
+        reset();
+        show();
+      } catch (e) {
+        toast(why(e, 'Não consegui importar agora.'));
+      }
+    }
+
+    function showPreview(parsed, skipped, check) {
+      const chosen = new Set(parsed.map((_, i) => i));
+      const ok = el('button', { class: 'btn btn-primary btn-sm', type: 'button' }, `Importar ${parsed.length} lançamentos`);
+      const sync = () => { ok.textContent = `Importar ${chosen.size} lançamentos`; ok.disabled = chosen.size === 0; };
+      const rows = parsed.map((x, i) => {
+        const cb = el('input', { type: 'checkbox', checked: true, 'aria-label': `Importar: ${x.note}` });
+        cb.addEventListener('change', () => { if (cb.checked) chosen.add(i); else chosen.delete(i); sync(); });
+        const hint = x.amountCents < 0 ? cardPaymentHint(x.note) : null;
+        let tag = null;
+        if (hint) {
+          if (hint === 'forte') x.transfer = true;
+          const tick = el('input', { type: 'checkbox', ...(hint === 'forte' ? { checked: true } : {}), 'aria-label': `${x.note} é pagamento de fatura de cartão` });
+          tick.addEventListener('change', () => { x.transfer = tick.checked; });
+          tag = el('label', { class: 'fine muted pay-tag' }, tick, hint === 'forte' ? ' pagamento de fatura (não conta como despesa)' : ' é pagamento de fatura? (não conta como despesa)');
+        }
+        return el('li', { class: 'entry-row' }, cb, el('span', { class: 'entry-date muted' }, dayShort(x.date)), el('span', { class: 'entry-note' }, x.note, tag), el('strong', { class: `entry-amount ${x.amountCents < 0 ? 'neg' : 'pos'}` }, brl(x.amountCents)));
+      });
+      const verdict = check
+        ? el('p', { class: check.ok ? 'note' : 'error' }, icon(check.ok ? 'check' : 'alert'), el('span', {}, check.ok
+          ? `Conferido com o extrato: a soma dos lançamentos fecha com ${check.source === 'saldo' ? 'o saldo anterior e o saldo final' : 'os totais de créditos e débitos'} (${brl(check.parsedCents)}).`
+          : `Atenção: a soma dos lançamentos lidos (${brl(check.parsedCents)}) não bate com o que o extrato informa (${brl(check.expectedCents)}). Confira antes de importar.`))
+        : el('p', { class: 'fine' }, 'O PDF não traz saldos nem totais para conferir a soma. Confira as linhas antes de importar.');
+      const eb = check?.ok ? check.endBalance : null;
+      const anchorBox = eb ? el('input', { type: 'checkbox', checked: true }) : null;
+      const no = el('button', { class: 'btn btn-quiet btn-sm', type: 'button' }, 'Cancelar');
+      no.addEventListener('click', reset);
+      ok.addEventListener('click', async () => {
+        ok.disabled = true;
+        await doImport(parsed.filter((_, i) => chosen.has(i)), skipped, eb && anchorBox.checked ? { cents: eb.cents, on: eb.on } : null);
+      });
+      preview.replaceChildren(
+        el('p', { class: 'fine' }, `Li ${parsed.length} lançamentos${skipped ? ` (${skipped} linhas não reconhecidas)` : ''}. Vão para a conta da empresa escolhida acima. Desmarque o que não quiser.`), verdict,
+        eb ? el('label', { class: 'fine pay-tag' }, anchorBox, ` Acertar o saldo da conta para o saldo do extrato (${brl(eb.cents)} em ${dayShort(eb.on)})`) : null,
+        el('ul', { class: 'entry-list', style: 'max-height: 360px; overflow: auto' }, ...rows), el('div', { class: 'button-row' }, ok, no));
+      preview.hidden = false;
+    }
+
+    input.addEventListener('change', async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      try {
+        if (/\.pdf$/i.test(file.name) || file.type === 'application/pdf') {
+          toast('Lendo o PDF no seu aparelho…');
+          const { extractPdfText } = await import('../vendor/pdfread.js');
+          const { text } = await extractPdfText(await file.arrayBuffer(), 36);
+          if (detectDocumentKind(text) === 'fatura') { input.value = ''; return toast('Isso é uma fatura de cartão. Importe pelo botão "Importar fatura" do cartão da empresa, mais abaixo.'); }
+          const r = parsePdfExtract(text);
+          if (r.entries.length === 0) { input.value = ''; return toast('Não achei lançamentos nesse PDF. Se ele for uma foto ou estiver escaneado, baixe o extrato em CSV ou OFX no app do banco.'); }
+          return showPreview(r.entries, r.skipped, r.check);
+        }
+        const r = parseExtract(await file.text(), file.name);
+        if (r.entries.length === 0) { input.value = ''; return toast('Não consegui ler nenhum lançamento desse arquivo.'); }
+        await doImport(r.entries, r.skipped, null);
+      } catch {
+        input.value = '';
+        toast('Não consegui ler esse arquivo.');
+      }
+    });
+    return el('div', { class: 'import-box no-print' }, data.wallets.length > 1 ? field('Importar para a conta', wallet) : null, input, btn,
+      el('span', { class: 'fine' }, 'Aceita CSV, OFX e PDF. O PDF é lido no seu aparelho: o arquivo não é enviado. Repetidos são ignorados e pró-labore, lucros, aporte e retirada são reconhecidos.'), preview);
   }
 
   function entryForm() {
@@ -170,10 +298,14 @@ export function viewEmpresa(ctx) {
     const full = data.wallets.length >= data.plan.limits.wallets;
     const add = el('button', { class: 'btn btn-secondary btn-sm', type: 'button', ...(full ? { disabled: true } : {}) }, icon('plus'), 'Adicionar conta');
     add.addEventListener('click', walletForm);
-    const rows = data.wallets.map((w) => el('li', { class: 'biz-row' },
-      el('div', {}, el('strong', {}, w.name), el('p', { class: 'muted fine' }, WALLET_KINDS.find(([k]) => k === w.kind)?.[1] ?? 'Conta')),
-      el('strong', { class: tone(w.balanceCents) }, brl(w.balanceCents)),
-      delButton(`Apagar a conta ${w.name}`, () => ctx.api.deleteBizWallet(w.id), 'Os lançamentos dela ficam na empresa, sem conta definida.')));
+    const rows = data.wallets.map((w) => {
+      const edit = el('button', { class: 'btn btn-quiet btn-sm icon-btn', type: 'button', 'aria-label': `Editar ${w.name}` }, icon('pencil'));
+      edit.addEventListener('click', () => walletEditForm(w));
+      return el('li', { class: 'biz-row biz-row-top' },
+        el('div', {}, el('strong', {}, w.name), el('p', { class: 'muted fine' }, WALLET_KINDS.find(([k]) => k === w.kind)?.[1] ?? 'Conta'), w.kind === 'conta' ? overdraftBlock(w) : null),
+        el('strong', { class: tone(w.balanceCents) }, brl(w.balanceCents)),
+        el('span', { class: 'ledger-actions' }, edit, delButton(`Apagar a conta ${w.name}`, () => ctx.api.deleteBizWallet(w.id), 'Os lançamentos dela ficam na empresa, sem conta definida.')));
+    });
     return card(el('div', { class: 'biz-head' }, el('h2', {}, 'Contas da empresa'), add),
       rows.length ? el('ul', { class: 'biz-list' }, ...rows) : el('p', { class: 'muted' }, 'Nenhuma conta ainda. Cadastre a conta da empresa para acompanhar o saldo.'),
       full && !data.plan.multi ? el('p', { class: 'fine muted' }, 'No Ousado cabe uma conta da empresa. No Desbravador você cadastra quantas precisar.') : null);
@@ -193,8 +325,11 @@ export function viewEmpresa(ctx) {
           el('p', { class: 'fine' }, c.limitCents > 0 ? `Usado ${brl(c.usedCents)} de ${brl(c.limitCents)} · disponível ${brl(c.availableCents)}` : `Usado ${brl(c.usedCents)}`)),
         el('span', { class: 'ledger-actions' }, edit, delButton(`Apagar o cartão ${c.name}`, () => ctx.api.deleteBizCard(c.id), 'As compras dele ficam na empresa, sem cartão definido.')));
     });
+    // Fatura em PDF: o mesmo leitor do pessoal (lido no aparelho, com conferência da soma); a gravação vai para o cartão da empresa.
+    const invCtx = { ...ctx, cards: { cards: data.cards }, refresh: show, api: { ...ctx.api, importCardInvoice: ctx.api.importBizInvoice, createCard: ctx.api.createBizCard } };
+    const invoice = data.cards.length > 0 ? el('details', { class: 'biz-import' }, el('summary', {}, 'Importar fatura do cartão (PDF)'), invoiceImportPanel(invCtx, null)) : null;
     return card(el('div', { class: 'biz-head' }, el('h2', {}, 'Cartões da empresa'), add),
-      rows.length ? el('ul', { class: 'biz-list' }, ...rows) : el('p', { class: 'muted' }, 'Nenhum cartão ainda. Cadastre o cartão da empresa para ver limite e fatura.'),
+      rows.length ? el('ul', { class: 'biz-list' }, ...rows) : el('p', { class: 'muted' }, 'Nenhum cartão ainda. Cadastre o cartão da empresa para ver limite e fatura.'), invoice,
       full && !data.plan.multi ? el('p', { class: 'fine muted' }, 'No Ousado cabe um cartão da empresa. No Desbravador você cadastra quantos tiver.') : null);
   }
 
@@ -208,7 +343,8 @@ export function viewEmpresa(ctx) {
         el('strong', { class: x.amountCents < 0 ? 'neg' : 'pos' }, brl(x.amountCents)),
         delButton('Apagar o lançamento', () => ctx.api.deleteBizEntry(x.id), x.linkedToPf ? 'Se o lançamento pessoal foi criado junto com este, ele também será apagado.' : 'Some da empresa.'));
     });
-    return card(el('div', { class: 'biz-head' }, el('h2', {}, 'Lançamentos da empresa'), add),
+    return card(el('div', { class: 'biz-head' }, el('h2', {}, 'Lançamentos da empresa'), add), importBox(),
+      el('p', { class: 'fine muted' }, 'Pelo WhatsApp: comece a mensagem com "empresa:" (texto, áudio, foto do cupom ou PDF da fatura) e o lançamento cai aqui, nunca no pessoal.'),
       rows.length ? el('ul', { class: 'biz-list' }, ...rows) : el('p', { class: 'muted' }, 'Nada lançado neste mês. Use "Novo lançamento" para registrar uma venda, uma despesa ou o pagamento da fatura.'));
   }
 
@@ -262,17 +398,31 @@ export function viewEmpresa(ctx) {
       el('p', { class: 'muted' }, 'Aplicações da empresa, separadas das suas: total, rendimento e imposto estimado de cada uma.')), viewInvestimentos(ctx, { scope: 'pj' })];
   }
 
+  /** Dívidas da empresa: a mesma tela de dívidas do pessoal (plano de quitação, pagamentos, cheque especial como dívida), com os dados e as chamadas da empresa. */
+  function debtsView() {
+    const debtCtx = {
+      ...ctx, debts, refresh: show,
+      get debtExtra() { return debtExtra; },
+      set debtExtra(v) { debtExtra = v; },
+      api: { ...ctx.api, createDebt: ctx.api.createBizDebt, deleteDebt: ctx.api.deleteBizDebt, payDebt: (id, body) => ctx.api.payBizDebt(id, { ...body, walletId: data.wallets.length === 1 ? data.wallets[0].id : null }) },
+    };
+    return viewDividas(debtCtx, { scope: 'pj' });
+  }
+
   function draw() {
     const m = data.month;
     const hero = card(
       el('h2', {}, 'Empresa (PJ)'),
       el('p', { class: 'muted' }, 'Contas, cartões e lançamentos da empresa. Tudo aqui é só da empresa: nada entra na sua Visão geral pessoal, no Orçamento ou nos Relatórios pessoais.'),
       data.hasData
-        ? el('dl', { class: 'stats' }, stat('Saldo nas contas', brl(data.totals.balanceCents), tone(data.totals.balanceCents)), stat('Entrou no mês', brl(m.incomeCents), 'pos'), stat('Saiu no mês', brl(m.spendCents)), stat('Resultado do mês', brl(m.resultCents), tone(m.resultCents)))
+        ? el('dl', { class: 'stats' }, stat('Saldo nas contas', brl(data.totals.balanceCents), tone(data.totals.balanceCents)), stat('Entrou no mês', brl(m.incomeCents), 'pos'), stat('Saiu no mês', brl(m.spendCents)), stat('Resultado do mês', brl(m.resultCents), tone(m.resultCents)),
+          ...(data.debts?.count > 0 ? [stat('Dívidas da empresa', brl(data.debts.owedCents), 'neg')] : []))
         : el('p', { class: 'note' }, icon('info'), el('span', {}, 'Comece cadastrando a conta da empresa. Depois lance as vendas e as despesas, e o Prumo mostra o saldo, o resultado do mês e o cartão, separados dos seus números pessoais.')),
       data.cards.length > 0 ? el('p', { class: 'fine' }, `Cartões da empresa: ${brl(data.totals.cardUsedCents)} a pagar.`) : null);
     const upsell = !data.plan.multi ? card(el('p', { class: 'note' }, icon('info'), el('span', {}, 'No Desbravador a empresa ganha contas e cartões à vontade, investimentos da empresa, relatório da empresa e a leitura dos movimentos entre a empresa e você (pró-labore, lucros, aportes e retiradas).'))) : null;
-    root.replaceChildren(...[hero, walletsCard(), cardsCard(), entriesCard(), chartsCard(), data.plan.multi ? partnerCard() : null, upsell, ...(data.plan.multi ? investCard() : [])].flat().filter(Boolean));
+    // Cheque especial (LIS) em uso nas contas da empresa: aviso no topo, igual ao pessoal.
+    const alerts = (data.alerts ?? []).length > 0 ? card(...data.alerts.map((a) => el('p', { class: `note ${a.level === 'warn' ? 'note-amber' : ''}` }, icon(a.level === 'warn' ? 'alert' : 'info'), el('span', {}, el('strong', {}, a.title), ' ', a.detail)))) : null;
+    root.replaceChildren(...[hero, alerts, walletsCard(), cardsCard(), entriesCard(), chartsCard(), debtsView(), data.plan.multi ? partnerCard() : null, upsell, ...(data.plan.multi ? investCard() : [])].flat().filter(Boolean));
   }
 
   show();
@@ -299,7 +449,9 @@ export function businessHomeCard(ctx, data) {
       stat('Saiu no mês', brl(m.spendCents)),
       stat('Resultado do mês', brl(m.resultCents), tone(m.resultCents)),
       ...(data.cards.length > 0 ? [stat('Cartões a pagar', brl(data.totals.cardUsedCents))] : []),
+      ...(data.debts?.count > 0 ? [stat('Dívidas da empresa', brl(data.debts.owedCents), 'neg')] : []),
       ...(data.investments && data.investments.count > 0 ? [stat('Investido pela empresa', brl(data.investments.positionCents))] : [])),
+    ...(data.alerts ?? []).map((a) => el('p', { class: `note ${a.level === 'warn' ? 'note-amber' : ''}` }, icon(a.level === 'warn' ? 'alert' : 'info'), el('span', {}, a.title))),
     partner, el('div', { class: 'no-print' }, open));
 }
 

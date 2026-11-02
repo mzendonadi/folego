@@ -2687,6 +2687,15 @@ h3 { font-weight: 500; letter-spacing: -0.015em; } /* em corpo pequeno a serifa 
 .check input { margin-top: 4px; flex: none; }
 .field[hidden] { display: none; }
 
+/* D-154: empresa com os mesmos recursos do pessoal: importar fatura, extrato, cheque especial e dívidas */
+.biz-import { margin-top: var(--s3); border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent); padding-top: var(--s3); }
+.biz-import > summary { cursor: pointer; font-weight: 600; min-height: 44px; display: flex; align-items: center; }
+.biz-import[open] > summary { margin-bottom: var(--s2); }
+.biz .import-box { display: grid; gap: var(--s2); margin: var(--s3) 0; justify-items: start; }
+.biz .import-box .field { width: 100%; max-width: 360px; }
+.biz-row-top { align-items: start; }
+.biz-row-top .lis-block { margin-top: 8px; max-width: 420px; }
+
 /* D-153: a vitrine do /prumo ganhou a aba Empresa (11 abas): 6 colunas no computador, 6 + 5 */
 @media (min-width: 900px) { .pm-tabs { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
 

@@ -8,9 +8,10 @@ import { AppError, notFound } from './errors.ts';
 import type { Ctx } from './services.ts';
 import { num, todaySaoPaulo } from './services.ts';
 import { requireFeature } from './subscriptions.ts';
-import { BIZ_CATEGORIES, BIZ_CATEGORY_LABEL, BIZ_MOVEMENTS, BIZ_MOVEMENT_LABEL, businessLimits, categorizeBiz, detectBizMovement, looksLikeCompany, movementRule, planHas } from './engine.ts';
-import type { BizMovement } from './engine.ts';
+import { BIZ_CATEGORIES, BIZ_CATEGORY_LABEL, BIZ_MOVEMENTS, BIZ_MOVEMENT_LABEL, buildPayoffPlan, businessLimits, categorizeBiz, detectBizMovement, looksLikeCompany, movementRule, overdraftAlerts, overdraftStatus, planHas } from './engine.ts';
+import type { AccountDebt, BizMovement } from './engine.ts';
 import { listInvestments } from './investments.ts';
+import { cardImportSchema } from './schemas.ts';
 
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((v) => { const t = Date.parse(`${v}T00:00:00Z`); return Number.isFinite(t) && new Date(t).toISOString().slice(0, 10) === v && v >= '1900-01-01' && v <= '2200-12-31'; }, 'Data inválida');
 const money = z.number().int().min(1).max(100_000_000_000);
@@ -21,7 +22,34 @@ export const bizWalletSchema = z.strictObject({
   name: z.string().trim().min(2).max(40),
   kind: z.enum(['conta', 'caixa', 'poupanca', 'outra']).default('conta'),
   openingBalanceCents: z.number().int().min(-100_000_000_000).max(100_000_000_000).default(0),
+  /** Cheque especial (LIS) da conta da empresa: limite contratado e taxa ao mês em pontos-base (8% = 800). */
+  overdraftLimitCents: z.number().int().min(0).max(100_000_000_000).optional(),
+  overdraftRateBps: z.number().int().min(0).max(100_000).optional(),
+  overdraftFreeDays: z.number().int().min(0).max(365).optional(),
 });
+export const bizWalletPatchSchema = z.strictObject({
+  name: z.string().trim().min(2).max(40).optional(),
+  openingBalanceCents: z.number().int().min(-100_000_000_000).max(100_000_000_000).optional(),
+  overdraftLimitCents: z.number().int().min(0).max(100_000_000_000).optional(),
+  overdraftRateBps: z.number().int().min(0).max(100_000).optional(),
+  overdraftFreeDays: z.number().int().min(0).max(365).optional(),
+});
+/** Extrato lido no aparelho (CSV, OFX, PDF ou foto): as linhas que a pessoa confirmou. `transfer` = pagamento de fatura (não conta como despesa). */
+export const bizImportSchema = z.strictObject({
+  walletId: uuid.nullable().optional(),
+  entries: z.array(z.strictObject({ date: day, amountCents: z.number().int().min(-100_000_000_000).max(100_000_000_000).refine((v) => v !== 0), note: z.string().trim().max(120), transfer: z.boolean().optional() })).min(1).max(500),
+});
+export const bizAnchorSchema = z.strictObject({ asOf: day, balanceCents: z.number().int().min(-100_000_000_000).max(100_000_000_000) });
+export const bizCardImportSchema = cardImportSchema;
+export const bizDebtSchema = z.strictObject({
+  name: z.string().trim().min(1).max(60),
+  balanceCents: z.number().int().min(1).max(100_000_000_000),
+  monthlyRateBps: z.number().int().min(0).max(100_000).optional(),
+  minPaymentCents: z.number().int().min(0).max(100_000_000_000).optional(),
+  dueDay: z.number().int().min(1).max(31).nullable().optional(),
+});
+export const bizDebtPatchSchema = bizDebtSchema.partial();
+export const bizDebtPaySchema = z.strictObject({ amountCents: money, date: day.optional(), walletId: uuid.nullable().optional(), addToLedger: z.boolean().optional() });
 export const bizCardSchema = z.strictObject({
   name: z.string().trim().min(2).max(40),
   brand: z.enum(['visa', 'mastercard', 'elo', 'amex', 'hipercard', 'outra']).default('outra'),
@@ -71,8 +99,9 @@ const requirePro = async (ctx: Ctx, sub: string) => { await requireFeature(ctx, 
 //   Saiu   = saídas, menos lucros e retiradas (são distribuição ao sócio, não despesa); o pró-labore conta como despesa.
 //   Pagamento de fatura de cartão e aplicação financeira (transfer_kind) nunca entram.
 const OPER = `b.transfer_kind IS NULL`;
-const IN_SQL = `coalesce(sum(b.amount_cents) FILTER (WHERE b.amount_cents > 0 AND coalesce(b.movement, '') <> 'aporte'), 0)::text`;
-const OUT_SQL = `coalesce(sum(-b.amount_cents) FILTER (WHERE b.amount_cents < 0 AND coalesce(b.movement, '') NOT IN ('lucros', 'retirada')), 0)::text`;
+//   Estorno no cartão (valor positivo com cartão) abate a despesa em vez de contar como venda.
+const IN_SQL = `coalesce(sum(b.amount_cents) FILTER (WHERE b.amount_cents > 0 AND b.card_id IS NULL AND coalesce(b.movement, '') <> 'aporte'), 0)::text`;
+const OUT_SQL = `coalesce(sum(-b.amount_cents) FILTER (WHERE (b.amount_cents < 0 AND coalesce(b.movement, '') NOT IN ('lucros', 'retirada')) OR (b.amount_cents > 0 AND b.card_id IS NOT NULL)), 0)::text`;
 
 interface Sums { income: string; spend: string; n: string }
 const sumsOf = (r?: Sums) => ({ incomeCents: num(r?.income ?? 0), spendCents: num(r?.spend ?? 0), resultCents: num(r?.income ?? 0) - num(r?.spend ?? 0), count: num(r?.n ?? 0) });
@@ -97,8 +126,9 @@ async function periodNumbers(ctx: Ctx, sub: string, from: string, to: string) {
 
 async function walletsAndCards(ctx: Ctx, sub: string) {
   const [w, c] = await Promise.all([
-    ctx.db.query<{ id: string; name: string; kind: string; opening: string; balance: string }>(
-      `SELECT w.id, w.name, w.kind, w.opening_balance_cents::text AS opening, (w.opening_balance_cents + coalesce(sum(b.amount_cents), 0))::text AS balance
+    ctx.db.query<{ id: string; name: string; kind: string; opening: string; balance: string; limit_c: string; rate: number; free_days: number | null }>(
+      `SELECT w.id, w.name, w.kind, w.opening_balance_cents::text AS opening, (w.opening_balance_cents + coalesce(sum(b.amount_cents), 0))::text AS balance,
+              w.overdraft_limit_cents::text AS limit_c, w.overdraft_rate_bps AS rate, w.overdraft_free_days AS free_days
          FROM app.biz_wallets w LEFT JOIN app.biz_entries b ON b.wallet_id = w.id WHERE w.subscriber_id = $1 GROUP BY w.id ORDER BY w.created_at`, [sub]),
     ctx.db.query<{ id: string; name: string; brand: string; last4: string | null; limit_c: string; closing_day: number; due_day: number; spent: string; paid: string }>(
       `SELECT c.id, c.name, c.brand, c.last4, c.limit_cents::text AS limit_c, c.closing_day, c.due_day,
@@ -107,7 +137,12 @@ async function walletsAndCards(ctx: Ctx, sub: string) {
          FROM app.biz_cards c LEFT JOIN app.biz_entries b ON b.card_id = c.id WHERE c.subscriber_id = $1 GROUP BY c.id ORDER BY c.created_at`, [sub]),
   ]);
   return {
-    wallets: w.rows.map((r) => ({ id: r.id, name: r.name, kind: r.kind, openingBalanceCents: num(r.opening), balanceCents: num(r.balance) })),
+    wallets: w.rows.map((r) => ({
+      id: r.id, name: r.name, kind: r.kind, openingBalanceCents: num(r.opening), balanceCents: num(r.balance),
+      overdraftLimitCents: num(r.limit_c), overdraftRateBps: r.rate, overdraftFreeDays: r.free_days,
+      // cheque especial (LIS): só em conta bancária, igual ao pessoal
+      overdraft: r.kind === 'conta' ? overdraftStatus({ balanceCents: num(r.balance), limitCents: num(r.limit_c), rateBps: r.rate }) : null,
+    })),
     cards: c.rows.map((r) => {
       const used = Math.max(0, num(r.spent) - num(r.paid)); // compras ainda não pagas
       return { id: r.id, name: r.name, brand: r.brand, last4: r.last4, limitCents: num(r.limit_c), closingDay: r.closing_day, dueDay: r.due_day, usedCents: used, availableCents: Math.max(0, num(r.limit_c) - used) };
@@ -129,11 +164,15 @@ export async function businessOverview(ctx: Ctx, sub: string, month: string) {
     investments = { positionCents: t.positionCents, appliedCents: t.appliedCents, yieldCents: t.yieldCents, yieldPct: t.yieldPct, count: t.count };
   }
   const entries = await ctx.db.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.biz_entries WHERE subscriber_id = $1`, [sub]);
-  const hasData = wc.wallets.length + wc.cards.length + num(entries.rows[0]?.n ?? 0) > 0 || (investments?.count ?? 0) > 0;
+  const dl = await listBizDebts(ctx, sub);
+  const hasData = wc.wallets.length + wc.cards.length + num(entries.rows[0]?.n ?? 0) > 0 || (investments?.count ?? 0) > 0 || dl.debts.length > 0;
   return {
     plan: { multi, limits },
     labels: { categories: BIZ_CATEGORY_LABEL, movements: BIZ_MOVEMENT_LABEL },
     ...wc,
+    /** Dívidas da empresa (inclui o cheque especial em uso) e alertas do cheque especial. Nada disso mistura com as dívidas pessoais. */
+    debts: { owedCents: dl.totals.owedCents, count: dl.totals.count, progressPct: dl.totals.progressPct },
+    alerts: overdraftAlerts(wc.wallets.filter((w) => w.kind === 'conta').map((w) => ({ name: w.name, balanceCents: w.balanceCents, limitCents: w.overdraftLimitCents, rateBps: w.overdraftRateBps }))),
     totals: { balanceCents: wc.wallets.reduce((s, w) => s + w.balanceCents, 0), cardUsedCents: wc.cards.reduce((s, c) => s + c.usedCents, 0) },
     month: { month, incomeCents: cur.incomeCents, spendCents: cur.spendCents, resultCents: cur.resultCents, count: cur.count, byCategory: cur.byCategory },
     series: past.series,
@@ -148,8 +187,42 @@ export async function createBizWallet(ctx: Ctx, sub: string, b: z.infer<typeof b
   const { limits } = await access(ctx, sub);
   const n = await ctx.db.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.biz_wallets WHERE subscriber_id = $1`, [sub]);
   if (num(n.rows[0]?.n ?? 0) >= limits.wallets) throw new AppError(422, 'too_many', limits.wallets === 1 ? 'No plano Ousado cabe uma conta da empresa. No Desbravador você cadastra quantas precisar.' : `Limite de ${limits.wallets} contas da empresa.`);
-  const r = await ctx.db.query<{ id: string }>(`INSERT INTO app.biz_wallets(subscriber_id, name, kind, opening_balance_cents) VALUES ($1,$2,$3,$4) RETURNING id`, [sub, b.name, b.kind, b.openingBalanceCents]);
+  const isAccount = b.kind === 'conta';
+  const r = await ctx.db.query<{ id: string }>(
+    `INSERT INTO app.biz_wallets(subscriber_id, name, kind, opening_balance_cents, overdraft_limit_cents, overdraft_rate_bps, overdraft_free_days) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+    [sub, b.name, b.kind, b.openingBalanceCents, isAccount ? (b.overdraftLimitCents ?? 0) : 0, isAccount ? (b.overdraftRateBps ?? 800) : 800, isAccount && b.overdraftFreeDays ? b.overdraftFreeDays : null],
+  );
   return r.rows[0]!.id;
+}
+
+/** Ajusta nome, saldo de partida e cheque especial (LIS). Limite e taxa só valem para conta bancária. */
+export async function updateBizWallet(ctx: Ctx, sub: string, id: string, p: z.infer<typeof bizWalletPatchSchema>): Promise<void> {
+  await access(ctx, sub);
+  const cur = await ctx.db.query<{ kind: string }>(`SELECT kind FROM app.biz_wallets WHERE id = $1 AND subscriber_id = $2`, [id, sub]);
+  if (!cur.rows[0]) throw notFound();
+  if (cur.rows[0].kind !== 'conta' && (p.overdraftLimitCents !== undefined || p.overdraftRateBps !== undefined || p.overdraftFreeDays !== undefined)) throw new AppError(422, 'not_account', 'Cheque especial só vale para conta bancária.');
+  await ctx.db.query(
+    `UPDATE app.biz_wallets SET name = coalesce($3, name), opening_balance_cents = coalesce($4, opening_balance_cents), overdraft_limit_cents = coalesce($5, overdraft_limit_cents),
+            overdraft_rate_bps = coalesce($6, overdraft_rate_bps), overdraft_free_days = CASE WHEN $7::int IS NULL THEN overdraft_free_days WHEN $7::int = 0 THEN NULL ELSE $7::int END
+      WHERE id = $1 AND subscriber_id = $2`,
+    [id, sub, p.name ?? null, p.openingBalanceCents ?? null, p.overdraftLimitCents ?? null, p.overdraftRateBps ?? null, p.overdraftFreeDays ?? null],
+  );
+}
+
+/** Ancora a conta da empresa ao saldo que o extrato do banco informa (mesma regra da conta pessoal): o saldo de partida é recalculado para fechar com o extrato em `asOf`. */
+export async function anchorBizWallet(ctx: Ctx, sub: string, id: string, b: z.infer<typeof bizAnchorSchema>): Promise<{ openingBalanceCents: number; balanceCents: number }> {
+  await access(ctx, sub);
+  return ctx.db.tx(async (q) => {
+    const w = await q.query<{ kind: string }>(`SELECT kind FROM app.biz_wallets WHERE id = $1 AND subscriber_id = $2 FOR UPDATE`, [id, sub]);
+    if (!w.rows[0]) throw notFound();
+    if (w.rows[0].kind !== 'conta') throw new AppError(422, 'invalid_kind', 'Só uma conta bancária pode ser ajustada pelo extrato.');
+    await q.query(`UPDATE app.biz_entries SET wallet_id = $2 WHERE subscriber_id = $1 AND wallet_id IS NULL AND card_id IS NULL`, [sub, id]);
+    const s = await q.query<{ upto: string; later: string }>(
+      `SELECT coalesce(sum(amount_cents) FILTER (WHERE occurred_on <= $2::date), 0)::text AS upto, coalesce(sum(amount_cents) FILTER (WHERE occurred_on > $2::date), 0)::text AS later FROM app.biz_entries WHERE wallet_id = $1`, [id, b.asOf]);
+    const opening = b.balanceCents - num(s.rows[0]?.upto ?? 0);
+    await q.query(`UPDATE app.biz_wallets SET opening_balance_cents = $3 WHERE id = $1 AND subscriber_id = $2`, [id, sub, opening]);
+    return { openingBalanceCents: opening, balanceCents: b.balanceCents + num(s.rows[0]?.later ?? 0) };
+  });
 }
 
 export async function deleteBizWallet(ctx: Ctx, sub: string, id: string): Promise<void> {
@@ -203,7 +276,7 @@ async function ownCard(ctx: Ctx, sub: string, id: string | null | undefined): Pr
   if (c.rows.length === 0) throw new AppError(422, 'invalid_card', 'Escolha um cartão da empresa seu.');
 }
 
-export async function createBizEntry(ctx: Ctx, sub: string, b: z.infer<typeof bizEntrySchema>): Promise<string> {
+export async function createBizEntry(ctx: Ctx, sub: string, b: z.infer<typeof bizEntrySchema>, source: 'manual' | 'whatsapp' = 'manual'): Promise<string> {
   await access(ctx, sub);
   await ownWallet(ctx, sub, b.walletId);
   await ownCard(ctx, sub, b.cardId);
@@ -218,8 +291,8 @@ export async function createBizEntry(ctx: Ctx, sub: string, b: z.infer<typeof bi
   const movement = detectBizMovement(b.note); // texto de pró-labore, lucros, aporte ou retirada: o Prumo reconhece e usa o movimento
   const category = b.cardPayment ? 'dividas' : (b.category ?? categorizeBiz(b.note, b.amountCents));
   const r = await ctx.db.query<{ id: string }>(
-    `INSERT INTO app.biz_entries(subscriber_id, occurred_on, amount_cents, category, note, wallet_id, card_id, movement, transfer_kind) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
-    [sub, b.date, b.amountCents, category, b.note || (b.cardPayment ? 'Pagamento da fatura' : ''), b.walletId ?? null, b.cardId ?? null, b.cardPayment ? null : movement, b.cardPayment ? 'card_payment' : null],
+    `INSERT INTO app.biz_entries(subscriber_id, occurred_on, amount_cents, category, note, wallet_id, card_id, movement, transfer_kind, source) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+    [sub, b.date, b.amountCents, category, b.note || (b.cardPayment ? 'Pagamento da fatura' : ''), b.walletId ?? null, b.cardId ?? null, b.cardPayment ? null : movement, b.cardPayment ? 'card_payment' : null, source],
   );
   return r.rows[0]!.id;
 }
@@ -232,6 +305,173 @@ export async function deleteBizEntry(ctx: Ctx, sub: string, id: string): Promise
     await q.query(`DELETE FROM app.biz_entries WHERE id = $1 AND subscriber_id = $2`, [id, sub]);
     // O lançamento pessoal criado junto some junto; o que já existia e só foi ligado continua (volta a ser um lançamento pessoal comum).
     if (cur.rows[0].pf && cur.rows[0].created) await q.query(`DELETE FROM app.ledger_entries WHERE id = $1 AND subscriber_id = $2`, [cur.rows[0].pf, sub]);
+  });
+}
+
+// ---------------------------------------------------------------- Importar extrato, fatura e foto (os mesmos leitores do pessoal; só a gravação é da empresa)
+/**
+ * Extrato lido no aparelho (CSV, OFX, PDF) ou cupom lido de foto. Mesma regra do pessoal: lançamento idêntico no mesmo dia só é repetição
+ * até a quantidade que já existe (duas cobranças iguais no dia continuam sendo duas). Pró-labore, lucros, aporte e retirada são reconhecidos pelo texto.
+ */
+export async function importBizEntries(ctx: Ctx, sub: string, b: z.infer<typeof bizImportSchema>, source: 'import' | 'whatsapp' = 'import'): Promise<{ added: number; duplicates: number; transfers: number }> {
+  await access(ctx, sub);
+  await ownWallet(ctx, sub, b.walletId);
+  const cards = (await ctx.db.query<{ id: string }>(`SELECT id FROM app.biz_cards WHERE subscriber_id = $1`, [sub])).rows;
+  return ctx.db.tx(async (q) => {
+    const seen = new Map<string, number>();
+    let added = 0, duplicates = 0, transfers = 0;
+    for (const e of b.entries) {
+      const note = e.note.trim().slice(0, 120);
+      const sig = `${e.date}|${e.amountCents}|${note.toLowerCase()}`;
+      const nth = (seen.get(sig) ?? 0) + 1;
+      seen.set(sig, nth);
+      const have = await q.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM app.biz_entries WHERE subscriber_id = $1 AND wallet_id IS NOT DISTINCT FROM $2::uuid AND card_id IS NULL AND occurred_on = $3 AND amount_cents = $4 AND lower(note) = lower($5)`,
+        [sub, b.walletId ?? null, e.date, e.amountCents, note]);
+      if (num(have.rows[0]?.n ?? 0) >= nth) { duplicates += 1; continue; }
+      const pay = Boolean(e.transfer) && e.amountCents < 0;
+      let movement: string | null = null;
+      if (!pay) {
+        const m = detectBizMovement(note);
+        if (m && movementRule(m).bizSign === (e.amountCents > 0 ? 1 : -1)) movement = m;
+      }
+      await q.query(
+        `INSERT INTO app.biz_entries(subscriber_id, occurred_on, amount_cents, category, note, wallet_id, card_id, movement, transfer_kind, source) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        [sub, e.date, e.amountCents, pay ? 'dividas' : categorizeBiz(note, e.amountCents), note || (pay ? 'Pagamento da fatura' : ''), b.walletId ?? null, pay && cards.length === 1 ? cards[0]!.id : null, movement, pay ? 'card_payment' : null, source],
+      );
+      added += 1;
+      if (pay) transfers += 1;
+    }
+    return { added, duplicates, transfers };
+  });
+}
+
+/**
+ * Fatura do cartão da empresa lida do PDF. Compras ficam no cartão (não mexem no saldo da conta), estornos abatem a fatura e o pagamento da fatura
+ * anterior, se já está no extrato da conta, vira "pagamento de fatura" (não conta como despesa de novo). Atualiza limite e dias do cartão.
+ */
+export async function importBizInvoice(ctx: Ctx, sub: string, cardId: string, input: z.infer<typeof bizCardImportSchema>, source: 'import' | 'whatsapp' = 'import') {
+  await access(ctx, sub);
+  await ownCard(ctx, sub, cardId);
+  const payments = input.payments ?? [];
+  const key = input.invoice?.key ?? null;
+  const updated: string[] = [];
+  return ctx.db.tx(async (q) => {
+    const c = input.card;
+    if (c) {
+      if (c.limitCents !== undefined) updated.push('limite');
+      if (c.closingDay !== undefined) updated.push('fechamento');
+      if (c.dueDay !== undefined) updated.push('vencimento');
+      if (c.last4) updated.push('final');
+      await q.query(
+        `UPDATE app.biz_cards SET name = coalesce($3, name), limit_cents = coalesce($4, limit_cents), closing_day = coalesce($5, closing_day), due_day = coalesce($6, due_day), last4 = coalesce(last4, $7) WHERE id = $1 AND subscriber_id = $2`,
+        [cardId, sub, c.name?.trim().slice(0, 40) ?? null, c.limitCents ?? null, c.closingDay ?? null, c.dueDay ?? null, c.last4 ?? null]);
+    }
+    let added = 0, duplicates = 0, credits = 0, transfers = 0;
+    const seen = new Map<string, number>();
+    const put = async (date: string, cents: number, rawNote: string, refund: boolean): Promise<boolean> => {
+      const note = rawNote.trim().slice(0, 120) || (refund ? 'Estorno no cartão' : 'Compra no cartão');
+      const sig = `${date}|${cents}|${note.toLowerCase()}`;
+      const nth = (seen.get(sig) ?? 0) + 1;
+      seen.set(sig, nth);
+      const have = await q.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.biz_entries WHERE subscriber_id = $1 AND card_id = $2 AND occurred_on = $3 AND amount_cents = $4 AND lower(note) = lower($5)`, [sub, cardId, date, cents, note]);
+      if (num(have.rows[0]?.n ?? 0) >= nth) {
+        if (key) await q.query(`UPDATE app.biz_entries SET invoice_key = $6 WHERE subscriber_id = $1 AND card_id = $2 AND occurred_on = $3 AND amount_cents = $4 AND lower(note) = lower($5) AND invoice_key IS NULL`, [sub, cardId, date, cents, note, key]);
+        return false;
+      }
+      await q.query(`INSERT INTO app.biz_entries(subscriber_id, occurred_on, amount_cents, category, note, card_id, source, invoice_key) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, [sub, date, cents, categorizeBiz(note, cents), note, cardId, source, key]);
+      return true;
+    };
+    for (const e of input.entries) {
+      const parcel = e.installmentNo && e.installmentTotal && e.installmentTotal >= 2 && e.installmentNo <= e.installmentTotal ? ` (${e.installmentNo}/${e.installmentTotal})` : '';
+      const base = e.note.trim();
+      if (await put(e.date, -e.amountCents, parcel && !base.includes(parcel.trim()) ? `${base.slice(0, 120 - parcel.length)}${parcel}` : base, false)) added += 1; else duplicates += 1;
+    }
+    for (const r of input.credits) if (await put(r.date, r.amountCents, r.note, true)) credits += 1;
+    // pagamento da fatura anterior: se a saída já está no extrato da conta, passa a ser "pagamento de fatura" (não é despesa de novo)
+    for (const p of payments) {
+      const hit = await q.query<{ id: string }>(
+        `SELECT id FROM app.biz_entries WHERE subscriber_id = $1 AND card_id IS NULL AND wallet_id IS NOT NULL AND transfer_kind IS NULL AND amount_cents = $2 AND occurred_on BETWEEN ($3::date - 3) AND ($3::date + 3) ORDER BY abs(occurred_on - $3::date) LIMIT 1`,
+        [sub, -p.amountCents, p.date]);
+      if (hit.rows[0]) {
+        await q.query(`UPDATE app.biz_entries SET transfer_kind = 'card_payment', card_id = $2, category = 'dividas' WHERE id = $1`, [hit.rows[0].id, cardId]);
+        transfers += 1;
+      }
+    }
+    return { added, duplicates, credits, adopted: 0, transfers, updated };
+  });
+}
+
+// ---------------------------------------------------------------- Dívidas da empresa (separadas das pessoais) + cheque especial (LIS) como dívida
+const MAX_DEBTS = 30;
+interface BizDebtRow { id: string; name: string; initial_cents: string; balance_cents: string; monthly_rate_bps: number; min_payment_cents: string; due_day: number | null; paid_off_at: Date | null }
+const toBizDebt = (r: BizDebtRow) => ({ virtual: false, walletId: null as string | null, id: r.id, name: r.name, initialCents: num(r.initial_cents), balanceCents: num(r.balance_cents), monthlyRateBps: r.monthly_rate_bps, minPaymentCents: num(r.min_payment_cents), dueDay: r.due_day, paidOff: Boolean(r.paid_off_at) });
+
+export async function listBizDebts(ctx: Ctx, sub: string, extraCents = 0) {
+  await access(ctx, sub);
+  const [r, wc] = await Promise.all([
+    ctx.db.query<BizDebtRow>(`SELECT id, name, initial_cents, balance_cents, monthly_rate_bps, min_payment_cents, due_day, paid_off_at FROM app.biz_debts WHERE subscriber_id = $1 ORDER BY (paid_off_at IS NOT NULL), balance_cents DESC, created_at`, [sub]),
+    walletsAndCards(ctx, sub),
+  ]);
+  // Conta da empresa no negativo (cheque especial) entra como dívida "virtual": mesma lista, mesmo plano de quitação. Para quitar, entre dinheiro na conta.
+  const lis = wc.wallets.filter((w) => w.kind === 'conta' && w.balanceCents < 0)
+    .map((w) => ({ virtual: true, walletId: w.id as string | null, id: `lis-${w.id}`, name: `Cheque especial: ${w.name}`, initialCents: -w.balanceCents, balanceCents: -w.balanceCents, monthlyRateBps: w.overdraftRateBps, minPaymentCents: 0, dueDay: null as number | null, paidOff: false }));
+  const debts = [...r.rows.map(toBizDebt), ...lis];
+  const open = debts.filter((d) => !d.paidOff && d.balanceCents > 0);
+  const accountDebts: AccountDebt[] = open.map((d) => ({ id: d.id, name: d.name, balanceCents: d.balanceCents, monthlyRateBps: d.monthlyRateBps, minPaymentCents: d.minPaymentCents }));
+  const initial = debts.reduce((s, d) => s + d.initialCents, 0);
+  const remaining = debts.reduce((s, d) => s + d.balanceCents, 0);
+  return {
+    debts,
+    totals: { owedCents: open.reduce((s, d) => s + d.balanceCents, 0), initialCents: initial, paidCents: Math.max(0, initial - remaining), progressPct: initial > 0 ? Math.round(((initial - remaining) / initial) * 100) : 0, minPaymentsCents: open.reduce((s, d) => s + d.minPaymentCents, 0), count: open.length },
+    plan: open.length > 0 ? buildPayoffPlan(accountDebts, extraCents) : null,
+  };
+}
+
+export async function createBizDebt(ctx: Ctx, sub: string, b: z.infer<typeof bizDebtSchema>): Promise<string> {
+  await access(ctx, sub);
+  const n = await ctx.db.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.biz_debts WHERE subscriber_id = $1`, [sub]);
+  if (num(n.rows[0]?.n ?? 0) >= MAX_DEBTS) throw new AppError(422, 'too_many', `Limite de ${MAX_DEBTS} dívidas da empresa.`);
+  const r = await ctx.db.query<{ id: string }>(`INSERT INTO app.biz_debts(subscriber_id, name, initial_cents, balance_cents, monthly_rate_bps, min_payment_cents, due_day) VALUES ($1,$2,$3,$3,$4,$5,$6) RETURNING id`, [sub, b.name.slice(0, 60), b.balanceCents, b.monthlyRateBps ?? 0, b.minPaymentCents ?? 0, b.dueDay ?? null]);
+  return r.rows[0]!.id;
+}
+
+export async function updateBizDebt(ctx: Ctx, sub: string, id: string, p: z.infer<typeof bizDebtPatchSchema>): Promise<void> {
+  await access(ctx, sub);
+  const cur = await ctx.db.query(`SELECT 1 FROM app.biz_debts WHERE id = $1 AND subscriber_id = $2`, [id, sub]);
+  if (cur.rows.length === 0) throw notFound();
+  await ctx.db.query(
+    `UPDATE app.biz_debts SET name = coalesce($3, name), monthly_rate_bps = coalesce($4, monthly_rate_bps), min_payment_cents = coalesce($5, min_payment_cents),
+            due_day = CASE WHEN $6::boolean THEN $7::smallint ELSE due_day END,
+            balance_cents = coalesce($8::bigint, balance_cents), initial_cents = CASE WHEN $8::bigint IS NULL THEN initial_cents ELSE GREATEST(initial_cents, $8::bigint) END,
+            paid_off_at = CASE WHEN $8::bigint IS NULL THEN paid_off_at WHEN $8::bigint = 0 THEN coalesce(paid_off_at, now()) ELSE NULL END
+      WHERE id = $1`,
+    [id, sub, p.name?.slice(0, 60) ?? null, p.monthlyRateBps ?? null, p.minPaymentCents ?? null, p.dueDay !== undefined, p.dueDay ?? null, p.balanceCents ?? null]);
+}
+
+export async function deleteBizDebt(ctx: Ctx, sub: string, id: string): Promise<void> {
+  await access(ctx, sub);
+  const r = await ctx.db.query(`DELETE FROM app.biz_debts WHERE id = $1 AND subscriber_id = $2`, [id, sub]);
+  if (r.rowCount === 0) throw notFound();
+}
+
+/** Pagamento: abate o saldo (não passa do que falta), guarda o histórico e, se pedido, lança a saída na conta da empresa (categoria dívidas). */
+export async function payBizDebt(ctx: Ctx, sub: string, id: string, p: z.infer<typeof bizDebtPaySchema>): Promise<{ balanceCents: number; paidOff: boolean }> {
+  await access(ctx, sub);
+  await ownWallet(ctx, sub, p.walletId);
+  return ctx.db.tx(async (q) => {
+    const cur = await q.query<{ name: string; balance_cents: string }>(`SELECT name, balance_cents FROM app.biz_debts WHERE id = $1 AND subscriber_id = $2 FOR UPDATE`, [id, sub]);
+    const row = cur.rows[0];
+    if (!row) throw notFound();
+    const balance = num(row.balance_cents);
+    if (balance <= 0) throw new AppError(409, 'already_paid', 'Esta dívida já está quitada.');
+    const paid = Math.min(p.amountCents, balance);
+    const date = p.date ?? todaySaoPaulo();
+    const left = balance - paid;
+    await q.query(`UPDATE app.biz_debts SET balance_cents = $2::bigint, paid_off_at = CASE WHEN $2::bigint = 0 THEN now() ELSE paid_off_at END WHERE id = $1`, [id, left]);
+    await q.query(`INSERT INTO app.biz_debt_payments(debt_id, subscriber_id, paid_on, amount_cents) VALUES ($1,$2,$3,$4)`, [id, sub, date, paid]);
+    if (p.addToLedger) await q.query(`INSERT INTO app.biz_entries(subscriber_id, occurred_on, amount_cents, category, note, wallet_id) VALUES ($1,$2,$3,'dividas',$4,$5)`, [sub, date, -paid, `Pagamento: ${row.name}`.slice(0, 120), p.walletId ?? null]);
+    return { balanceCents: left, paidOff: left === 0 };
   });
 }
 
@@ -338,14 +578,15 @@ export async function businessReport(ctx: Ctx, sub: string, q: z.infer<typeof bi
 
 /** Retrato resumido da empresa (últimos 90 dias) para a análise do Estrategista e para a FolIA: sempre separado do pessoal. Só Desbravador. */
 export async function businessSnapshot(ctx: Ctx, sub: string): Promise<Record<string, unknown> | null> {
-  const plan = await ctx.db.query<{ n: string }>(`SELECT ((SELECT count(*) FROM app.biz_wallets WHERE subscriber_id = $1) + (SELECT count(*) FROM app.biz_cards WHERE subscriber_id = $1) + (SELECT count(*) FROM app.biz_entries WHERE subscriber_id = $1))::text AS n`, [sub]);
+  const plan = await ctx.db.query<{ n: string }>(`SELECT ((SELECT count(*) FROM app.biz_wallets WHERE subscriber_id = $1) + (SELECT count(*) FROM app.biz_cards WHERE subscriber_id = $1) + (SELECT count(*) FROM app.biz_entries WHERE subscriber_id = $1) + (SELECT count(*) FROM app.biz_debts WHERE subscriber_id = $1))::text AS n`, [sub]);
   if (num(plan.rows[0]?.n ?? 0) === 0) return null;
   const to = todaySaoPaulo();
   const from = new Date(Date.parse(`${to}T00:00:00Z`) - 89 * 86_400_000).toISOString().slice(0, 10);
-  const [wc, p, inv] = await Promise.all([walletsAndCards(ctx, sub), periodNumbers(ctx, sub, from, to), listInvestments(ctx, sub, 'pj').catch(() => null)]);
+  const [wc, p, inv, dl] = await Promise.all([walletsAndCards(ctx, sub), periodNumbers(ctx, sub, from, to), listInvestments(ctx, sub, 'pj').catch(() => null), listBizDebts(ctx, sub).catch(() => null)]);
   return {
     observacao: 'DADOS DA EMPRESA (PJ), separados dos pessoais: nunca some com o patrimônio ou a renda pessoal.',
-    contas_da_empresa: wc.wallets.map((w) => ({ nome: w.name, saldo_centavos: w.balanceCents })),
+    contas_da_empresa: wc.wallets.map((w) => ({ nome: w.name, saldo_centavos: w.balanceCents, cheque_especial_em_uso_centavos: w.overdraft?.usedCents ?? 0, cheque_especial_limite_centavos: w.overdraftLimitCents })),
+    dividas_da_empresa: dl ? { total_devido_centavos: dl.totals.owedCents, lista: dl.debts.filter((d) => !d.paidOff && d.balanceCents > 0).slice(0, 8).map((d) => ({ nome: d.name, saldo_centavos: d.balanceCents, juros_ao_mes_bps: d.monthlyRateBps })) } : null,
     cartoes_da_empresa: wc.cards.map((c) => ({ nome: c.name, limite_centavos: c.limitCents, usado_centavos: c.usedCents })),
     ultimos_90_dias: { entrou_centavos: p.incomeCents, saiu_centavos: p.spendCents, resultado_centavos: p.resultCents, maiores_categorias_de_saida: p.byCategory.filter((c) => c.spendCents > 0).slice(0, 6).map((c) => ({ categoria: c.label, centavos: c.spendCents })) },
     entre_empresa_e_socio_pf: { pro_labore_centavos: p.partner.proLaboreCents, distribuicao_de_lucros_centavos: p.partner.lucrosCents, retiradas_centavos: p.partner.retiradaCents, aportes_do_socio_centavos: p.partner.aporteCents },

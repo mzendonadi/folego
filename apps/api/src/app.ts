@@ -781,6 +781,25 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.get('/api/account/business/suggestions', async (req) => businessApi.businessSuggestions(ctx, await requireSubscriber(req)));
   app.post('/api/account/business/links', async (req, reply) => reply.status(201).send({ id: await businessApi.linkBizMovement(ctx, await requireSubscriber(req), businessApi.bizLinkSchema.parse(req.body)) }));
   app.get('/api/account/business/report', async (req) => businessApi.businessReport(ctx, await requireSubscriber(req), businessApi.bizReportQuery.parse(req.query)));
+  // Empresa: cheque especial (LIS) e saldo do extrato, importação de extrato e fatura (leitores iguais aos do pessoal) e dívidas separadas.
+  app.put('/api/account/business/wallets/:id', async (req) => {
+    await businessApi.updateBizWallet(ctx, await requireSubscriber(req), bizId(req), businessApi.bizWalletPatchSchema.parse(req.body));
+    return { ok: true };
+  });
+  app.post('/api/account/business/wallets/:id/anchor', async (req) => businessApi.anchorBizWallet(ctx, await requireSubscriber(req), bizId(req), businessApi.bizAnchorSchema.parse(req.body)));
+  app.post('/api/account/business/import', { bodyLimit: 2 * 1024 * 1024, config: { rateLimit: { max: 30 * scale, timeWindow: '10 minutes' } } }, async (req) => businessApi.importBizEntries(ctx, await requireSubscriber(req), businessApi.bizImportSchema.parse(req.body)));
+  app.post('/api/account/business/cards/:id/import', { bodyLimit: 2 * 1024 * 1024, config: { rateLimit: { max: 12 * scale, timeWindow: '10 minutes' } } }, async (req) => businessApi.importBizInvoice(ctx, await requireSubscriber(req), bizId(req), businessApi.bizCardImportSchema.parse(req.body)));
+  app.get('/api/account/business/debts', async (req) => businessApi.listBizDebts(ctx, await requireSubscriber(req), Number((req.query as { extra?: string }).extra) > 0 ? Math.min(Number((req.query as { extra?: string }).extra), 100_000_000) : 0));
+  app.post('/api/account/business/debts', async (req, reply) => reply.status(201).send({ id: await businessApi.createBizDebt(ctx, await requireSubscriber(req), businessApi.bizDebtSchema.parse(req.body)) }));
+  app.put('/api/account/business/debts/:id', async (req) => {
+    await businessApi.updateBizDebt(ctx, await requireSubscriber(req), bizId(req), businessApi.bizDebtPatchSchema.parse(req.body));
+    return { ok: true };
+  });
+  app.delete('/api/account/business/debts/:id', async (req, reply) => {
+    await businessApi.deleteBizDebt(ctx, await requireSubscriber(req), bizId(req));
+    return reply.status(204).send();
+  });
+  app.post('/api/account/business/debts/:id/payments', async (req) => businessApi.payBizDebt(ctx, await requireSubscriber(req), bizId(req), businessApi.bizDebtPaySchema.parse(req.body)));
   app.get('/api/account/strategies', async (req) => strategiesApi.strategyOverview(ctx, await requireSubscriber(req)));
   app.post('/api/account/strategies/report', { config: { rateLimit: { max: 6 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => reply.status(202).send(await strategiesApi.requestStrategyReport(ctx, await requireSubscriber(req))));
   app.get('/api/account/trips', async (req) => trips.listTrips(ctx, await requireSubscriber(req)));
