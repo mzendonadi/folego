@@ -179,6 +179,7 @@ export const getBizSuggestions = notAvailable;
 export const linkBizMovement = notAvailable;
 export const getBizReport = notAvailable;
 export const updateBizWallet = notAvailable;
+export const updateBizEntry = notAvailable;
 export const anchorBizWallet = notAvailable;
 export const importBizEntries = notAvailable;
 export const importBizInvoice = notAvailable;

@@ -773,6 +773,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
   app.get('/api/account/business/entries', async (req) => businessApi.listBizEntries(ctx, await requireSubscriber(req), businessApi.bizMonthQuery.parse(req.query).month));
   app.post('/api/account/business/entries', async (req, reply) => reply.status(201).send({ id: await businessApi.createBizEntry(ctx, await requireSubscriber(req), businessApi.bizEntrySchema.parse(req.body)) }));
+  app.put('/api/account/business/entries/:id', async (req) => {
+    await businessApi.updateBizEntry(ctx, await requireSubscriber(req), bizId(req), businessApi.bizEntryPatchSchema.parse(req.body));
+    return { ok: true };
+  });
   app.delete('/api/account/business/entries/:id', async (req, reply) => {
     await businessApi.deleteBizEntry(ctx, await requireSubscriber(req), bizId(req));
     return reply.status(204).send();

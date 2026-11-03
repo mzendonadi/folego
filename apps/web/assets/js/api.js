@@ -87,6 +87,7 @@ export const getBizSuggestions = impl.getBizSuggestions;
 export const linkBizMovement = impl.linkBizMovement;
 export const getBizReport = impl.getBizReport;
 export const updateBizWallet = impl.updateBizWallet;
+export const updateBizEntry = impl.updateBizEntry;
 export const anchorBizWallet = impl.anchorBizWallet;
 export const importBizEntries = impl.importBizEntries;
 export const importBizInvoice = impl.importBizInvoice;

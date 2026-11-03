@@ -10,6 +10,7 @@ import { confirmDialog } from './confirm.js';
 import { donut, bars, hbars, chartCard } from './charts.js';
 import { viewInvestimentos } from './account-invest-views.js';
 import { accountFields, overdraftBlock, viewDividas } from './account-extras-views.js';
+import { ledgerGroups } from './account-ledger.js';
 import { invoiceImportPanel } from './account-invoice.js';
 import { cardPaymentHint, detectDocumentKind, parseExtract, parsePdfExtract } from '../vendor/engine.js';
 
@@ -66,7 +67,7 @@ export function viewEmpresa(ctx) {
   };
 
   // ---- formulários
-  function walletForm() {
+  function walletForm(inline = false) {
     const name = el('input', { class: 'input', id: 'bw-nome', type: 'text', maxlength: '40', placeholder: 'Ex.: Conta Inter PJ' });
     const kind = select('bw-tipo', WALLET_KINDS, 'conta');
     const opening = moneyInput({ id: 'bw-saldo', ariaLabel: 'Saldo de hoje', placeholder: '0,00' });
@@ -89,10 +90,11 @@ export function viewEmpresa(ctx) {
       }
       run(b.ok, () => ctx.api.createBizWallet({ name: name.value.trim(), kind: kind.value, openingBalanceCents: opening.cents() ?? 0 }), 'Conta da empresa adicionada.');
     });
-    shell('Nova conta da empresa', f, 'Fica só na empresa: não entra nos seus números pessoais.');
+    if (inline) return f;
+    shell('Nova conta da empresa', f,'Fica só na empresa: não entra nos seus números pessoais.');
   }
 
-  function cardForm(existing = null) {
+  function cardForm(existing = null, inline = false) {
     const name = el('input', { class: 'input', id: 'bc-nome', type: 'text', maxlength: '40', placeholder: 'Ex.: Cartão Empresarial', value: existing?.name ?? '' });
     const brand = select('bc-bandeira', BRANDS, existing?.brand ?? 'outra');
     const last4 = el('input', { class: 'input', id: 'bc-final', type: 'text', inputmode: 'numeric', maxlength: '4', placeholder: '1234', value: existing?.last4 ?? '' });
@@ -109,7 +111,8 @@ export function viewEmpresa(ctx) {
       const body = { name: name.value.trim(), brand: brand.value, last4: last4.value || null, limitCents: limit.cents() ?? 0, closingDay: Number(closing.value), dueDay: Number(due.value) };
       run(b.ok, () => (existing ? ctx.api.updateBizCard(existing.id, body) : ctx.api.createBizCard(body)), existing ? 'Cartão atualizado.' : 'Cartão da empresa adicionado.');
     });
-    shell(existing ? 'Editar cartão da empresa' : 'Novo cartão da empresa', f, 'As compras no cartão da empresa usam o limite dele e não saem da conta na hora.');
+    if (inline) return f;
+    shell(existing ? 'Editar cartão da empresa' : 'Novo cartão da empresa', f,'As compras no cartão da empresa usam o limite dele e não saem da conta na hora.');
   }
 
   /** Ajusta o nome, o saldo de partida e o cheque especial (LIS) da conta: negativo na conta é cheque especial em uso, igual ao pessoal. */
@@ -294,58 +297,164 @@ export function viewEmpresa(ctx) {
     return del;
   };
 
+  // ---- Carteira: o mesmo padrão do pessoal ("Saldo por carteira", ajuste de saldo e cheque especial dentro da linha da conta)
   function walletsCard() {
     const full = data.wallets.length >= data.plan.limits.wallets;
-    const add = el('button', { class: 'btn btn-secondary btn-sm', type: 'button', ...(full ? { disabled: true } : {}) }, icon('plus'), 'Adicionar conta');
-    add.addEventListener('click', walletForm);
-    const rows = data.wallets.map((w) => {
-      const edit = el('button', { class: 'btn btn-quiet btn-sm icon-btn', type: 'button', 'aria-label': `Editar ${w.name}` }, icon('pencil'));
-      edit.addEventListener('click', () => walletEditForm(w));
-      return el('li', { class: 'biz-row biz-row-top' },
-        el('div', {}, el('strong', {}, w.name), el('p', { class: 'muted fine' }, WALLET_KINDS.find(([k]) => k === w.kind)?.[1] ?? 'Conta'), w.kind === 'conta' ? overdraftBlock(w) : null),
-        el('strong', { class: tone(w.balanceCents) }, brl(w.balanceCents)),
-        el('span', { class: 'ledger-actions' }, edit, delButton(`Apagar a conta ${w.name}`, () => ctx.api.deleteBizWallet(w.id), 'Os lançamentos dela ficam na empresa, sem conta definida.')));
-    });
-    return card(el('div', { class: 'biz-head' }, el('h2', {}, 'Contas da empresa'), add),
-      rows.length ? el('ul', { class: 'biz-list' }, ...rows) : el('p', { class: 'muted' }, 'Nenhuma conta ainda. Cadastre a conta da empresa para acompanhar o saldo.'),
-      full && !data.plan.multi ? el('p', { class: 'fine muted' }, 'No Ousado cabe uma conta da empresa. No Desbravador você cadastra quantas precisar.') : null);
+    const add = el('details', { class: 'cc-add', ...(data.wallets.length === 0 ? { open: true } : {}) }, el('summary', { class: 'btn btn-primary' }, icon('plus'), 'Adicionar conta'), walletForm(true));
+    const adjust = (w) => {
+      const f = accountFields({ prefix: `aj-${w.id.slice(0, 8)}`, openingBalanceCents: w.openingBalanceCents, overdraftLimitCents: w.overdraftLimitCents, overdraftRateBps: w.overdraftRateBps, overdraftFreeDays: w.overdraftFreeDays });
+      const save = el('button', { class: 'btn btn-secondary btn-sm', type: 'button' }, 'Salvar');
+      save.addEventListener('click', () => {
+        const v = f.read();
+        if (!v.rateOk) return toast('A taxa deve ser um número entre 0 e 100.');
+        run(save, () => ctx.api.updateBizWallet(w.id, { openingBalanceCents: v.openingBalanceCents, overdraftLimitCents: v.overdraftLimitCents, overdraftRateBps: v.overdraftRateBps, overdraftFreeDays: v.overdraftFreeDays }), 'Conta atualizada.');
+      });
+      return el('details', { class: 'lis-edit' }, el('summary', {}, 'Ajustar saldo e cheque especial (LIS)'), f.node, save);
+    };
+    const rows = data.wallets.map((w) => el('li', { class: 'wallet-row' },
+      el('div', {}, el('strong', {}, w.name), el('p', { class: 'muted fine' }, WALLET_KINDS.find(([k]) => k === w.kind)?.[1] ?? 'Conta'), w.kind === 'conta' ? overdraftBlock(w) : null, w.kind === 'conta' ? adjust(w) : null),
+      el('strong', { class: `entry-amount ${w.balanceCents < 0 ? 'neg' : 'pos'}` }, brl(w.balanceCents)),
+      delButton(`Apagar a conta ${w.name}`, () => ctx.api.deleteBizWallet(w.id), 'Os lançamentos dela não somem: ficam sem conta.')));
+    return card(
+      el('div', { class: 'cc-top' }, el('div', {}, el('h2', {}, 'Carteira da empresa'), el('p', { class: 'muted' }, 'Onde o dinheiro da empresa está. Em conta corrente você registra o limite do cheque especial (LIS) para ver quanto está usando e quanto isso custa. O saldo é o de partida mais os lançamentos ligados à conta.')),
+        el('div', { class: 'cc-top-actions' }, full ? el('p', { class: 'fine' }, data.plan.multi ? 'Você chegou ao limite de contas.' : 'No Ousado cabe uma conta da empresa. No Desbravador você cadastra quantas precisar.') : add)),
+      rows.length ? el('ul', { class: 'entries' }, ...rows) : el('p', { class: 'muted' }, 'Nenhuma conta ainda. Cadastre a conta da empresa para acompanhar o saldo.'));
   }
 
+  // ---- Cartões: painéis iguais aos do pessoal (fatura, limite, ações)
+  const METER = { none: '', ok: '', attention: 'lis-high', high: 'lis-over' };
+  function actionBar(defs) {
+    const area = el('div', { class: 'cc-area' });
+    let open = null;
+    const buttons = defs.map((d) => {
+      const b = el('button', { class: 'btn btn-secondary btn-sm cc-actbtn', type: 'button', 'aria-expanded': 'false' }, d.label);
+      b.addEventListener('click', () => {
+        open = open === d.id ? null : d.id;
+        buttons.forEach((x, i) => { const on = defs[i].id === open; x.setAttribute('aria-expanded', String(on)); x.classList.toggle('is-on', on); });
+        area.replaceChildren(...(open ? [d.build()] : []));
+      });
+      return b;
+    });
+    return [el('div', { class: 'cc-acts', role: 'group', 'aria-label': 'Ações do cartão' }, ...buttons), area];
+  }
+  function purchasePanel(c) {
+    const k = c.id.slice(0, 8);
+    const note = el('input', { class: 'input', id: `pc-${k}-desc`, type: 'text', maxlength: '120', placeholder: 'Ex.: anúncios, software, combustível' });
+    const amount = moneyInput({ id: `pc-${k}-valor`, ariaLabel: 'Valor da compra' });
+    const date = el('input', { class: 'input', id: `pc-${k}-data`, type: 'date', value: todayISO(), max: todayISO() });
+    const cat = select(`pc-${k}-cat`, [['', 'Automática (pelo nome)'], ...Object.entries(data.labels.categories)], '');
+    const go = el('button', { class: 'btn btn-primary', type: 'submit' }, icon('plus'), 'Lançar compra');
+    const f = el('form', { class: 'entry-form cc-form form-std' }, el('div', { class: 'field field-wide' }, el('label', { class: 'label', for: note.id }, 'O que foi'), note), field('Valor (R$)', amount.input), field('Data da compra', date), field('Categoria', cat), go);
+    f.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const cents = amount.cents();
+      if (!cents) return toast('Informe o valor da compra.');
+      run(go, () => ctx.api.createBizEntry({ date: date.value, amountCents: -cents, note: note.value.trim(), cardId: c.id, ...(cat.value ? { category: cat.value } : {}) }), 'Compra lançada no cartão.');
+    });
+    return f;
+  }
+  function paymentPanel(c) {
+    const k = c.id.slice(0, 8);
+    const amount = moneyInput({ id: `pg-${k}-valor`, ariaLabel: 'Valor pago', value: c.usedCents > 0 ? c.usedCents : null });
+    const date = el('input', { class: 'input', id: `pg-${k}-data`, type: 'date', value: todayISO(), max: todayISO() });
+    const wallet = select(`pg-${k}-conta`, data.wallets.map((w) => [w.id, w.name]), data.wallets[0]?.id ?? '');
+    const go = el('button', { class: 'btn btn-primary', type: 'submit' }, 'Registrar pagamento');
+    const f = el('form', { class: 'entry-form cc-form form-std' }, field('Valor pago (R$)', amount.input, 'A fatura paga não conta como despesa de novo: o gasto está nas compras do cartão.'), field('Data', date), field('Saiu da conta', wallet), go);
+    f.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const cents = amount.cents();
+      if (!cents) return toast('Informe o valor pago.');
+      if (!wallet.value) return toast('Cadastre antes uma conta da empresa.');
+      run(go, () => ctx.api.createBizEntry({ date: date.value, amountCents: -cents, note: 'Pagamento da fatura', walletId: wallet.value, cardId: c.id, cardPayment: true }), 'Pagamento da fatura registrado.');
+    });
+    return f;
+  }
+  function cardTile(c) {
+    const pct = c.limitCents > 0 ? Math.round((c.usedCents / c.limitCents) * 100) : null;
+    const level = pct === null ? 'none' : pct >= 90 ? 'high' : pct >= 70 ? 'attention' : 'ok';
+    const stat = (label, value, sub) => el('div', { class: 'cc-stat' }, el('span', { class: 'cc-stat-label' }, label), el('strong', {}, value), el('span', { class: 'fine muted' }, sub));
+    const meter = pct === null ? el('p', { class: 'fine muted' }, 'Informe o limite para acompanhar quanto você já usou.') : el('div', { class: 'lis-block' },
+      el('div', { class: `lis-meter ${METER[level]}`, role: 'img', 'aria-label': `${pct}% do limite em uso` }, el('span', { style: `width:${Math.min(100, pct)}%` })),
+      el('p', { class: 'fine' }, `${pct}% do limite em uso: ${brl(c.usedCents)} de ${brl(c.limitCents)}.`));
+    const invCtx = { ...ctx, cards: { cards: data.cards }, refresh: show, api: { ...ctx.api, importCardInvoice: ctx.api.importBizInvoice, createCard: ctx.api.createBizCard } };
+    const acts = actionBar([
+      { id: 'compra', label: 'Nova compra', build: () => purchasePanel(c) },
+      { id: 'pagar', label: 'Pagar fatura', build: () => paymentPanel(c) },
+      { id: 'pdf', label: 'Importar fatura (PDF)', build: () => invoiceImportPanel(invCtx, c) },
+      { id: 'editar', label: 'Editar cartão', build: () => cardForm(c, true) },
+    ]);
+    return el('article', { class: `card cc-tile cc-${level}` },
+      el('header', { class: 'cc-head' }, el('span', { class: 'cc-ico', 'aria-hidden': 'true' }, icon('card')),
+        el('div', { class: 'cc-title' }, el('h3', {}, c.name), el('p', { class: 'muted fine' }, `${BRANDS.find(([k]) => k === c.brand)?.[1] ?? ''}${c.last4 ? ` · final ${c.last4}` : ''} · fecha dia ${c.closingDay}, vence dia ${c.dueDay}`)),
+        delButton(`Apagar o cartão ${c.name}`, () => ctx.api.deleteBizCard(c.id), 'As compras dele ficam na empresa, sem cartão definido.')),
+      el('div', { class: 'cc-stats' }, stat('A pagar', brl(c.usedCents), `vence dia ${c.dueDay}`), stat('Disponível', c.limitCents > 0 ? brl(c.availableCents) : '—', c.limitCents > 0 ? `de ${brl(c.limitCents)}` : 'sem limite informado'), stat('Fecha', `dia ${c.closingDay}`, 'fechamento da fatura')),
+      meter, ...acts);
+  }
   function cardsCard() {
     const full = data.cards.length >= data.plan.limits.cards;
-    const add = el('button', { class: 'btn btn-secondary btn-sm', type: 'button', ...(full ? { disabled: true } : {}) }, icon('plus'), 'Adicionar cartão');
-    add.addEventListener('click', () => cardForm());
-    const rows = data.cards.map((c) => {
-      const pct = c.limitCents > 0 ? Math.min(100, Math.round((c.usedCents / c.limitCents) * 100)) : 0;
-      const edit = el('button', { class: 'btn btn-quiet btn-sm icon-btn', type: 'button', 'aria-label': `Editar ${c.name}` }, icon('pencil'));
-      edit.addEventListener('click', () => cardForm(c));
-      return el('li', { class: 'biz-row biz-row-card' },
-        el('div', {}, el('strong', {}, `${c.name}${c.last4 ? ` ••${c.last4}` : ''}`), el('p', { class: 'muted fine' }, `Fecha dia ${c.closingDay} · vence dia ${c.dueDay}`),
-          c.limitCents > 0 ? el('div', { class: `progress${pct >= 90 ? ' is-over' : ''}`, role: 'img', 'aria-label': `${pct}% do limite usado` }, el('i', { style: `width:${pct}%` })) : null,
-          el('p', { class: 'fine' }, c.limitCents > 0 ? `Usado ${brl(c.usedCents)} de ${brl(c.limitCents)} · disponível ${brl(c.availableCents)}` : `Usado ${brl(c.usedCents)}`)),
-        el('span', { class: 'ledger-actions' }, edit, delButton(`Apagar o cartão ${c.name}`, () => ctx.api.deleteBizCard(c.id), 'As compras dele ficam na empresa, sem cartão definido.')));
-    });
-    // Fatura em PDF: o mesmo leitor do pessoal (lido no aparelho, com conferência da soma); a gravação vai para o cartão da empresa.
+    const add = el('details', { class: 'cc-add', ...(data.cards.length === 0 ? { open: true } : {}) }, el('summary', { class: 'btn btn-primary' }, icon('plus'), 'Adicionar cartão'), cardForm(null, true));
+    const totalLimit = data.cards.reduce((s, c) => s + c.limitCents, 0);
+    const totalUsed = data.cards.reduce((s, c) => s + c.usedCents, 0);
+    const pct = totalLimit > 0 ? Math.round((totalUsed / totalLimit) * 100) : null;
     const invCtx = { ...ctx, cards: { cards: data.cards }, refresh: show, api: { ...ctx.api, importCardInvoice: ctx.api.importBizInvoice, createCard: ctx.api.createBizCard } };
-    const invoice = data.cards.length > 0 ? el('details', { class: 'biz-import' }, el('summary', {}, 'Importar fatura do cartão (PDF)'), invoiceImportPanel(invCtx, null)) : null;
-    return card(el('div', { class: 'biz-head' }, el('h2', {}, 'Cartões da empresa'), add),
-      rows.length ? el('ul', { class: 'biz-list' }, ...rows) : el('p', { class: 'muted' }, 'Nenhum cartão ainda. Cadastre o cartão da empresa para ver limite e fatura.'), invoice,
-      full && !data.plan.multi ? el('p', { class: 'fine muted' }, 'No Ousado cabe um cartão da empresa. No Desbravador você cadastra quantos tiver.') : null);
+    const quick = data.cards.length > 0 ? el('details', { class: 'cc-add' }, el('summary', { class: 'btn btn-secondary' }, icon('list'), 'Importar fatura (PDF)'), invoiceImportPanel(invCtx, null)) : null;
+    const top = card(
+      el('div', { class: 'cc-top' }, el('div', {}, el('h2', {}, 'Cartões da empresa'), el('p', { class: 'muted' }, data.cards.length ? `${data.cards.length} de ${data.plan.limits.cards} cartões${totalLimit ? ` · limite total ${brl(totalLimit)}` : ''}.` : 'Cadastre o cartão da empresa para acompanhar limite, fatura e vencimento. Compra no cartão conta como despesa do mês; pagar a fatura não conta de novo.')),
+        el('div', { class: 'cc-top-actions' }, full ? el('p', { class: 'fine' }, data.plan.multi ? 'Você chegou ao limite de cartões.' : 'No Ousado cabe um cartão da empresa. No Desbravador você cadastra quantos tiver.') : add, quick)),
+      pct !== null ? el('div', { class: 'lis-block' }, el('div', { class: `lis-meter ${pct >= 90 ? 'lis-over' : pct >= 70 ? 'lis-high' : ''}`, role: 'img', 'aria-label': `${pct}% do limite total em uso` }, el('span', { style: `width:${Math.min(100, pct)}%` })), el('p', { class: 'fine' }, `Em uso: ${brl(totalUsed)} (${pct}%). Disponível: ${brl(Math.max(0, totalLimit - totalUsed))}.`)) : null);
+    return [top, ...data.cards.map(cardTile)];
   }
 
-  function entriesCard() {
-    const add = el('button', { class: 'btn btn-primary btn-sm', type: 'button' }, icon('plus'), 'Novo lançamento');
-    add.addEventListener('click', entryForm);
-    const rows = entries.map((x) => {
-      const tag = x.movement ? MOVEMENT_SHORT[x.movement] : x.transferKind === 'card_payment' ? 'Fatura paga' : x.transferKind === 'investment' ? 'Resgate' : null;
-      return el('li', { class: 'biz-row' },
-        el('div', {}, el('strong', {}, x.note || x.label), el('p', { class: 'muted fine' }, `${dayShort(x.date)} · ${x.label} · ${x.card ?? x.wallet ?? 'sem conta'}${tag ? ` · ${tag}` : ''}${x.linkedToPf ? ' · ligado ao pessoal' : ''}`)),
-        el('strong', { class: x.amountCents < 0 ? 'neg' : 'pos' }, brl(x.amountCents)),
-        delButton('Apagar o lançamento', () => ctx.api.deleteBizEntry(x.id), x.linkedToPf ? 'Se o lançamento pessoal foi criado junto com este, ele também será apagado.' : 'Some da empresa.'));
+  // ---- Lançamentos: o mesmo padrão do pessoal (novo lançamento no topo, blocos por conta e cartão, editar e corrigir)
+  const monthLabel = (m) => { const s = new Date(`${m}-01T12:00:00`).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }); return s.charAt(0).toUpperCase() + s.slice(1); };
+  function monthNav() {
+    const prev = el('button', { class: 'btn btn-quiet btn-sm icon-btn', type: 'button', 'aria-label': 'Mês anterior' }, icon('arrow-left'));
+    const next = el('button', { class: 'btn btn-quiet btn-sm icon-btn', type: 'button', 'aria-label': 'Próximo mês', ...(ctx.month >= todayISO().slice(0, 7) ? { disabled: true } : {}) }, icon('arrow-right'));
+    prev.addEventListener('click', () => ctx.setMonth(addMonths(ctx.month, -1)));
+    next.addEventListener('click', () => ctx.setMonth(addMonths(ctx.month, 1)));
+    return el('div', { class: 'month-nav no-print' }, prev, el('strong', { class: 'month-label', role: 'status' }, monthLabel(ctx.month)), next);
+  }
+  function newEntryForm() {
+    let kind = 'gasto';
+    const seg = el('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Tipo' }, ...[['gasto', 'Gasto'], ['entrada', 'Entrada']].map(([v, l]) => {
+      const b = el('button', { class: 'seg-btn', type: 'button', role: 'radio', 'aria-checked': String(v === 'gasto') }, l);
+      b.addEventListener('click', () => { kind = v; seg.querySelectorAll('.seg-btn').forEach((x) => x.setAttribute('aria-checked', String(x === b))); });
+      return b;
+    }));
+    const amount = moneyInput({ id: 'lc-valor', ariaLabel: 'Valor' });
+    const date = el('input', { class: 'input', id: 'lc-data', type: 'date', max: todayISO(), value: ctx.month === todayISO().slice(0, 7) ? todayISO() : `${ctx.month}-01` });
+    const note = el('input', { class: 'input', id: 'lc-desc', type: 'text', maxlength: '120', placeholder: 'Ex.: anúncios do mês, venda para cliente, DAS' });
+    const cat = select('lc-categoria', [['', 'Automática (pelo texto)'], ...Object.entries(data.labels.categories)], '');
+    const wallet = data.wallets.length ? select('lc-carteira', [['', 'Sem conta'], ...data.wallets.map((w) => [w.id, w.name])], data.wallets[0].id) : null;
+    const go = el('button', { class: 'btn btn-primary', type: 'submit' }, icon('plus'), 'Adicionar');
+    const f = el('form', { class: 'entry-form' },
+      el('div', { class: 'field' }, el('span', { class: 'label' }, 'Tipo'), seg), field('Valor (R$)', amount.input), field('Data', date), field('Categoria', cat),
+      el('div', { class: 'field field-wide' }, el('label', { class: 'label', for: 'lc-desc' }, 'Descrição'), note), wallet ? field('Conta da empresa', wallet) : null, go);
+    f.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const cents = amount.cents();
+      if (!cents) return toast('Digite o valor.');
+      if (!date.value) return toast('Escolha a data.');
+      const body = { date: date.value, amountCents: kind === 'gasto' ? -cents : cents, note: note.value.trim() || (kind === 'gasto' ? 'Gasto' : 'Entrada'), ...(cat.value ? { category: cat.value } : {}), ...(wallet?.value ? { walletId: wallet.value } : {}) };
+      ctx.month = date.value.slice(0, 7);
+      run(go, () => ctx.api.createBizEntry(body), 'Lançamento adicionado.');
     });
-    return card(el('div', { class: 'biz-head' }, el('h2', {}, 'Lançamentos da empresa'), add), importBox(),
+    return f;
+  }
+  function entriesCard() {
+    const opts = {
+      categories: Object.entries(data.labels.categories), refresh: show,
+      api: { updateEntry: ctx.api.updateBizEntry, setEntryCategory: (id, c) => ctx.api.updateBizEntry(id, { category: c }), deleteEntry: ctx.api.deleteBizEntry },
+      locked: (x) => (x.linked ? 'Este lançamento está ligado ao pessoal (movimento com o sócio): para mudar data ou valor, apague e lance de novo.' : null),
+    };
+    const mapped = entries.map((x) => ({
+      id: x.id, date: x.date, note: x.note || x.label, category: x.category, amountCents: x.amountCents, walletId: x.walletId, linked: x.linkedToPf,
+      cardName: x.transferKind === 'card_payment' ? null : x.card, transfer: x.transferKind === 'card_payment' || x.transferKind === 'investment',
+      transferKind: x.transferKind === 'investment' ? 'investment_redeem' : x.transferKind, tag: x.movement ? MOVEMENT_SHORT[x.movement] : x.linkedToPf ? 'ligado ao pessoal' : null,
+    }));
+    return card(el('h2', {}, 'Lançamentos da empresa'), monthNav(), newEntryForm(), importBox(),
       el('p', { class: 'fine muted' }, 'Pelo WhatsApp: comece a mensagem com "empresa:" (texto, áudio, foto do cupom ou PDF da fatura) e o lançamento cai aqui, nunca no pessoal.'),
-      rows.length ? el('ul', { class: 'biz-list' }, ...rows) : el('p', { class: 'muted' }, 'Nada lançado neste mês. Use "Novo lançamento" para registrar uma venda, uma despesa ou o pagamento da fatura.'));
+      mapped.length ? ledgerGroups(ctx, mapped, data.wallets, opts) : el('div', { class: 'empty' }, el('strong', {}, 'Nenhum lançamento neste mês'), el('p', { class: 'muted' }, 'Adicione acima ou importe o extrato do banco.')));
   }
 
   function chartsCard() {

@@ -333,6 +333,9 @@ export async function getBizReport(from, to) {
   return request('GET', `/account/business/report?from=${from}&to=${to}`);
 }
 /** Empresa: cheque especial e saldo do extrato, importação de extrato e fatura, dívidas (sempre separadas das pessoais). */
+export async function updateBizEntry(id, body) {
+  return request('PUT', `/account/business/entries/${id}`, { body });
+}
 export async function updateBizWallet(id, body) {
   return request('PUT', `/account/business/wallets/${id}`, { body });
 }

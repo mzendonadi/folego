@@ -254,15 +254,34 @@ export async function deleteBizCard(ctx: Ctx, sub: string, id: string): Promise<
 // ---------------------------------------------------------------- Lançamentos da empresa
 export async function listBizEntries(ctx: Ctx, sub: string, month: string) {
   await access(ctx, sub);
-  const r = await ctx.db.query<{ id: string; d: Date; amount: string; category: string; note: string; wallet: string | null; card: string | null; movement: string | null; kind: string | null; pf: string | null }>(
-    `SELECT b.id, b.occurred_on AS d, b.amount_cents::text AS amount, b.category, b.note, w.name AS wallet, c.name AS card, b.movement, b.transfer_kind AS kind, b.pf_entry_id::text AS pf
+  const r = await ctx.db.query<{ id: string; d: Date; amount: string; category: string; note: string; wallet: string | null; card: string | null; wid: string | null; cid: string | null; movement: string | null; kind: string | null; pf: string | null }>(
+    `SELECT b.id, b.occurred_on AS d, b.amount_cents::text AS amount, b.category, b.note, w.name AS wallet, c.name AS card, b.wallet_id::text AS wid, b.card_id::text AS cid, b.movement, b.transfer_kind AS kind, b.pf_entry_id::text AS pf
        FROM app.biz_entries b LEFT JOIN app.biz_wallets w ON w.id = b.wallet_id LEFT JOIN app.biz_cards c ON c.id = b.card_id
       WHERE b.subscriber_id = $1 AND b.occurred_on BETWEEN $2::date AND $3::date ORDER BY b.occurred_on DESC, b.created_at DESC LIMIT 500`,
     [sub, `${month}-01`, lastDay(month)],
   );
   return {
-    entries: r.rows.map((x) => ({ id: x.id, date: iso(x.d), amountCents: num(x.amount), category: x.category, label: (BIZ_CATEGORY_LABEL as Record<string, string>)[x.category] ?? x.category, note: x.note, wallet: x.wallet, card: x.card, movement: x.movement, transferKind: x.kind, linkedToPf: x.pf !== null })),
+    entries: r.rows.map((x) => ({ id: x.id, date: iso(x.d), amountCents: num(x.amount), category: x.category, label: (BIZ_CATEGORY_LABEL as Record<string, string>)[x.category] ?? x.category, note: x.note, wallet: x.wallet, card: x.card, walletId: x.wid, cardId: x.cid, movement: x.movement, transferKind: x.kind, linkedToPf: x.pf !== null })),
   };
+}
+
+/** Corrige um lançamento da empresa (texto, data, valor, categoria), como no pessoal. Se ele está ligado a um lançamento pessoal (movimento com o sócio), data e valor ficam travados para os dois lados não se desencontrarem. */
+export const bizEntryPatchSchema = z.strictObject({
+  note: z.string().trim().max(120).optional(),
+  date: day.optional(),
+  amountCents: z.number().int().min(-100_000_000_000).max(100_000_000_000).refine((v) => v !== 0, 'Informe um valor').optional(),
+  category: z.enum(BIZ_CATEGORIES).optional(),
+});
+export async function updateBizEntry(ctx: Ctx, sub: string, id: string, p: z.infer<typeof bizEntryPatchSchema>): Promise<void> {
+  await access(ctx, sub);
+  const cur = await ctx.db.query<{ pf: string | null; card: string | null; amount: string }>(`SELECT pf_entry_id::text AS pf, card_id::text AS card, amount_cents::text AS amount FROM app.biz_entries WHERE id = $1 AND subscriber_id = $2`, [id, sub]);
+  const row = cur.rows[0];
+  if (!row) throw notFound();
+  if (row.pf && (p.date !== undefined || p.amountCents !== undefined)) throw new AppError(422, 'linked_entry', 'Este lançamento está ligado a um lançamento pessoal (movimento com o sócio). Apague e lance de novo para mudar a data ou o valor.');
+  if (row.card && p.amountCents !== undefined && p.amountCents > 0 && num(row.amount) < 0) throw new AppError(422, 'card_entry', 'No cartão só entram compras (saídas); estorno vem da fatura.');
+  await ctx.db.query(
+    `UPDATE app.biz_entries SET note = coalesce($3, note), occurred_on = coalesce($4::date, occurred_on), amount_cents = coalesce($5::bigint, amount_cents), category = coalesce($6, category) WHERE id = $1 AND subscriber_id = $2`,
+    [id, sub, p.note ?? null, p.date ?? null, p.amountCents ?? null, p.category ?? null]);
 }
 
 async function ownWallet(ctx: Ctx, sub: string, id: string | null | undefined): Promise<void> {

@@ -102,6 +102,24 @@ test('conta da empresa no negativo: cheque especial (LIS) vira alerta e dívida 
   assert.equal(bad.status, 422);
 });
 
+test('corrigir lançamento da empresa: texto, valor, data e categoria; ligado ao pessoal trava data e valor', async () => {
+  const c = await assinante('pj-edit@exemplo.com');
+  const w = (await c('POST', '/api/account/business/wallets', { body: { name: 'Conta PJ Edit', kind: 'conta' } })).json;
+  const e = (await c('POST', '/api/account/business/entries', { body: { date: today, amountCents: -10_000, note: 'Gasto errado', walletId: w.id } })).json;
+  const up = await c('PUT', `/api/account/business/entries/${e.id}`, { body: { note: 'Anúncios', amountCents: -12_500, category: 'marketing' } });
+  assert.equal(up.status, 200);
+  const list = (await c('GET', `/api/account/business/entries?month=${month}`)).json.entries;
+  const x = list.find((y: any) => y.id === e.id);
+  assert.equal(x.amountCents, -12_500);
+  assert.equal(x.note, 'Anúncios');
+  assert.equal(x.walletId, w.id, 'a lista informa a conta pelo id, para agrupar como no pessoal');
+  assert.equal((await c('PUT', `/api/account/business/entries/${e.id}`, { body: { category: 'categoria-inexistente' } })).status, 400);
+  const mv = (await c('POST', '/api/account/business/movements', { body: { movement: 'pro_labore', date: today, amountCents: 100_000, walletId: w.id } })).json;
+  const linked = await c('PUT', `/api/account/business/entries/${mv.id}`, { body: { amountCents: -1 } });
+  assert.equal(linked.status, 422, 'movimento ligado ao pessoal não muda valor');
+  assert.equal((await c('PUT', `/api/account/business/entries/${mv.id}`, { body: { note: 'Pró-labore outubro' } })).status, 200);
+});
+
 test('extrato importado na empresa: sem repetir, reconhece pró-labore, ancora o saldo e não mexe no pessoal', async () => {
   const c = await assinante('pj-import@exemplo.com');
   const before = await pessoal(c);
