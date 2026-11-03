@@ -1,6 +1,10 @@
 # Tudo roda em containers: não exige root nem instalar nada no sistema.
 # Uso (na pasta deploy/, com o .env ao lado):  sudo docker compose up -d --build     (ou:  bash deploy.sh)
 
+# Projeto próprio: outro sistema na mesma VPS (Alta PMO) também rodava em uma pasta chamada "deploy", e o Compose o tratava como o
+# MESMO projeto (serviço "api" igual), trocando a API do Fôlego pela dele. Com nome fixo isso não acontece mais.
+name: folego
+
 x-api-env: &api-env
   NODE_ENV: production
   DATABASE_URL: postgres://app_owner:${POSTGRES_PASSWORD}@postgres:5432/app
@@ -139,3 +143,4 @@ services:
 
 volumes:
   pgdata:
+    name: deploy_pgdata # o volume que já guarda o banco (criado quando o projeto se chamava "deploy"): não trocar
