@@ -153,6 +153,8 @@ export async function subscriptionAction(ctx: Ctx, admin: AdminUser, subscriberI
   await ctx.db.tx(async (q) => {
     const exists = await q.query(`SELECT 1 FROM app.subscribers WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, [subscriberId]);
     if (exists.rows.length === 0) throw notFound();
+    const owner = await q.query<{ is_owner: boolean }>(`SELECT is_owner FROM app.subscribers WHERE id = $1`, [subscriberId]);
+    if (owner.rows[0]?.is_owner) throw new AppError(409, 'owner_account', 'Conta de dono: já é Desbravador sem fim, não expira e não se cancela. Nada a ajustar.');
     if (action.type === 'extend') {
       if (!Number.isInteger(action.days) || action.days < 1 || action.days > 365) throw new AppError(422, 'invalid_days', 'Informe de 1 a 365 dias.');
       const plan = await q.query<{ plan: string }>(`SELECT plan FROM app.subscriptions WHERE subscriber_id = $1`, [subscriberId]);

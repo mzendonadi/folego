@@ -19,6 +19,7 @@ export const cancelNotice = (until) => `Cobrança interrompida. Você continua c
 export function billingHeader(acc, plan) {
   const b = acc.billing;
   const end = acc.subscription.periodEnd;
+  if (acc.owner) return { pill: `Plano ${plan.name}`, line: 'Conta de dono · sem prazo, nunca expira', tone: 'ok' };
   if (!b) return { pill: `Plano ${plan.name}`, line: `Acesso até ${dateBr(end)}`, tone: 'ok' };
   if (b.status === 'canceled') return { pill: `Plano ${plan.name}`, line: `Cancelado · acesso até ${dateBr(end)}`, tone: 'warn' };
   if (b.status === 'past_due') return { pill: `Plano ${plan.name}`, line: 'Cartão recusado · atualize para manter o acesso', tone: 'bad' };

@@ -339,3 +339,34 @@ test('backoffice: editar o cadastro inteiro do parceiro, inclusive o e-mail de a
   await assert.rejects(partners.update(ctx(), 'teste', id, { email: 'outra@teste.com' }), /Já existe/);
   await assert.rejects(partners.update(ctx(), 'teste', id, { cnpj: '11222333000144' }), /Já existe/);
 });
+
+test('exportar contatos do Fôlego em .xlsx: período e filtros no servidor, sem token 401, período vazio 422 e a exportação vai para a auditoria', async () => {
+  const admin = client();
+  const euro = await db.query<{ id: string }>(`SELECT id FROM app.partners WHERE cnpj = '09242004000150'`);
+  const partnerId = euro.rows[0]!.id;
+  const login = await admin('POST', '/api/partner/login', { body: { email: 'novo@euro.test', password: (await partners.resetPassword(ctx(), 'teste', partnerId)).password } }); // o e-mail mudou no teste anterior
+  const auth = { authorization: `Bearer ${login.json.token}` };
+  const { c, caseId } = await paidCase('export-lead');
+  assert.equal((await c('POST', `/api/cases/${caseId}/leads`, { body: { name: 'Ana Exportada', phone: '(21) 97777-1234', categories: ['consignado'], consent: true } })).status, 201);
+  await deliverPendingLeads(ctx());
+  const post = (body: unknown, headers: Record<string, string> = auth) => app.inject({ method: 'POST', url: '/api/partner/leads/export', headers: { 'x-folego': '1', 'content-type': 'application/json', ...headers }, payload: JSON.stringify(body) });
+
+  assert.equal((await post({}, {})).statusCode, 401, 'sem token não exporta');
+  const all = await post({});
+  assert.equal(all.statusCode, 200);
+  assert.match(String(all.headers['content-type']), /spreadsheetml\.sheet/);
+  assert.match(String(all.headers['content-disposition']), /contatos-folego-\d{4}-\d{2}-\d{2}\.xlsx/);
+  assert.ok(Number(all.headers['x-export-count']) >= 1);
+  assert.equal(all.rawPayload.subarray(0, 2).toString(), 'PK', 'é um .xlsx (zip)');
+
+  const novo = await post({ status: ['delivered'], deal: 'sem', q: 'ana exportada' });
+  assert.equal(novo.statusCode, 200);
+  assert.equal(Number(novo.headers['x-export-count']), 1, 'a busca e o filtro acham só ela');
+  assert.equal((await post({ status: ['converted'], q: 'ana exportada' })).statusCode, 422, 'sem contato com esses filtros');
+  assert.equal((await post({ from: '2099-01-01', to: '2099-12-31' })).statusCode, 422, 'período sem contatos');
+  assert.equal((await post({ from: '2026-12-31', to: '2026-01-01' })).statusCode, 422, 'data final antes da inicial');
+  assert.equal((await post({ campo_desconhecido: 1 })).statusCode, 400, 'filtro desconhecido é recusado');
+
+  const logged = await db.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.audit_log WHERE action = 'partner_leads_exported'`);
+  assert.ok(Number(logged.rows[0]!.n) >= 2, 'cada exportação fica na auditoria');
+});

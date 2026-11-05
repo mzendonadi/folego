@@ -6,7 +6,7 @@ import { audit, wipeCase } from './services.ts';
 import type { Ctx } from './services.ts';
 import { num } from './services.ts';
 import { CATEGORY_LABEL, planByCode } from './engine.ts';
-import { requireFeature } from './subscriptions.ts';
+import { assertNotOwner, requireFeature } from './subscriptions.ts';
 import { revokeAllForSubscriber } from './openfinance.ts';
 import { buildXlsx } from './xlsx.ts';
 import type { Sheet } from './xlsx.ts';
@@ -190,6 +190,7 @@ export async function buildSubscriberPackage(ctx: Ctx, subscriberId: string, act
 
 /** Apaga TUDO o que é dado da pessoa. Pedidos e pagamentos ficam sem dado pessoal (e-mail anonimizado) por obrigação fiscal. */
 export async function purgeSubscriber(ctx: Ctx, subscriberId: string, actor: string): Promise<{ deletedRows: number }> {
+  await assertNotOwner(ctx, subscriberId); // conta de dono nunca é apagada (nem pela pessoa, nem pela rotina de retenção)
   const tables = (await subscriberTables(ctx)).filter((t) => !KEEP_ON_PURGE.has(t));
   const prof = await ctx.db.query<{ provider_subscription_id: string | null; status: string }>(`SELECT provider_subscription_id, status FROM app.billing_profiles WHERE subscriber_id = $1`, [subscriberId]);
   if (prof.rows[0]?.provider_subscription_id && prof.rows[0].status !== 'canceled') await ctx.gateway.cancelCardSubscription(prof.rows[0].provider_subscription_id);

@@ -205,6 +205,140 @@ function noteBox(ctx, path, onSaved) {
   return form;
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+// Exportar os contatos do Fôlego em .xlsx, com filtros personalizados (a planilha é gerada e conferida no servidor; aqui é a prévia e o pedido).
+const spDay = (ms) => new Date(ms).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+const addDays = (iso, n) => new Date(Date.parse(`${iso}T12:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+const EXPORT_PRESETS = [['tudo', 'Todo o período'], ['hoje', 'Hoje'], ['7', 'Últimos 7 dias'], ['30', 'Últimos 30 dias'], ['mes', 'Este mês'], ['mes_ant', 'Mês passado'], ['custom', 'Personalizado']];
+function presetRange(preset) {
+  const t = todayISO();
+  if (preset === 'hoje') return { from: t, to: t };
+  if (preset === '7') return { from: addDays(t, -6), to: t };
+  if (preset === '30') return { from: addDays(t, -29), to: t };
+  if (preset === 'mes') return { from: `${t.slice(0, 7)}-01`, to: t };
+  if (preset === 'mes_ant') {
+    const first = `${t.slice(0, 7)}-01`;
+    const last = addDays(first, -1);
+    return { from: `${last.slice(0, 7)}-01`, to: last };
+  }
+  return { from: '', to: '' };
+}
+
+function exportModal(ctx, leads) {
+  const usable = leads.filter((l) => !l.revoked && l.phone);
+  const f = { preset: 'tudo', from: '', to: '', status: new Set(), uf: new Set(), income: new Set(), debt: new Set(), deal: 'todos', q: '' };
+  const distinct = (k) => [...new Set(usable.map((l) => l[k]).filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b), 'pt-BR', { numeric: true }));
+  const m = modal('Exportar contatos', el('p', { class: 'pt-sub' }, 'Escolha o período e os filtros. A planilha .xlsx traz uma aba com os contatos e outra com o resumo do que foi filtrado.'));
+  const matches = (l) => {
+    const d = spDay(l.createdAt);
+    if (f.from && d < f.from) return false;
+    if (f.to && d > f.to) return false;
+    if (f.status.size && !f.status.has(l.status)) return false;
+    if (f.uf.size && !f.uf.has(l.uf)) return false;
+    if (f.income.size && !f.income.has(l.incomeBand)) return false;
+    if (f.debt.size && !f.debt.has(l.debtBand)) return false;
+    if (f.deal === 'com' && !l.dealsCount) return false;
+    if (f.deal === 'sem' && l.dealsCount) return false;
+    const q = f.q.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    if (q) {
+      const hay = `${l.name ?? ''} ${l.email ?? ''}`.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+      const digits = q.replace(/\D/g, '');
+      if (!(hay.includes(q) || (digits.length >= 3 && (l.phone ?? '').includes(digits)))) return false;
+    }
+    return true;
+  };
+  const count = el('p', { class: 'pt-export-count', role: 'status', 'aria-live': 'polite' });
+  const go = el('button', { class: 'btn btn-primary', type: 'button' }, 'Baixar .xlsx');
+  const refresh = () => {
+    const n = usable.filter(matches).length;
+    count.textContent = n === 0 ? 'Nenhum contato com esses filtros.' : `${n} ${n === 1 ? 'contato' : 'contatos'} neste filtro.`;
+    go.disabled = n === 0;
+  };
+
+  const chips = el('div', { class: 'pt-filters', role: 'radiogroup', 'aria-label': 'Período' });
+  const from = el('input', { class: 'input', type: 'date', 'aria-label': 'De', max: todayISO() });
+  const to = el('input', { class: 'input', type: 'date', 'aria-label': 'Até', max: todayISO() });
+  const custom = el('div', { class: 'pt-export-dates', hidden: true }, el('label', { class: 'field' }, el('span', { class: 'label' }, 'De'), from), el('label', { class: 'field' }, el('span', { class: 'label' }, 'Até'), to));
+  const drawChips = () => chips.replaceChildren(...EXPORT_PRESETS.map(([k, l]) => {
+    const b = el('button', { class: 'pt-chip', type: 'button', role: 'radio', 'aria-checked': String(f.preset === k) }, l);
+    b.addEventListener('click', () => {
+      f.preset = k;
+      if (k !== 'custom') { const r = presetRange(k); f.from = r.from; f.to = r.to; from.value = r.from; to.value = r.to; }
+      custom.hidden = k !== 'custom';
+      drawChips();
+      refresh();
+    });
+    return b;
+  }));
+  from.addEventListener('change', () => { f.from = from.value; refresh(); });
+  to.addEventListener('change', () => { f.to = to.value; refresh(); });
+
+  const group = (title, options, set) => {
+    if (options.length === 0) return null;
+    return el('fieldset', { class: 'pt-export-group' }, el('legend', { class: 'label' }, title), el('div', { class: 'pt-export-checks' }, ...options.map(([v, l]) => {
+      const cb = el('input', { type: 'checkbox' });
+      cb.addEventListener('change', () => { if (cb.checked) set.add(v); else set.delete(v); refresh(); });
+      return el('label', { class: 'pt-check' }, cb, el('span', {}, l));
+    })));
+  };
+  const deal = el('select', { class: 'input', 'aria-label': 'Contrato fechado' }, ...[['todos', 'Com e sem contrato'], ['com', 'Só com contrato fechado'], ['sem', 'Só sem contrato fechado']].map(([v, l]) => el('option', { value: v }, l)));
+  deal.addEventListener('change', () => { f.deal = deal.value; refresh(); });
+  const q = el('input', { class: 'input', type: 'search', maxlength: '60', placeholder: 'Nome, e-mail ou telefone', 'aria-label': 'Buscar' });
+  q.addEventListener('input', () => { f.q = q.value; refresh(); });
+
+  const clear = el('button', { class: 'btn btn-quiet', type: 'button' }, 'Limpar filtros');
+  clear.addEventListener('click', () => { m.close(); exportModal(ctx, leads); });
+
+  go.addEventListener('click', async () => {
+    const body = {};
+    if (f.from) body.from = f.from;
+    if (f.to) body.to = f.to;
+    if (f.status.size) body.status = [...f.status];
+    if (f.uf.size) body.uf = [...f.uf];
+    if (f.income.size) body.income = [...f.income];
+    if (f.debt.size) body.debt = [...f.debt];
+    if (f.deal !== 'todos') body.deal = f.deal;
+    if (f.q.trim()) body.q = f.q.trim();
+    go.disabled = true;
+    go.textContent = 'Gerando…';
+    try {
+      const res = await ctx.raw('POST', '/partner/leads/export', { 'content-type': 'application/json' }, JSON.stringify(body));
+      if (!res.ok) {
+        const j = await res.json().catch(() => null);
+        throw new Error(j?.message ?? `Não consegui gerar agora (erro ${res.status}).`);
+      }
+      const blob = await res.blob();
+      const name = /filename="([^"]+)"/.exec(res.headers.get('content-disposition') ?? '')?.[1] ?? 'contatos-folego.xlsx';
+      const url = URL.createObjectURL(blob);
+      const a = el('a', { href: url, download: name });
+      document.body.append(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      toast(`${res.headers.get('x-export-count') ?? ''} contatos exportados.`.trim());
+      m.close();
+    } catch (err) {
+      toast(err.message);
+      go.textContent = 'Baixar .xlsx';
+      refresh();
+    }
+  });
+
+  m.body.append(
+    el('div', { class: 'pt-export' },
+      el('div', { class: 'field' }, el('span', { class: 'label' }, 'Período em que o contato foi recebido'), chips, custom),
+      group('Situação', [['delivered', 'Novo'], ['contacted', 'Em contato'], ['converted', 'Contrato fechado'], ['rejected', 'Descartado']], f.status),
+      group('Estado (UF)', distinct('uf').map((v) => [v, v]), f.uf),
+      group('Faixa de renda', distinct('incomeBand').map((v) => [v, v]), f.income),
+      group('Faixa de dívidas', distinct('debtBand').map((v) => [v, v]), f.debt),
+      el('div', { class: 'pt-export-row' }, el('label', { class: 'field' }, el('span', { class: 'label' }, 'Contrato'), deal), el('label', { class: 'field' }, el('span', { class: 'label' }, 'Buscar'), q)),
+      count,
+      el('div', { class: 'button-row' }, go, clear),
+      el('p', { class: 'pt-sub' }, 'Quem revogou a autorização nunca entra na planilha. Os dados são pessoais: use só para o contato autorizado.')));
+  drawChips();
+  refresh();
+}
+
 export async function viewFolego(ctx) {
   const root = el('div', { class: 'pt-stack' });
   let filter = 'todos';
@@ -213,8 +347,10 @@ export async function viewFolego(ctx) {
     const shown = leads.filter((l) => filter === 'todos' || l.status === filter);
     const tabs = [['todos', 'Todos'], ['delivered', 'Novos'], ['contacted', 'Em contato'], ['converted', 'Contrato fechado'], ['rejected', 'Descartados']];
     const count = (k) => (k === 'todos' ? leads.length : leads.filter((l) => l.status === k).length);
+    const exportBtn = el('button', { class: 'btn btn-secondary', type: 'button', ...(leads.some((l) => !l.revoked && l.phone) ? {} : { disabled: true }) }, 'Exportar');
+    exportBtn.addEventListener('click', () => exportModal(ctx, leads));
     root.replaceChildren(
-      head('Contatos do Fôlego', 'Pessoas que autorizaram falar com um parceiro e foram enviadas a você. A comissão do Fôlego vale sobre os contratos fechados com elas.'),
+      head('Contatos do Fôlego', 'Pessoas que autorizaram falar com um parceiro e foram enviadas a você. A comissão do Fôlego vale sobre os contratos fechados com elas.', exportBtn),
       el('div', { class: 'pt-filters', role: 'tablist' }, ...tabs.map(([k, l]) => { const b = el('button', { class: 'pt-chip', type: 'button', role: 'tab', 'aria-selected': String(filter === k) }, `${l} `, el('span', {}, String(count(k)))); b.addEventListener('click', () => { filter = k; draw(); }); return b; })),
       shown.length === 0 ? empty('Nenhum contato aqui', leads.length === 0 ? 'Quando o Fôlego enviar contatos para você, eles aparecem nesta tela.' : 'Nenhum contato nesta situação.') : el('div', { class: 'pt-list' }, ...shown.map(leadCard)),
     );

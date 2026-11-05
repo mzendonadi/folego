@@ -4,6 +4,7 @@
 //   mês corrente e mantém o acesso (e o download dos dados) até o fim do mês já pago. Depois o acesso encerra e os dados
 //   são apagados (pelo backoffice, após o download de segurança, ou automaticamente depois da janela de retenção).
 import { attribute } from './referrals.ts';
+import { assertNotOwner } from './subscriptions.ts';
 import { AppError, notFound } from './errors.ts';
 import { encryptText } from './crypto.ts';
 import { layout } from './email.ts';
@@ -164,6 +165,7 @@ async function markCanceled(ctx: Ctx, subscriberId: string, by: 'subscriber' | '
 
 /** Cancelamento pedido pela pessoa: para a cobrança agora; o acesso e os downloads seguem até o fim do mês pago. */
 export async function cancelCardSubscription(ctx: Ctx, subscriberId: string): Promise<{ accessUntil: number }> {
+  await assertNotOwner(ctx, subscriberId);
   const bp = await ctx.db.query<{ status: string; provider_subscription_id: string | null }>(`SELECT status, provider_subscription_id FROM app.billing_profiles WHERE subscriber_id = $1`, [subscriberId]);
   const p = bp.rows[0];
   if (!p || p.status === 'pending') {

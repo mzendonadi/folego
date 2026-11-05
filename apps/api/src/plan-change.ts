@@ -49,6 +49,8 @@ interface State {
 }
 
 async function loadState(db: Queryable, subscriberId: string): Promise<State> {
+  const owner = await db.query<{ is_owner: boolean }>(`SELECT is_owner FROM app.subscribers WHERE id = $1`, [subscriberId]);
+  if (owner.rows[0]?.is_owner) throw new AppError(409, 'owner_account', 'Esta é a conta de dono do Prumo: ela já tem o Desbravador sem fim e não troca de plano.');
   const r = await db.query<{ status: string; plan: string; customer: string | null; from_price: string | null; credit: number; period_end: Date | string; active: boolean; period_days: string; left_days: string }>(
     `SELECT b.status, b.plan, b.provider_customer_id AS customer, coalesce(b.contract_cents, pr.price_cents) AS from_price, b.plan_credit_cents AS credit,
             s.current_period_end AS period_end, (s.status = 'active' AND s.current_period_end > now()) AS active,

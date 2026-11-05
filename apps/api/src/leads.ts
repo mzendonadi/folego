@@ -385,7 +385,7 @@ export function partnerFromToken(ctx: Ctx, header: string | undefined): string {
   return payload.pid;
 }
 
-export async function partnerLeads(ctx: Ctx, partnerId: string): Promise<Record<string, unknown>[]> {
+export async function partnerLeads(ctx: Ctx, partnerId: string, limit = 200): Promise<Record<string, unknown>[]> {
   const r = await ctx.db.query<{
     id: string; status: string; created_at: Date | string; delivered_at: Date | string | null; price_cents: string; category: string; campaign: string; commission_bps: number; deals_n: string; deals_cents: string;
     full_name_enc: Buffer | null; phone_enc: Buffer | null; email_enc: Buffer | null; uf: string | null; employment_type: string | null; income_band: string | null; debt_band: string | null;
@@ -399,8 +399,8 @@ export async function partnerLeads(ctx: Ctx, partnerId: string): Promise<Record<
        JOIN app.partner_campaigns c ON c.id = d.campaign_id
        LEFT JOIN app.lead_contacts lc ON lc.case_id = d.case_id
        LEFT JOIN app.lead_profiles lp ON lp.case_id = d.case_id
-      WHERE d.partner_id = $1 AND (lc.case_id IS NOT NULL OR d.kept_phone_enc IS NOT NULL) ORDER BY d.created_at DESC LIMIT 200`, // sem contato nem cópia = o titular revogou ou apagou os dados (a cópia da entrega é apagada junto) e some da lista; o expurgo por prazo NÃO tira o lead do parceiro
-    [partnerId],
+      WHERE d.partner_id = $1 AND (lc.case_id IS NOT NULL OR d.kept_phone_enc IS NOT NULL) ORDER BY d.created_at DESC LIMIT $2`, // sem contato nem cópia = o titular revogou ou apagou os dados (a cópia da entrega é apagada junto) e some da lista; o expurgo por prazo NÃO tira o lead do parceiro
+    [partnerId, Math.max(1, Math.min(limit, 10_000))],
   );
   return r.rows.map((x) => {
     const revoked = !x.phone_enc;

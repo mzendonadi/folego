@@ -2687,6 +2687,18 @@ h3 { font-weight: 500; letter-spacing: -0.015em; } /* em corpo pequeno a serifa 
 .check input { margin-top: 4px; flex: none; }
 .field[hidden] { display: none; }
 
+/* D-158: Exportar contatos do Fôlego em .xlsx (portal do parceiro) */
+.pt-export { display: grid; gap: var(--s4, 16px); }
+.pt-export .pt-filters { justify-content: flex-start; margin: 6px 0 0; }
+.pt-export-dates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s3, 12px); margin-top: var(--s3, 12px); }
+.pt-export-dates[hidden] { display: none; }
+.pt-export-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s3, 12px); }
+.pt-export-group { border: 0; padding: 0; margin: 0; min-width: 0; }
+.pt-export-checks { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 6px; }
+.pt-check { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; font-weight: 600; cursor: pointer; }
+.pt-export-count { margin: 0; font-weight: 700; }
+@media (max-width: 639px) { .pt-export-dates, .pt-export-row { grid-template-columns: minmax(0, 1fr); } }
+
 /* D-154: empresa com os mesmos recursos do pessoal: importar fatura, extrato, cheque especial e dívidas */
 .biz-import { margin-top: var(--s3); border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent); padding-top: var(--s3); }
 .biz-import > summary { cursor: pointer; font-weight: 600; min-height: 44px; display: flex; align-items: center; }

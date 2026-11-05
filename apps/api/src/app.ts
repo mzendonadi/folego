@@ -29,6 +29,7 @@ import * as investmentsApi from './investments.ts';
 import * as reportsApi from './reports.ts';
 import * as strategiesApi from './strategies.ts';
 import * as businessApi from './business.ts';
+import * as partnerExport from './partner-export.ts';
 import * as debts from './account-debts.ts';
 import { askPlanner } from './planner.ts';
 import * as program from './coach-program.ts';
@@ -408,6 +409,16 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       return leads.partnerLogin(ctx, email, password);
     });
     app.get('/api/partner/leads', async (req) => ({ leads: await leads.partnerLeads(ctx, leads.partnerFromToken(ctx, req.headers.authorization)) }));
+    // Exportar contatos do Fôlego em .xlsx com filtros (período, situação, UF, renda, dívidas, contrato, busca). Só o parceiro dono; revogados nunca entram.
+    app.post('/api/partner/leads/export', { config: { rateLimit: { max: 20 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => {
+      const partnerId = leads.partnerFromToken(ctx, req.headers.authorization);
+      const out = await partnerExport.exportLeadsXlsx(ctx, partnerId, partnerExport.leadExportSchema.parse(req.body ?? {}));
+      reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      reply.header('Content-Disposition', `attachment; filename="${out.filename}"`);
+      reply.header('X-Export-Count', String(out.count));
+      reply.header('Cache-Control', 'no-store');
+      return reply.send(out.buffer);
+    });
     app.post('/api/partner/leads/:id/status', async (req) => {
       const partnerId = leads.partnerFromToken(ctx, req.headers.authorization);
       await leads.partnerSetStatus(ctx, partnerId, idParam((req.params as { id: string }).id), partnerStatusSchema.parse(req.body).status);

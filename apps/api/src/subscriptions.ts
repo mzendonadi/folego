@@ -93,6 +93,18 @@ export interface AccountView {
   profile: { displayName: string | null; notifyDigest: boolean; notifyReminders: boolean; marketing: boolean; avatarAt: string | null };
   /** Conta de teste ligada pelo dono: nada é cobrado (o Prumo mostra um aviso). */
   demo: boolean;
+  /** Conta de dono: Desbravador sem fim, nunca expira nem é cancelada ou excluída. */
+  owner: boolean;
+}
+
+const OWNER_MSG = 'Esta é a conta de dono do Prumo: ela é ilimitada, nunca expira e não é cancelada nem excluída.';
+export async function isOwnerAccount(ctx: Pick<Ctx, 'db'>, subscriberId: string): Promise<boolean> {
+  const r = await ctx.db.query<{ is_owner: boolean }>(`SELECT is_owner FROM app.subscribers WHERE id = $1`, [subscriberId]);
+  return Boolean(r.rows[0]?.is_owner);
+}
+/** Cancelar, trocar de plano ou excluir não se aplicam à conta de dono (o banco também impede). */
+export async function assertNotOwner(ctx: Pick<Ctx, 'db'>, subscriberId: string): Promise<void> {
+  if (await isOwnerAccount(ctx, subscriberId)) throw new AppError(409, 'owner_account', OWNER_MSG);
 }
 
 export async function accountView(ctx: Ctx, subscriberId: string): Promise<AccountView> {
@@ -104,7 +116,8 @@ export async function accountView(ctx: Ctx, subscriberId: string): Promise<Accou
   );
   const row = sub.rows[0];
   const end = row ? new Date(row.current_period_end).getTime() : 0;
-  const billing = await billingView(ctx, subscriberId);
+  const owner = await isOwnerAccount(ctx, subscriberId);
+  const billing = owner ? null : await billingView(ctx, subscriberId); // dono não tem cobrança no cartão a mostrar
   // Cartão em dia tem uns dias de tolerância depois do vencimento: a renovação chega por webhook.
   const grace = billing && billing.status !== 'canceled' ? CARD_GRACE_DAYS * 86_400_000 : 0;
   const p = s.rows[0];
@@ -114,6 +127,7 @@ export async function accountView(ctx: Ctx, subscriberId: string): Promise<Accou
     billing,
     profile: { displayName: p.display_name, notifyDigest: p.notify_digest, notifyReminders: p.notify_reminders, marketing: !p.opted_out, avatarAt: p.avatar_at ? new Date(p.avatar_at).toISOString() : null },
     demo: await isDemoSubscriber(ctx, subscriberId),
+    owner,
   };
 }
 
@@ -210,6 +224,7 @@ async function activateSubscriptionPeriod(q: Queryable, subscriberId: string, or
 }
 
 export async function setCancel(ctx: Ctx, subscriberId: string, cancel: boolean): Promise<void> {
+  await assertNotOwner(ctx, subscriberId);
   const r = await ctx.db.query(`UPDATE app.subscriptions SET cancel_at_period_end = $2 WHERE subscriber_id = $1`, [subscriberId, cancel]);
   if (r.rowCount === 0) throw notFound();
   await audit(ctx.db, `subscriber:${subscriberId}`, cancel ? 'subscription_cancel' : 'subscription_resume', 'subscriber', subscriberId);
@@ -217,6 +232,7 @@ export async function setCancel(ctx: Ctx, subscriberId: string, cancel: boolean)
 
 /** Apaga a conta: dados de uso somem; o registro fica anonimizado só para não quebrar pedidos pagos (obrigação fiscal). */
 export async function deleteAccount(ctx: Ctx, sessionId: string, subscriberId: string): Promise<void> {
+  await assertNotOwner(ctx, subscriberId);
   await ctx.db.tx(async (q) => {
     const maps = await q.query<{ id: string }>(`SELECT id FROM app.cases WHERE owner_subscriber_id = $1 AND status <> 'purged'`, [subscriberId]);
     for (const m of maps.rows) await wipeCase(q, m.id); // o Mapa de quem apaga a conta vai junto
