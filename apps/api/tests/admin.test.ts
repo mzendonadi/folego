@@ -451,13 +451,16 @@ test('política de senha: curta, sem número, repetitiva ou com o e-mail são re
   assert.equal((await c('POST', '/api/gestao/login-password', { body: { email, password: 'Uma-Senha-Boa-77' } })).status, 200);
 });
 
-test('primeiro acesso só vale uma vez: com senha definida, ninguém redefine só com o e-mail', async () => {
+test('esqueci minha senha: quem já tem senha recebe o código no e-mail, mas só o código certo redefine', async () => {
   await ownerClient();
   const c = client();
   mailbox.sent.length = 0;
   assert.equal((await c('POST', '/api/gestao/setup-code', { body: { email: 'dono@exemplo.com' } })).status, 200);
-  assert.equal(mailbox.sent.length, 0, 'sem código: a senha já existe');
-  assert.equal((await c('POST', '/api/gestao/setup', { body: { email: 'dono@exemplo.com', code: '123456', password: 'Outra-Senha-9999' } })).status, 401);
+  assert.equal(mailbox.sent.length, 1, 'o código chega (a regra antiga, só com liberação do dono, mudou)');
+  const code = /\b(\d{6})\b/.exec(mailbox.sent[0]!.text)![1]!;
+  const wrong = code === '123456' ? '654321' : '123456';
+  assert.equal((await c('POST', '/api/gestao/setup', { body: { email: 'dono@exemplo.com', code: wrong, password: 'Outra-Senha-9999' } })).status, 401, 'código errado não redefine');
+  assert.equal((await c('POST', '/api/gestao/login-password', { body: { email: 'dono@exemplo.com', password: PW } })).status, 200, 'a senha atual continua valendo');
 });
 
 test('trocar a senha exige a atual e derruba as outras sessões; o dono libera a redefinição de outra pessoa', async () => {

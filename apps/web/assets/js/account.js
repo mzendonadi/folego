@@ -110,13 +110,21 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
       pwForm.hidden = !pwForm.hidden;
       if (!pwForm.hidden) pwEmail.focus();
     });
+    // "Esqueci minha senha": o Prumo não usa senha (o código do e-mail é o acesso). Em vez de um beco sem saída, explica e leva a pedir o código.
+    const forgotNote = el('p', { class: 'note', role: 'status', hidden: true }, icon('info'), el('span', {}, 'No Prumo não existe senha para esquecer: o acesso é o código que chega no seu e-mail. Digite o e-mail acima e toque em "Enviar código". Ele chega em segundos e vale por 10 minutos. Se for a conta de teste, peça uma senha nova ao dono.'));
+    const forgot = el('button', { class: 'btn btn-quiet btn-sm', type: 'button' }, 'Esqueci minha senha');
+    forgot.addEventListener('click', () => {
+      forgotNote.hidden = false;
+      email.focus();
+    });
     root.replaceChildren(
       card(
         el('h2', {}, 'Entrar na sua conta'),
         el('p', { class: 'section-sub' }, 'Sem senha: mandamos um código de 6 dígitos para o seu e-mail, válido por 10 minutos.'),
         sendForm,
         codeBox,
-        el('div', {}, pwToggle),
+        el('div', { class: 'button-row' }, forgot, pwToggle),
+        forgotNote,
         pwForm,
       ),
     );

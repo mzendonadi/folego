@@ -81,10 +81,10 @@ async function sendCode(ctx: Ctx, email: string, purpose: 'admin' | 'admin_setup
     if (ctx.config.env === 'production') throw new AppError(503, 'email_off', 'O envio de e-mail não está configurado.');
     return ctx.config.exposeDevCodes || ctx.config.env === 'test' ? { sent: true, devCode: code } : { sent: true };
   }
-  const title = purpose === 'admin' ? 'Seu código do backoffice Fôlego' : 'Definir sua senha do backoffice Fôlego';
-  const body = layout(title, [`Seu código: ${code}`, `Ele vale por ${CODE_TTL_MIN} minutos. Se não foi você, ignore este e-mail e avise o dono: alguém pode estar tentando entrar.`]);
+  const title = purpose === 'admin' ? 'Seu código do backoffice Fôlego' : 'Redefinir a senha do backoffice Fôlego';
+  const body = layout(title, [`Seu código: ${code}`, `Ele vale por ${CODE_TTL_MIN} minutos. Se não foi você que pediu, ignore este e-mail e avise o dono: alguém pode estar tentando entrar.`]);
   try {
-    await ctx.email.send({ to: email, subject: `${purpose === 'admin' ? 'Código do backoffice' : 'Código para definir a senha'}: ${code}`, ...body });
+    await ctx.email.send({ to: email, subject: `${purpose === 'admin' ? 'Código do backoffice' : 'Código para redefinir a senha'}: ${code}`, ...body });
   } catch {
     throw new AppError(502, 'email_failed', 'Não consegui enviar o e-mail agora. Tente de novo em instantes.');
   }
@@ -127,18 +127,21 @@ export async function passwordLogin(ctx: Ctx, sessionId: string, email: string, 
   return toAdminUser(u as never);
 }
 
-/** Primeiro acesso ou senha liberada pelo dono: manda um código para provar que o e-mail é da pessoa. Resposta sempre igual. */
+/**
+ * "Esqueci minha senha" e primeiro acesso: manda um código para provar que o e-mail é da pessoa. Vale para todo usuário ativo
+ * (antes só no primeiro acesso ou quando o dono liberava). Resposta sempre igual, para não revelar se o e-mail existe.
+ */
 export async function requestSetupCode(ctx: Ctx, email: string): Promise<{ sent: true; devCode?: string }> {
   const u = await credentials(ctx, email);
-  const allowed = Boolean(u && !u.password_hash && (u.password_set_at === null || (u.setup_allowed_until && new Date(u.setup_allowed_until).getTime() > Date.now())));
-  if (!allowed) return { sent: true };
+  if (!u) return { sent: true };
+  await audit(ctx.db, `admin:${u.id}`, 'admin_password_forgot_requested', 'admin_user', u.id);
   return sendCode(ctx, email, 'admin_setup');
 }
 
 /** Define a senha (código do e-mail + senha nova). Não entra no sistema: depois é preciso fazer o login normal. */
 export async function completeSetup(ctx: Ctx, email: string, code: string, password: string): Promise<void> {
   const u = await credentials(ctx, email);
-  const allowed = Boolean(u && !u.password_hash && (u.password_set_at === null || (u.setup_allowed_until && new Date(u.setup_allowed_until).getTime() > Date.now())));
+  const allowed = Boolean(u);
   const problem = checkPasswordPolicy(password, email);
   if (problem) throw new AppError(422, 'weak_password', problem);
   const r = await ctx.db.query<{ id: string; code_hash: Buffer; attempts: number }>(

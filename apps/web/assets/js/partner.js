@@ -56,6 +56,7 @@ export function renderPartner(root) {
     const email = el('input', { class: 'input', id: 'pt-email', type: 'email', autocomplete: 'username', required: true });
     const pass = el('input', { class: 'input', id: 'pt-pass', type: 'password', autocomplete: 'current-password', required: true });
     const go = el('button', { class: 'btn btn-primary', type: 'submit' }, 'Entrar');
+    const forgotLink = el('p', { class: 'fine' }, (() => { const b = el('button', { class: 'link', type: 'button' }, 'Esqueci minha senha'); b.addEventListener('click', () => drawForgot(email.value.trim())); return b; })());
     const form = el(
       'form', { class: 'pt-login-form' },
       el('div', { class: 'field' }, el('label', { class: 'label', for: 'pt-email' }, 'E-mail'), email),
@@ -80,8 +81,61 @@ export function renderPartner(root) {
         el('h1', { class: 'pt-login-title' }, 'Seus contatos, contratos e comissões num só lugar.'),
         message ? el('p', { class: 'note note-amber' }, icon('info'), el('span', {}, message)) : null,
         form,
-        el('p', { class: 'fine muted' }, 'Acesso só para parceiros do Fôlego. Esqueceu a senha? Peça uma nova ao Fôlego.')),
+        forgotLink,
+        el('p', { class: 'fine muted' }, 'Acesso só para parceiros do Fôlego.')),
     ));
+  }
+
+  /** "Esqueci minha senha": código de 6 dígitos no e-mail e senha nova. Depois volta ao login. */
+  function drawForgot(prefill = '') {
+    const email = el('input', { class: 'input', id: 'pt-f-email', type: 'email', autocomplete: 'username', required: true, value: prefill });
+    const ask = el('button', { class: 'btn btn-secondary', type: 'button' }, 'Enviar código para o meu e-mail');
+    const hint = el('p', { class: 'fine', role: 'status', 'aria-live': 'polite' });
+    const code = el('input', { class: 'input', id: 'pt-f-code', type: 'text', inputmode: 'numeric', maxlength: '6', autocomplete: 'one-time-code', required: true });
+    const p1 = el('input', { class: 'input', id: 'pt-f-p1', type: 'password', autocomplete: 'new-password', minlength: '12', required: true });
+    const p2 = el('input', { class: 'input', id: 'pt-f-p2', type: 'password', autocomplete: 'new-password', minlength: '12', required: true });
+    const save = el('button', { class: 'btn btn-primary', type: 'submit' }, 'Definir senha nova');
+    const back = el('button', { class: 'link', type: 'button' }, 'Voltar ao login');
+    back.addEventListener('click', () => drawLogin());
+    ask.addEventListener('click', async () => {
+      if (!email.value.includes('@')) return toast('Informe o e-mail.');
+      ask.disabled = true;
+      try {
+        const out = await call('POST', '/partner/forgot', { email: email.value.trim() });
+        hint.textContent = out?.devCode ? `Ambiente de desenvolvimento: código ${out.devCode}` : 'Se este e-mail tem acesso ao portal, o código chegou. Ele vale por 10 minutos.';
+        code.focus();
+      } catch (err) {
+        toast(err.message);
+      }
+      ask.disabled = false;
+    });
+    const form = el('form', { class: 'pt-login-form' },
+      el('div', { class: 'field' }, el('label', { class: 'label', for: 'pt-f-email' }, 'E-mail de acesso'), email),
+      ask, hint,
+      el('div', { class: 'field' }, el('label', { class: 'label', for: 'pt-f-code' }, 'Código recebido por e-mail'), code),
+      el('div', { class: 'field' }, el('label', { class: 'label', for: 'pt-f-p1' }, 'Senha nova'), withEye(p1), el('span', { class: 'fine' }, 'Mínimo de 12 caracteres, com letras e números. Evite o seu e-mail e senhas óbvias.')),
+      el('div', { class: 'field' }, el('label', { class: 'label', for: 'pt-f-p2' }, 'Repita a senha'), withEye(p2)),
+      save);
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (p1.value !== p2.value) return toast('As duas senhas não são iguais.');
+      save.disabled = true;
+      try {
+        await call('POST', '/partner/reset', { email: email.value.trim(), code: code.value.trim(), password: p1.value });
+        drawLogin('Senha redefinida. Entre com a senha nova.');
+      } catch (err) {
+        save.disabled = false;
+        toast(err.message);
+      }
+    });
+    root.replaceChildren(el('section', { class: 'pt-login' },
+      el('div', { class: 'pt-login-card' },
+        el('p', { class: 'pt-kicker' }, 'Portal do parceiro'),
+        el('h1', { class: 'pt-login-title' }, 'Redefinir a senha'),
+        el('p', { class: 'fine muted' }, 'Enviamos um código para o e-mail de acesso. Ele confirma que a caixa é sua.'),
+        form,
+        el('p', { class: 'fine' }, back))));
+    email.focus();
   }
 
   async function drawShell(tab = 'painel') {

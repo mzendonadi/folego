@@ -335,6 +335,25 @@ export function registerGestao(app: FastifyInstance, deps: AdminRouteDeps): void
     const a = await admin(req, 'parcerias');
     return partners.resetPassword(ctx, who(a), idParam((req.params as { id: string }).id));
   });
+  // acessos ao mesmo portal do parceiro (a equipe dele): listar, adicionar, trocar a senha de um e remover
+  app.get(`${P}/parcerias/parceiros/:id/usuarios`, async (req) => {
+    await admin(req, 'parcerias');
+    return partners.listPortalUsers(ctx, idParam((req.params as { id: string }).id));
+  });
+  app.post(`${P}/parcerias/parceiros/:id/usuarios`, { config: { rateLimit: { max: 20 * scale, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const a = await admin(req, 'parcerias');
+    return reply.status(201).send(await partners.addPortalUser(ctx, who(a), idParam((req.params as { id: string }).id), partners.partnerUserSchema.parse(req.body)));
+  });
+  app.post(`${P}/parcerias/parceiros/:id/usuarios/:uid/senha`, async (req) => {
+    const a = await admin(req, 'parcerias');
+    const p = req.params as { id: string; uid: string };
+    return partners.resetPassword(ctx, who(a), idParam(p.id), idParam(p.uid));
+  });
+  app.delete(`${P}/parcerias/parceiros/:id/usuarios/:uid`, async (req) => {
+    const a = await admin(req, 'parcerias');
+    const p = req.params as { id: string; uid: string };
+    return partners.removePortalUser(ctx, who(a), idParam(p.id), idParam(p.uid));
+  });
   // contratos fechados pelo parceiro com contatos do Fôlego e a baixa da comissão do Fôlego
   app.get(`${P}/parcerias/parceiros/:id/contratos`, async (req) => {
     await admin(req, 'parcerias');

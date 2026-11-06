@@ -30,6 +30,7 @@ import * as reportsApi from './reports.ts';
 import * as strategiesApi from './strategies.ts';
 import * as businessApi from './business.ts';
 import * as partnerExport from './partner-export.ts';
+import * as partnerAuth from './partner-auth.ts';
 import * as debts from './account-debts.ts';
 import { askPlanner } from './planner.ts';
 import * as program from './coach-program.ts';
@@ -407,6 +408,13 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     app.post('/api/partner/login', { config: { rateLimit: { max: 10, timeWindow: '5 minutes' } } }, async (req) => {
       const { email, password } = partnerLoginSchema.parse(req.body);
       return leads.partnerLogin(ctx, email, password);
+    });
+    // "Esqueci minha senha" do portal: código por e-mail e senha nova (resposta do pedido sempre igual).
+    app.post('/api/partner/forgot', { config: { rateLimit: { max: 5 * scale, timeWindow: '10 minutes' } } }, async (req) => partnerAuth.partnerRequestReset(ctx, partnerAuth.partnerForgotSchema.parse(req.body).email));
+    app.post('/api/partner/reset', { config: { rateLimit: { max: 8 * scale, timeWindow: '10 minutes' } } }, async (req, reply) => {
+      const { email, code, password } = partnerAuth.partnerResetSchema.parse(req.body);
+      await partnerAuth.partnerCompleteReset(ctx, email, code, password);
+      return reply.status(204).send();
     });
     app.get('/api/partner/leads', async (req) => ({ leads: await leads.partnerLeads(ctx, leads.partnerFromToken(ctx, req.headers.authorization)) }));
     // Exportar contatos do Fôlego em .xlsx com filtros (período, situação, UF, renda, dívidas, contrato, busca). Só o parceiro dono; revogados nunca entram.

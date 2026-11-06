@@ -177,9 +177,68 @@ export function partnersManager(ctx, { onChange }) {
       }
     });
     d.body.append(
-      el('div', { class: 'bo-form-grid' }, field('Razão social', legalName), field('Nome fantasia', tradeName, 'Aparece no portal do parceiro.'), field('Telefone', phone), field('Tipo', category), field('CNPJ', cnpj), field('E-mail de acesso ao portal', email, 'É o login do parceiro. Trocar o e-mail não muda a senha.'), field('Cidade', city), field('Estado', uf)),
+      el('div', { class: 'bo-form-grid' }, field('Razão social', legalName), field('Nome fantasia', tradeName, 'Aparece no portal do parceiro.'), field('Telefone', phone), field('Tipo', category), field('CNPJ', cnpj), field('E-mail de acesso ao portal', email, 'É o login principal do parceiro. Trocar o e-mail não muda a senha. Para incluir mais pessoas, use "Usuários de acesso" abaixo.'), field('Cidade', city), field('Estado', uf)),
       el('div', { class: 'bo-actions' }, save, reset),
+      usersSection(p, onChange),
     );
+  }
+
+  /** Vários acessos no MESMO portal: cada pessoa da equipe do parceiro com e-mail e senha próprios. A senha gerada aparece uma vez. */
+  function usersSection(p, refreshList) {
+    const list = el('ul', { class: 'bo-user-list' });
+    const email = text('E-mail do novo acesso', { type: 'email', maxlength: '200', placeholder: 'nome@empresa.com.br', autocomplete: 'off' });
+    const add = el('button', { class: 'btn btn-secondary btn-sm', type: 'button' }, icon('plus'), 'Adicionar acesso');
+    const draw = (r) => {
+      list.replaceChildren(...r.users.map((u) => {
+        const pw = el('button', { class: 'btn btn-quiet btn-sm', type: 'button' }, 'Nova senha');
+        pw.addEventListener('click', async () => {
+          if (!(await confirmDialog({ title: 'Gerar nova senha?', text: `A senha atual de ${u.email} deixa de funcionar. A nova aparece uma vez só.`, confirmLabel: 'Gerar' }))) return;
+          try {
+            const out = await api.senhaUsuarioParceiro(p.id, u.id);
+            secretsDrawer('Nova senha do acesso', [[`Senha de ${u.email}`, out.password]]);
+          } catch (e) {
+            toast(e?.message ?? 'Não consegui agora.');
+          }
+        });
+        const rm = el('button', { class: 'btn btn-quiet btn-sm', type: 'button', ...(r.users.length <= 1 ? { disabled: true, title: 'É o único acesso do parceiro' } : {}) }, 'Remover');
+        rm.addEventListener('click', async () => {
+          if (!(await confirmDialog({ title: 'Remover este acesso?', text: `${u.email} deixa de entrar no portal. Os contatos e contratos do parceiro continuam.`, confirmLabel: 'Remover', danger: true }))) return;
+          try {
+            await api.removerUsuarioParceiro(p.id, u.id);
+            toast('Acesso removido.');
+            await load();
+            refreshList();
+          } catch (e) {
+            toast(e?.message ?? 'Não consegui remover.');
+          }
+        });
+        return el('li', { class: 'bo-user' }, el('div', {}, el('strong', {}, u.email), el('span', { class: 'fine muted' }, u.main ? 'Acesso principal' : `Adicionado em ${day(u.createdAt)}`)), el('div', { class: 'bo-actions' }, pw, rm));
+      }));
+      add.disabled = r.users.length >= r.max;
+    };
+    async function load() {
+      try { draw(await api.usuariosParceiro(p.id)); } catch (e) { list.replaceChildren(el('li', { class: 'fine muted' }, e?.message ?? 'Não consegui carregar os acessos.')); }
+    }
+    add.addEventListener('click', async () => {
+      const v = email.value.trim();
+      if (!/^\S+@\S+\.\S+$/.test(v)) return toast('Informe um e-mail válido para o novo acesso.');
+      add.disabled = true;
+      try {
+        const out = await api.addUsuarioParceiro(p.id, v);
+        email.value = '';
+        secretsDrawer('Acesso adicionado', [[`Senha de ${out.email}`, out.password]]);
+        await load();
+      } catch (e) {
+        add.disabled = false;
+        toast(e?.message ?? 'Não consegui adicionar.');
+      }
+    });
+    load();
+    return el('section', { class: 'bo-users' },
+      el('h3', {}, 'Usuários de acesso ao portal'),
+      el('p', { class: 'fine muted' }, 'Quem entra no mesmo portal deste parceiro. Cada pessoa tem o próprio e-mail e a própria senha, e pode trocar a senha sozinha em "Esqueci minha senha".'),
+      list,
+      el('div', { class: 'bo-user-add' }, field('Adicionar outro e-mail de acesso', email), add));
   }
 
   function campaignDrawer(p, c) {

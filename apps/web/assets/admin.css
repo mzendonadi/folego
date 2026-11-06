@@ -308,3 +308,16 @@ button.bo-kpi:hover::after, button.bo-kpi:focus-visible::after { color: var(--pr
 /* D-151: os dois botões do bloco do usuário com exatamente o mesmo tamanho (largura toda do bloco), conteúdo à esquerda */
 .bo-me > .btn { flex: 1 1 100%; width: 100%; justify-content: flex-start; }
 
+/* D-159: acessos ao mesmo portal do parceiro (modal Editar) */
+.bo-users { margin-top: var(--s5, 24px); padding-top: var(--s4, 16px); border-top: 1px solid var(--line); display: grid; gap: var(--s3, 12px); }
+.bo-users h3 { margin: 0; }
+.bo-users > p { margin: 0; }
+.bo-user-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.bo-user { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent); }
+.bo-user:last-child { border-bottom: 0; }
+.bo-user > div:first-child { display: grid; gap: 2px; min-width: 0; }
+.bo-user strong { overflow-wrap: anywhere; }
+.bo-user .bo-actions { margin: 0; }
+.bo-user-add { display: grid; gap: 8px; justify-items: start; }
+.bo-user-add .field { width: 100%; max-width: 420px; }
+

@@ -43,7 +43,7 @@ function drawLogin(message = '') {
   const email = el('input', { class: 'input', id: 'bo-email', type: 'email', autocomplete: 'username', required: true });
   const password = el('input', { class: 'input', id: 'bo-password', type: 'password', autocomplete: 'current-password', required: true });
   const send = el('button', { class: 'btn btn-primary btn-block', type: 'submit' }, 'Continuar');
-  const first = el('button', { class: 'link', type: 'button' }, 'Primeiro acesso ou esqueci a senha');
+  const first = el('button', { class: 'link', type: 'button' }, 'Esqueci minha senha');
   first.addEventListener('click', () => drawSetup(email.value.trim().toLowerCase()));
   const form = el('form', { class: 'tool-form' },
     el('div', { class: 'field' }, el('label', { class: 'label', for: 'bo-email' }, 'E-mail'), email),
@@ -62,7 +62,7 @@ function drawLogin(message = '') {
       toast(err.message);
     }
   });
-  root.replaceChildren(loginCard('Entrar', 'Área restrita. Entre com e-mail e senha. No primeiro acesso, ou se esqueceu a senha, use o link abaixo: confirmamos seu e-mail por um código.', message, form));
+  root.replaceChildren(loginCard('Entrar', 'Área restrita. Entre com e-mail e senha. No primeiro acesso, ou se esqueceu a senha, use "Esqueci minha senha": confirmamos seu e-mail por um código.', message, form));
   email.focus();
 }
 
@@ -81,7 +81,7 @@ function drawSetup(prefill = '') {
     ask.disabled = true;
     try {
       const out = await api.setupCode(email.value.trim().toLowerCase());
-      hint.textContent = out.devCode ? `Ambiente de desenvolvimento: código ${out.devCode}` : 'Se este e-mail tem acesso e ainda não tem senha (ou o dono liberou a redefinição), o código chegou. Vale por 10 minutos.';
+      hint.textContent = out.devCode ? `Ambiente de desenvolvimento: código ${out.devCode}` : 'Se este e-mail tem acesso ao backoffice, o código chegou. Vale por 10 minutos.';
       code.focus();
     } catch (err) {
       toast(err.message);
@@ -107,7 +107,7 @@ function drawSetup(prefill = '') {
       toast(err.message);
     }
   });
-  root.replaceChildren(loginCard('Definir a senha', 'Primeiro acesso, ou o dono liberou a redefinição da sua senha. O código do e-mail confirma que a caixa é sua.', '', form));
+  root.replaceChildren(loginCard('Redefinir a senha', 'Primeiro acesso ou senha esquecida. O código do e-mail confirma que a caixa é sua; depois é só entrar com a senha nova.', '', form));
   email.focus();
 }
 

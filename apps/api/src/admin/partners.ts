@@ -137,13 +137,60 @@ export async function remove(ctx: Ctx, actor: string, id: string) {
   return { ok: true };
 }
 
-/** Nova senha do portal do parceiro (aparece uma vez). */
-export async function resetPassword(ctx: Ctx, actor: string, id: string) {
+/**
+ * Nova senha de UM acesso do portal (aparece uma vez). Sem `userId`, é o acesso principal (o primeiro cadastrado):
+ * com vários acessos no mesmo portal, cada um tem a sua senha e trocar uma não derruba as outras.
+ */
+export async function resetPassword(ctx: Ctx, actor: string, id: string, userId?: string) {
   const password = newToken().slice(0, 20);
-  const r = await ctx.db.query(`UPDATE app.partner_users SET password_hash = $2 WHERE partner_id = $1`, [id, hashPassword(password)]);
+  const r = userId
+    ? await ctx.db.query(`UPDATE app.partner_users SET password_hash = $3 WHERE partner_id = $1 AND id = $2`, [id, userId, hashPassword(password)])
+    : await ctx.db.query(`UPDATE app.partner_users SET password_hash = $2 WHERE id = (SELECT id FROM app.partner_users WHERE partner_id = $1 ORDER BY created_at LIMIT 1)`, [id, hashPassword(password)]);
   if (!r.rowCount) throw notFound();
-  await audit(ctx.db, actor, 'partner_password_reset', 'partner', id, {});
+  await audit(ctx.db, actor, 'partner_password_reset', 'partner', id, userId ? { userId } : {});
   return { password };
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Acessos ao portal do parceiro: vários e-mails (a equipe do parceiro) entram no MESMO portal, cada um com a sua senha.
+// ---------------------------------------------------------------------------------------------------------------------
+const MAX_PORTAL_USERS = 10;
+export const partnerUserSchema = z.strictObject({ email: z.string().trim().toLowerCase().email().max(200) });
+
+export async function listPortalUsers(ctx: Ctx, partnerId: string) {
+  const ok = await ctx.db.query(`SELECT 1 FROM app.partners WHERE id = $1`, [partnerId]);
+  if (ok.rows.length === 0) throw notFound();
+  const r = await ctx.db.query<{ id: string; email: string; role: string; created_at: Date }>(`SELECT id, email::text AS email, role, created_at FROM app.partner_users WHERE partner_id = $1 ORDER BY created_at`, [partnerId]);
+  return { users: r.rows.map((u, i) => ({ id: u.id, email: u.email, main: i === 0, role: u.role, createdAt: iso(u.created_at) })), max: MAX_PORTAL_USERS };
+}
+
+/** Cria o acesso com uma senha gerada (aparece uma vez, como no cadastro do parceiro). */
+export async function addPortalUser(ctx: Ctx, actor: string, partnerId: string, input: z.infer<typeof partnerUserSchema>) {
+  const ok = await ctx.db.query(`SELECT 1 FROM app.partners WHERE id = $1 AND NOT internal`, [partnerId]);
+  if (ok.rows.length === 0) throw notFound();
+  const n = await ctx.db.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.partner_users WHERE partner_id = $1`, [partnerId]);
+  if (num(n.rows[0]?.n ?? 0) >= MAX_PORTAL_USERS) throw new AppError(422, 'too_many', `Cada parceiro pode ter até ${MAX_PORTAL_USERS} acessos ao portal.`);
+  const password = newToken().slice(0, 20);
+  try {
+    const r = await ctx.db.query<{ id: string }>(`INSERT INTO app.partner_users(partner_id, email, password_hash, role) VALUES ($1,$2,$3,'member') RETURNING id`, [partnerId, input.email, hashPassword(password)]);
+    await audit(ctx.db, actor, 'partner_user_added', 'partner', partnerId, { userId: r.rows[0]!.id });
+    return { id: r.rows[0]!.id, email: input.email, password };
+  } catch (e) {
+    if (e instanceof Error && /duplicate key|partner_users_email_key/i.test(e.message)) throw new AppError(409, 'duplicate', 'Já existe um acesso com este e-mail (neste ou em outro parceiro).');
+    throw e;
+  }
+}
+
+/** Remove um acesso. O último não sai: o parceiro precisa de pelo menos um jeito de entrar. */
+export async function removePortalUser(ctx: Ctx, actor: string, partnerId: string, userId: string) {
+  await ctx.db.tx(async (q) => {
+    const all = await q.query<{ id: string }>(`SELECT id FROM app.partner_users WHERE partner_id = $1 ORDER BY created_at FOR UPDATE`, [partnerId]);
+    if (!all.rows.some((u) => u.id === userId)) throw notFound();
+    if (all.rows.length <= 1) throw new AppError(409, 'last_user', 'Este é o único acesso do parceiro. Adicione outro antes de remover este.');
+    await q.query(`DELETE FROM app.partner_users WHERE id = $1 AND partner_id = $2`, [userId, partnerId]);
+    await audit(q, actor, 'partner_user_removed', 'partner', partnerId, { userId });
+  });
+  return { ok: true };
 }
 
 export async function createCampaign(ctx: Ctx, actor: string, partnerId: string, c: z.infer<typeof campaignCreateSchema>) {
