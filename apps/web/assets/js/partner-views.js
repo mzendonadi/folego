@@ -251,7 +251,7 @@ function exportModal(ctx, leads) {
   const go = el('button', { class: 'btn btn-primary', type: 'button' }, 'Baixar .xlsx');
   const refresh = () => {
     const n = usable.filter(matches).length;
-    count.textContent = n === 0 ? 'Nenhum contato com esses filtros.' : `${n} ${n === 1 ? 'contato' : 'contatos'} neste filtro.`;
+    count.replaceChildren(...(n === 0 ? ['Nenhum contato com esses filtros'] : [el('strong', {}, String(n)), n === 1 ? ' contato neste filtro' : ' contatos neste filtro']));
     go.disabled = n === 0;
   };
 
@@ -275,10 +275,10 @@ function exportModal(ctx, leads) {
 
   const group = (title, options, set) => {
     if (options.length === 0) return null;
-    return el('fieldset', { class: 'pt-export-group' }, el('legend', { class: 'label' }, title), el('div', { class: 'pt-export-checks' }, ...options.map(([v, l]) => {
+    return el('fieldset', { class: 'pt-export-sec pt-export-group' }, el('legend', { class: 'pt-export-title' }, title), el('div', { class: 'pt-export-checks' }, ...options.map(([v, l]) => {
       const cb = el('input', { type: 'checkbox' });
       cb.addEventListener('change', () => { if (cb.checked) set.add(v); else set.delete(v); refresh(); });
-      return el('label', { class: 'pt-check' }, cb, el('span', {}, l));
+      return el('label', { class: 'pt-opt' }, cb, el('span', {}, l));
     })));
   };
   const deal = el('select', { class: 'input', 'aria-label': 'Contrato fechado' }, ...[['todos', 'Com e sem contrato'], ['com', 'Só com contrato fechado'], ['sem', 'Só sem contrato fechado']].map(([v, l]) => el('option', { value: v }, l)));
@@ -326,15 +326,14 @@ function exportModal(ctx, leads) {
 
   m.body.append(
     el('div', { class: 'pt-export' },
-      el('div', { class: 'field' }, el('span', { class: 'label' }, 'Período em que o contato foi recebido'), chips, custom),
+      el('div', { class: 'pt-export-sec' }, el('p', { class: 'pt-export-title' }, 'Período em que o contato foi recebido'), chips, custom),
       group('Situação', [['delivered', 'Novo'], ['contacted', 'Em contato'], ['converted', 'Contrato fechado'], ['rejected', 'Descartado']], f.status),
       group('Estado (UF)', distinct('uf').map((v) => [v, v]), f.uf),
       group('Faixa de renda', distinct('incomeBand').map((v) => [v, v]), f.income),
       group('Faixa de dívidas', distinct('debtBand').map((v) => [v, v]), f.debt),
-      el('div', { class: 'pt-export-row' }, el('label', { class: 'field' }, el('span', { class: 'label' }, 'Contrato'), deal), el('label', { class: 'field' }, el('span', { class: 'label' }, 'Buscar'), q)),
-      count,
-      el('div', { class: 'button-row' }, go, clear),
-      el('p', { class: 'pt-sub' }, 'Quem revogou a autorização nunca entra na planilha. Os dados são pessoais: use só para o contato autorizado.')));
+      el('div', { class: 'pt-export-sec pt-export-row' }, el('label', { class: 'pt-export-field' }, el('span', { class: 'pt-export-title' }, 'Contrato'), deal), el('label', { class: 'pt-export-field' }, el('span', { class: 'pt-export-title' }, 'Buscar'), q)),
+      el('p', { class: 'pt-export-note' }, 'Quem revogou a autorização nunca entra na planilha. Os dados são pessoais: use só para o contato autorizado.'),
+      el('div', { class: 'pt-export-foot' }, count, el('div', { class: 'pt-export-actions' }, clear, go))));
   drawChips();
   refresh();
 }

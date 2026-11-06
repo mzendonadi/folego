@@ -2688,16 +2688,43 @@ h3 { font-weight: 500; letter-spacing: -0.015em; } /* em corpo pequeno a serifa 
 .field[hidden] { display: none; }
 
 /* D-158: Exportar contatos do Fôlego em .xlsx (portal do parceiro) */
-.pt-export { display: grid; gap: var(--s4, 16px); }
-.pt-export .pt-filters { justify-content: flex-start; margin: 6px 0 0; }
-.pt-export-dates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s3, 12px); margin-top: var(--s3, 12px); }
+.pt-export { display: grid; }
+/* seções separadas por um fio, sem caixas: o rótulo é discreto e o conteúdo é o que pesa */
+.pt-export-sec { padding: var(--s4) 0; border-top: 1px solid var(--line); min-width: 0; }
+.pt-export > .pt-export-sec:first-child { border-top: 0; padding-top: 0; }
+.pt-export-group { border-inline: 0; border-bottom: 0; margin: 0; }
+.pt-export-title { display: block; margin: 0 0 10px; padding: 0; font-size: 0.86rem; font-weight: 600; color: var(--muted); }
+.pt-export .pt-filters { justify-content: flex-start; gap: 8px; }
+.pt-export .pt-chip { min-height: 38px; padding: 6px 15px; font-size: 0.93rem; font-weight: 600; transition: background-color 0.15s, border-color 0.15s, color 0.15s; }
+.pt-export .pt-chip[aria-checked="true"] { background: var(--primary); border-color: var(--primary); color: var(--primary-ink); }
+.pt-export .pt-chip[aria-checked="true"]:hover { color: var(--primary-ink); }
+.pt-export-dates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s3); margin-top: var(--s3); max-width: 420px; }
 .pt-export-dates[hidden] { display: none; }
-.pt-export-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s3, 12px); }
-.pt-export-group { border: 0; padding: 0; margin: 0; min-width: 0; }
-.pt-export-checks { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 6px; }
-.pt-check { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; font-weight: 600; cursor: pointer; }
-.pt-export-count { margin: 0; font-weight: 700; }
-@media (max-width: 639px) { .pt-export-dates, .pt-export-row { grid-template-columns: minmax(0, 1fr); } }
+.pt-export-dates .label { font-size: 0.86rem; font-weight: 600; color: var(--muted); }
+.pt-export-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s3); }
+.pt-export-field { display: grid; gap: 0; }
+.pt-export-checks { display: flex; flex-wrap: wrap; gap: 8px; }
+/* opções de marcar viram pílulas selecionáveis (a caixa nativa fica por baixo, para teclado e leitor de tela) */
+.pt-opt { position: relative; display: inline-flex; cursor: pointer; }
+.pt-opt input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.pt-opt span { display: inline-flex; align-items: center; gap: 6px; min-height: 38px; padding: 6px 15px; border-radius: 99px; border: 1px solid var(--line); background: var(--surface); font-size: 0.93rem; font-weight: 600; transition: background-color 0.15s, border-color 0.15s, color 0.15s; }
+.pt-opt:hover span { border-color: var(--primary); }
+.pt-opt input:checked + span { background: color-mix(in srgb, var(--primary) 11%, var(--surface)); border-color: var(--primary); color: var(--primary); }
+.pt-opt input:checked + span::before { content: "✓"; font-size: 0.8em; }
+.pt-opt input:focus-visible + span { outline: 2px solid var(--primary); outline-offset: 2px; }
+.pt-export-note { margin: 0; padding-top: var(--s4); border-top: 1px solid var(--line); font-size: 0.86rem; color: var(--muted); line-height: 1.5; max-width: 52ch; }
+/* rodapé fixo na janela: a contagem e o botão de baixar ficam sempre à vista */
+.pt-export-foot { position: sticky; bottom: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: var(--s3); flex-wrap: wrap; margin: var(--s4) calc(var(--s5) * -1) calc(var(--s5) * -1); padding: var(--s3) var(--s5); background: var(--surface); border-top: 1px solid var(--line); box-shadow: 0 -14px 24px -18px rgba(0, 0, 0, 0.3); }
+.pt-export-count { margin: 0; color: var(--muted); font-size: 0.93rem; }
+.pt-export-count strong { margin-right: 4px; font-family: var(--font-display); font-size: 1.7rem; font-weight: 500; line-height: 1; color: var(--ink); vertical-align: -2px; }
+.pt-export-actions { display: flex; align-items: center; gap: var(--s2); }
+@media (max-width: 639px) {
+  .pt-export-dates, .pt-export-row { grid-template-columns: minmax(0, 1fr); max-width: none; }
+  .pt-export-foot { margin-inline: calc(var(--s4) * -1); padding-inline: var(--s4); }
+  .pt-export-actions { width: 100%; }
+  .pt-export-actions .btn { flex: 1; justify-content: center; }
+}
+@media (prefers-reduced-motion: reduce) { .pt-export .pt-chip, .pt-opt span { transition: none; } }
 
 /* D-154: empresa com os mesmos recursos do pessoal: importar fatura, extrato, cheque especial e dívidas */
 .biz-import { margin-top: var(--s3); border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent); padding-top: var(--s3); }
