@@ -193,7 +193,7 @@ export async function purgeSubscriber(ctx: Ctx, subscriberId: string, actor: str
   await assertNotOwner(ctx, subscriberId); // conta de dono nunca é apagada (nem pela pessoa, nem pela rotina de retenção)
   const tables = (await subscriberTables(ctx)).filter((t) => !KEEP_ON_PURGE.has(t));
   const prof = await ctx.db.query<{ provider_subscription_id: string | null; status: string }>(`SELECT provider_subscription_id, status FROM app.billing_profiles WHERE subscriber_id = $1`, [subscriberId]);
-  if (prof.rows[0]?.provider_subscription_id && prof.rows[0].status !== 'canceled') await ctx.gateway.cancelCardSubscription(prof.rows[0].provider_subscription_id);
+  if (prof.rows[0]?.provider_subscription_id && prof.rows[0].status !== 'canceled') await ctx.gateway.stopCardSubscription(prof.rows[0].provider_subscription_id);
   await revokeAllForSubscriber(ctx, subscriberId); // corta o acesso aos bancos no agregador antes de apagar os dados
   return ctx.db.tx(async (q) => {
     const old = await q.query<{ email: string }>(`SELECT email::text AS email FROM app.subscribers WHERE id = $1`, [subscriberId]);

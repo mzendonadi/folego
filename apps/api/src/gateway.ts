@@ -23,8 +23,18 @@ export interface GatewayEvent {
 export interface BillingEvent {
   providerEventId: string;
   providerSubscriptionId: string;
-  type: 'charge_refused' | 'subscription_ended';
+  /** charge_created: o provedor gerou uma cobrança nova da assinatura (se ela já foi cancelada, é apagada na hora). */
+  type: 'charge_refused' | 'subscription_ended' | 'charge_created';
+  providerPaymentId?: string;
 }
+
+/**
+ * Resultado de cancelar de verdade uma assinatura no provedor:
+ *  - stopped: apagamos as cobranças em aberto e encerramos a assinatura (conferido);
+ *  - already_gone: já estava encerrada (as cobranças em aberto, se havia, foram apagadas);
+ *  - not_visible: o provedor NÃO enxerga esta assinatura (ex.: foi criada em outra conta, como a PF antiga). NÃO está cancelada: alguém precisa cancelar lá.
+ */
+export type StopResult = { result: 'stopped' | 'already_gone' | 'not_visible'; chargesRemoved: number };
 
 /** Resultado de ler um webhook: assinatura inválida, evento que não nos interessa, um pagamento a conferir ou um aviso da recorrência. */
 export type WebhookParse = { kind: 'invalid' } | { kind: 'ignore' } | { kind: 'payment'; event: GatewayEvent } | { kind: 'billing'; event: BillingEvent };
@@ -70,6 +80,8 @@ export interface PaymentGateway {
   createCardSubscription(input: CardSubscriptionInput): Promise<CardSubscription>;
   /** Para de cobrar na hora. Não estorna o mês que já foi pago. */
   cancelCardSubscription(providerSubscriptionId: string): Promise<void>;
+  /** Cancela DE VERDADE: apaga as cobranças pendentes e vencidas, encerra a assinatura e confere. Nunca finge que deu certo quando o provedor não enxerga a assinatura. */
+  stopCardSubscription(providerSubscriptionId: string): Promise<StopResult>;
   /** Muda o valor das próximas cobranças da assinatura (desconto de indicação, ou volta ao preço cheio). */
   updateCardSubscriptionValue(providerSubscriptionId: string, valueCents: number): Promise<void>;
   /** Cobrança avulsa no cartão (diferença proporcional de um upgrade). A pessoa paga na página segura do provedor (checkoutUrl). */
@@ -110,6 +122,9 @@ export class FakeGateway implements PaymentGateway {
     if ((b.billing === 'charge_refused' || b.billing === 'subscription_ended') && typeof b.subscriptionId === 'string') {
       return { kind: 'billing', event: { providerEventId: b.eventId, providerSubscriptionId: b.subscriptionId, type: b.billing } };
     }
+    if (b.billing === 'charge_created' && typeof b.subscriptionId === 'string' && typeof b.paymentId === 'string') {
+      return { kind: 'billing', event: { providerEventId: b.eventId, providerSubscriptionId: b.subscriptionId, type: 'charge_created', providerPaymentId: b.paymentId } };
+    }
     if (typeof b.paymentId !== 'string') return { kind: 'ignore' };
     return {
       kind: 'payment',
@@ -135,8 +150,18 @@ export class FakeGateway implements PaymentGateway {
     return { providerPaymentId, checkoutUrl: `DEMO-CARD-${providerPaymentId.toUpperCase()}` };
   }
 
-  async cancelCharge(_providerPaymentId: string): Promise<void> {
-    // De propósito não apaga: nos testes a cobrança "cancelada" ainda pode ser paga na corrida, e o sistema tem que aguentar.
+  /** Só no provedor de mentira: cobranças que o sistema mandou cancelar (para os testes conferirem). */
+  readonly cancelledCharges: string[] = [];
+  async cancelCharge(providerPaymentId: string): Promise<void> {
+    // De propósito não muda o status: nos testes a cobrança "cancelada" ainda pode ser paga na corrida, e o sistema tem que aguentar.
+    this.cancelledCharges.push(providerPaymentId);
+  }
+
+  /** Só no provedor de mentira: assinaturas que o provedor "não enxerga" (criadas em outra conta). */
+  readonly invisible = new Set<string>();
+  async stopCardSubscription(providerSubscriptionId: string): Promise<StopResult> {
+    if (this.invisible.has(providerSubscriptionId)) return { result: 'not_visible', chargesRemoved: 0 };
+    return { result: this.subscriptions.delete(providerSubscriptionId) ? 'stopped' : 'already_gone', chargesRemoved: 0 };
   }
 
   /** Só no provedor de mentira: o valor que a próxima cobrança teria (undefined = preço cheio do plano). */
@@ -306,6 +331,53 @@ export class AsaasGateway implements PaymentGateway {
     await this.callDelete(`/subscriptions/${encodeURIComponent(providerSubscriptionId)}`);
   }
 
+  /** GET que devolve o status HTTP em vez de lançar (404 aqui quer dizer "esta chave não enxerga isso"). */
+  private async probe(path: string): Promise<{ status: number; json: unknown }> {
+    let res: Response;
+    try {
+      res = await this.fetchFn(`${this.o.baseUrl}${path}`, { method: 'GET', headers: { access_token: this.o.apiKey, 'User-Agent': 'Folego/1.0' }, signal: AbortSignal.timeout(10_000) });
+    } catch {
+      throw new AppError(502, 'gateway_unreachable', 'Não consegui falar com o provedor de pagamento. Tente de novo.');
+    }
+    if (res.status !== 404 && !res.ok) {
+      await this.logRefusal('GET', path, res);
+      throw new AppError(502, 'gateway_error', 'O provedor de pagamento recusou o pedido. Tente de novo.');
+    }
+    return { status: res.status, json: res.status === 404 ? null : await res.json().catch(() => null) };
+  }
+
+  /**
+   * Cancelamento que só vale quando o provedor confirma. Antes, um 404 era tratado como "já cancelada" e a assinatura criada numa
+   * conta antiga (PF) seguia cobrando. Agora: 404 = "não enxergo" (not_visible); se enxerga, apaga as cobranças em aberto
+   * (inclusive a do mês seguinte, que o Asaas já deixa gerada), encerra a assinatura e CONFERE que ela saiu.
+   */
+  async stopCardSubscription(providerSubscriptionId: string): Promise<StopResult> {
+    const id = encodeURIComponent(providerSubscriptionId);
+    const head = await this.probe(`/subscriptions/${id}`);
+    if (head.status === 404) return { result: 'not_visible', chargesRemoved: 0 };
+    const gone = Boolean((head.json as { deleted?: unknown } | null)?.deleted);
+    let removed = 0;
+    for (const st of ['PENDING', 'OVERDUE']) {
+      let list: { data?: Array<{ id?: unknown }> } = {};
+      try {
+        list = (await this.call('GET', `/subscriptions/${id}/payments?status=${st}&limit=100`)) as typeof list;
+      } catch (e) {
+        if (!gone) throw e; // assinatura já apagada pode não listar mais: aí não há o que remover
+      }
+      for (const p of list.data ?? []) {
+        if (typeof p.id !== 'string') continue;
+        await this.callDelete(`/payments/${encodeURIComponent(p.id)}`);
+        removed += 1;
+      }
+    }
+    if (!gone) {
+      await this.callDelete(`/subscriptions/${id}`);
+      const after = await this.probe(`/subscriptions/${id}`);
+      if (!(after.status === 404 || Boolean((after.json as { deleted?: unknown } | null)?.deleted))) throw new AppError(502, 'gateway_error', 'O provedor não confirmou o cancelamento da assinatura.');
+    }
+    return { result: gone ? 'already_gone' : 'stopped', chargesRemoved: removed };
+  }
+
   /** Cobrança avulsa no cartão: o Asaas devolve a página segura (invoiceUrl) onde a pessoa paga; nada de cartão passa por aqui. */
   async createOneOffCardCharge(input: { customerId: string; orderId: string; valueCents: number; description: string; dueOn: string }): Promise<{ providerPaymentId: string; checkoutUrl: string }> {
     const p = (await this.call('POST', '/payments', {
@@ -358,6 +430,7 @@ export class AsaasGateway implements PaymentGateway {
       return { kind: 'ignore' };
     }
     if (b.event === 'PAYMENT_CREDIT_CARD_CAPTURE_REFUSED' && paymentSub) return { kind: 'billing', event: { providerEventId: b.id, providerSubscriptionId: paymentSub, type: 'charge_refused' } };
+    if (b.event === 'PAYMENT_CREATED' && paymentSub && typeof b.payment?.id === 'string') return { kind: 'billing', event: { providerEventId: b.id, providerSubscriptionId: paymentSub, type: 'charge_created', providerPaymentId: b.payment.id } };
     if ((b.event === 'SUBSCRIPTION_DELETED' || b.event === 'SUBSCRIPTION_INACTIVATED') && typeof b.subscription?.id === 'string') {
       return { kind: 'billing', event: { providerEventId: b.id, providerSubscriptionId: b.subscription.id, type: 'subscription_ended' } };
     }

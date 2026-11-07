@@ -4,6 +4,7 @@ import { processWhatsAppQueue } from '../whatsapp.ts';
 import { processBirdQueue, syncBirdStatuses } from '../bird.ts';
 import { sendPushReminders } from '../push.ts';
 import { maintenance } from '../subscriptions.ts';
+import { reconcileCanceled } from '../billing.ts';
 import { refreshRuntime } from '../runtime.ts';
 import { workerBeat } from '../health.ts';
 import { consentCheck, syncDueConnections } from '../openfinance.ts';
@@ -263,6 +264,7 @@ export async function runWorker(ctx: Ctx, opts: WorkerOptions, control: { stoppe
       ['boas_vindas', () => sendWelcomes(ctx, log)],
       ['indicadores_mercado', () => refreshMarket(ctx, log)],
       ['manutencao', () => maintenance(ctx, log)],
+      ['cobrancas_canceladas', () => reconcileCanceled(ctx, log)],
       ['open_finance', () => syncDueConnections(ctx, log)],
       ['consentimento_open_finance', () => consentCheck(ctx, log)],
     ];

@@ -12,7 +12,7 @@ import type { Ctx } from './services.ts';
 import { audit, num } from './services.ts';
 import type { Queryable } from './db.ts';
 import { planByCode, formatBrl } from './engine.ts';
-import type { BillingEvent, GatewayEvent } from './gateway.ts';
+import type { BillingEvent, GatewayEvent, StopResult } from './gateway.ts';
 
 export const TERMS_VERSION = '2026-10-03';
 export const CARD_GRACE_DAYS = 2; // tolerância para a renovação chegar por webhook antes de o acesso fechar
@@ -42,7 +42,7 @@ export async function startCardCheckout(ctx: Ctx, args: { subscriberId: string; 
   if (!price.rows[0]) throw new AppError(422, 'product_unavailable', 'Este plano não está disponível no momento.');
   const valueCents = num(price.rows[0].price_cents);
 
-  const cur = await ctx.db.query<{ status: string }>(`SELECT status FROM app.billing_profiles WHERE subscriber_id = $1`, [args.subscriberId]);
+  const cur = await ctx.db.query<{ status: string; provider_subscription_id: string | null }>(`SELECT status, provider_subscription_id FROM app.billing_profiles WHERE subscriber_id = $1`, [args.subscriberId]);
   const sub = await ctx.db.query<{ active: boolean }>(`SELECT (status = 'active' AND current_period_end > now()) AS active FROM app.subscriptions WHERE subscriber_id = $1`, [args.subscriberId]);
   if (cur.rows[0] && ['active', 'past_due'].includes(cur.rows[0].status)) throw new AppError(409, 'already_subscribed', 'Você já tem uma assinatura mensal ativa. Para trocar de plano, cancele e assine o novo depois do fim do mês pago.');
   if (sub.rows[0]?.active && cur.rows[0]?.status === 'canceled') throw new AppError(409, 'still_in_period', 'Seu plano está cancelado, mas o acesso continua até o fim do mês já pago. Depois dessa data você pode assinar de novo.');
@@ -63,6 +63,8 @@ export async function startCardCheckout(ctx: Ctx, args: { subscriberId: string; 
     await q.query(`INSERT INTO app.order_items(order_id, product_code, unit_price_cents) VALUES ($1,$2,$3)`, [id, plan.productCode, valueCents]);
     return id;
   });
+  // Checkout anterior que ficou pendente (a pessoa abandonou e voltou): a assinatura antiga seguiria gerando cobrança no provedor. Encerra antes de criar a nova.
+  if (cur.rows[0]?.provider_subscription_id) await stopAndAlert(ctx, args.subscriberId, cur.rows[0].provider_subscription_id, 'cancelamento').catch(() => undefined);
   let card;
   try {
     card = await ctx.gateway.createCardSubscription({
@@ -140,6 +142,14 @@ export async function handleBillingEvent(ctx: Ctx, event: BillingEvent): Promise
   if (!p) return 'ignored';
   const seen = await ctx.db.query<{ id: string }>(`INSERT INTO app.payment_events(provider, provider_event_id, payload) VALUES ($1,$2,$3::jsonb) ON CONFLICT (provider, provider_event_id) DO NOTHING RETURNING id`, [ctx.gateway.name, event.providerEventId, JSON.stringify(event)]);
   if (!seen.rows[0]) return 'ignored';
+  // Cobrança nova de uma assinatura que a pessoa já cancelou: nunca pode ser cobrada. Apaga na hora e avisa.
+  if (event.type === 'charge_created') {
+    if (p.status !== 'canceled') return 'ignored';
+    if (event.providerPaymentId) await ctx.gateway.cancelCharge(event.providerPaymentId);
+    await audit(ctx.db, 'system', 'charge_after_cancel_blocked', 'subscriber', p.subscriber_id, { paymentId: event.providerPaymentId ?? null });
+    await alertOwners(ctx, 'Cobrança de assinatura cancelada foi barrada', [`O Asaas gerou uma cobrança nova para um cliente que já tinha cancelado (${p.subscriber_id.slice(0, 8)}). Ela foi apagada na hora. Vale conferir se a assinatura foi encerrada no Asaas.`]);
+    return 'confirmed';
+  }
   if (event.type === 'charge_refused') {
     if (p.status === 'canceled') return 'ignored';
     await ctx.db.query(`UPDATE app.billing_profiles SET status = 'past_due', past_due_since = coalesce(past_due_since, now()) WHERE subscriber_id = $1`, [p.subscriber_id]);
@@ -155,9 +165,76 @@ export async function handleBillingEvent(ctx: Ctx, event: BillingEvent): Promise
   return 'confirmed';
 }
 
-async function markCanceled(ctx: Ctx, subscriberId: string, by: 'subscriber' | 'provider'): Promise<void> {
+// ---------------------------------------------------------------------------------------------------------------------
+// Cancelamento que vale de verdade. Regra do produto: depois do pedido de cancelamento NENHUMA cobrança pode sair.
+//  1) cancelar = o provedor confirma (cobranças em aberto apagadas e assinatura encerrada); "não enxergo" NÃO é "cancelada";
+//  2) cobrança nova de assinatura cancelada (webhook) é apagada na hora;
+//  3) varredura periódica reconfere todas as canceladas;
+//  4) qualquer coisa que não dê para confirmar vira alerta por e-mail aos administradores.
+// ---------------------------------------------------------------------------------------------------------------------
+async function alertOwners(ctx: Ctx, subject: string, lines: string[]): Promise<void> {
+  if (!ctx.email) return;
+  const body = layout(subject, lines);
+  for (const to of ctx.config.adminEmails ?? []) await ctx.email.send({ to, subject, ...body }).catch(() => undefined);
+}
+
+async function alertUnverified(ctx: Ctx, subscriberId: string, providerSubscriptionId: string, when: 'cancelamento' | 'varredura'): Promise<void> {
+  await ctx.db.query(`UPDATE app.billing_profiles SET cancel_verified = false, cancel_alerted_at = now() WHERE subscriber_id = $1`, [subscriberId]);
+  await audit(ctx.db, 'system', 'cancel_unverified', 'subscriber', subscriberId, { provider: ctx.gateway.name, when });
+  await alertOwners(ctx, 'URGENTE: cancelamento não confirmado no Asaas', [
+    `Um cancelamento (cliente ${subscriberId.slice(0, 8)}) NÃO foi confirmado no Asaas: a assinatura ${providerSubscriptionId} não é visível para a chave de API atual (provavelmente foi criada em outra conta do Asaas, como a PF antiga).`,
+    'Isso significa que o Asaas pode continuar cobrando. Entre na conta do Asaas onde ela foi criada, cancele a assinatura e apague as cobranças pendentes dela.',
+    'O Prumo já tirou o acesso renovável e vai reconferir sozinho; este aviso se repete no máximo a cada 7 dias.',
+  ]);
+}
+
+/** Cancela no provedor e confere. Devolve o resultado; "não visível" já dispara o alerta. */
+async function stopAndAlert(ctx: Ctx, subscriberId: string, providerSubscriptionId: string, when: 'cancelamento' | 'varredura'): Promise<StopResult> {
+  const out = await ctx.gateway.stopCardSubscription(providerSubscriptionId);
+  if (out.result === 'not_visible') await alertUnverified(ctx, subscriberId, providerSubscriptionId, when);
+  return out;
+}
+
+/**
+ * Varredura: reconfere as assinaturas canceladas (últimos 120 dias). Apaga cobrança em aberto que tenha aparecido, encerra assinatura que
+ * ainda esteja ativa e refaz o alerta (a cada 7 dias, até 45 dias depois do cancelamento) quando o provedor não enxerga a assinatura.
+ */
+let lastReconcile = 0;
+export async function reconcileCanceled(ctx: Ctx, opts: { force?: boolean; log?: (e: Record<string, unknown>) => void } = {}): Promise<number> {
+  if (!ctx.config.subscriptionsEnabled) return 0;
+  if (!opts.force && Date.now() - lastReconcile < 30 * 60_000) return 0;
+  lastReconcile = Date.now();
+  const r = await ctx.db.query<{ subscriber_id: string; sub: string; verified: boolean | null; alerted: Date | null; canceled_at: Date | null }>(
+    `SELECT subscriber_id, provider_subscription_id AS sub, cancel_verified AS verified, cancel_alerted_at AS alerted, canceled_at
+       FROM app.billing_profiles WHERE status = 'canceled' AND provider = $1 AND provider_subscription_id IS NOT NULL AND canceled_at > now() - interval '120 days' LIMIT 100`,
+    [ctx.gateway.name],
+  );
+  let fixed = 0;
+  for (const row of r.rows) {
+    try {
+      const out = await ctx.gateway.stopCardSubscription(row.sub);
+      if (out.result === 'not_visible') {
+        const recentlyAlerted = row.alerted !== null && Date.now() - new Date(row.alerted).getTime() < 7 * 86_400_000;
+        const tooOld = row.canceled_at !== null && Date.now() - new Date(row.canceled_at).getTime() > 45 * 86_400_000;
+        if (!recentlyAlerted && !tooOld) await alertUnverified(ctx, row.subscriber_id, row.sub, 'varredura');
+        continue;
+      }
+      if (row.verified !== true) await ctx.db.query(`UPDATE app.billing_profiles SET cancel_verified = true WHERE subscriber_id = $1`, [row.subscriber_id]);
+      if (out.result === 'stopped' || out.chargesRemoved > 0) {
+        fixed += 1;
+        await audit(ctx.db, 'system', 'charge_after_cancel_removed', 'subscriber', row.subscriber_id, { assinatura: out.result, cobrancasRemovidas: out.chargesRemoved });
+        await alertOwners(ctx, 'Cobrança de assinatura cancelada foi barrada', [`Encontramos ${out.result === 'stopped' ? 'a assinatura ainda ativa e ' : ''}${out.chargesRemoved} cobrança(s) em aberto de um cliente que já tinha cancelado (${row.subscriber_id.slice(0, 8)}). Já foram apagadas no Asaas.`]);
+      }
+    } catch (e) {
+      opts.log?.({ evento: 'varredura_cancelados_falhou', erro: e instanceof Error ? e.message.slice(0, 120) : 'erro' });
+    }
+  }
+  return fixed;
+}
+
+async function markCanceled(ctx: Ctx, subscriberId: string, by: 'subscriber' | 'provider', verified: boolean | null = null): Promise<void> {
   await ctx.db.tx(async (q) => {
-    await q.query(`UPDATE app.billing_profiles SET status = 'canceled', canceled_at = now() WHERE subscriber_id = $1`, [subscriberId]);
+    await q.query(`UPDATE app.billing_profiles SET status = 'canceled', canceled_at = now(), cancel_verified = coalesce($2, cancel_verified) WHERE subscriber_id = $1`, [subscriberId, verified]);
     await q.query(`UPDATE app.subscriptions SET cancel_at_period_end = true, canceled_at = coalesce(canceled_at, now()) WHERE subscriber_id = $1`, [subscriberId]);
     await audit(q, by === 'subscriber' ? `subscriber:${subscriberId}` : 'system', 'subscription_canceled', 'subscriber', subscriberId, { by });
   });
@@ -169,13 +246,14 @@ export async function cancelCardSubscription(ctx: Ctx, subscriberId: string): Pr
   const bp = await ctx.db.query<{ status: string; provider_subscription_id: string | null }>(`SELECT status, provider_subscription_id FROM app.billing_profiles WHERE subscriber_id = $1`, [subscriberId]);
   const p = bp.rows[0];
   if (!p || p.status === 'pending') {
-    // Nada cobrado ainda (checkout abandonado): apenas limpa.
-    if (p?.provider_subscription_id) await ctx.gateway.cancelCardSubscription(p.provider_subscription_id);
+    // Nada cobrado ainda (checkout abandonado): encerra a assinatura criada no provedor (senão ela segue gerando cobrança) e limpa.
+    if (p?.provider_subscription_id) await stopAndAlert(ctx, subscriberId, p.provider_subscription_id, 'cancelamento');
     await ctx.db.query(`DELETE FROM app.billing_profiles WHERE subscriber_id = $1 AND status = 'pending'`, [subscriberId]);
     throw new AppError(409, 'nothing_to_cancel', 'Não há assinatura ativa para cancelar.');
   }
-  if (p.status !== 'canceled' && p.provider_subscription_id) await ctx.gateway.cancelCardSubscription(p.provider_subscription_id);
-  if (p.status !== 'canceled') await markCanceled(ctx, subscriberId, 'subscriber');
+  let verified = true;
+  if (p.status !== 'canceled' && p.provider_subscription_id) verified = (await stopAndAlert(ctx, subscriberId, p.provider_subscription_id, 'cancelamento')).result !== 'not_visible';
+  if (p.status !== 'canceled') await markCanceled(ctx, subscriberId, 'subscriber', verified);
   const sub = await ctx.db.query<{ current_period_end: Date | string }>(`SELECT current_period_end FROM app.subscriptions WHERE subscriber_id = $1`, [subscriberId]);
   return { accessUntil: new Date(sub.rows[0]?.current_period_end ?? Date.now()).getTime() };
 }
