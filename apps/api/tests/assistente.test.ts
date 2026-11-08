@@ -21,7 +21,8 @@ const config = {
 };
 const sent: { to: string; text: string }[] = [];
 let n = 0;
-const fake = { async sendText(_c: unknown, to: string, text: string) { sent.push({ to, text }); return { id: `w${(n += 1)}` }; } } as unknown as WaTransport;
+let failSend = false;
+const fake = { async sendText(_c: unknown, to: string, text: string) { if (failSend) throw Object.assign(new Error('A Bird recusou o envio para +5534998375296'), { status: 422 }); sent.push({ to, text }); return { id: `w${(n += 1)}` }; } } as unknown as WaTransport;
 const ctx = (): Ctx => ({ db, config, whatsapp: fake, email: mailbox } as unknown as Ctx);
 
 before(async () => {
@@ -145,4 +146,62 @@ test('assistente: número já vinculado a outra conta é recusado; sem assinatur
   await say('+5511900000001', 'mercado 20');
   assert.match(last(), /assinatura do Prumo não está ativa/);
   assert.equal((await db.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.ledger_entries WHERE amount_cents = -2000`)).rows[0]!.n, '0');
+});
+
+test('assistente de verdade: responde "como está minha conta" com os dados dela, não lança pergunta e registra falha de envio', async () => {
+  const c = client();
+  await subscribe(c, 'assist4@exemplo.com', 'assist-sub-0004');
+  const link = (await c('POST', '/api/account/assistant/link')).json;
+  const P = '+5511977770004';
+  await say(P, `VINCULAR ${link.pending.code}`);
+  await say(P, 'mercado 45');
+  const entries = async () => (await db.query<{ n: string }>(`SELECT count(*)::text AS n FROM app.ledger_entries`)).rows[0]!.n;
+
+  // sem IA: a situação sai pronta, com os números dela (o caso da mensagem que ficou sem resposta)
+  sent.length = 0;
+  await say(P, 'Fôlego me diga como está a situação da minha conta');
+  assert.match(last(), /Situação da sua conta/);
+  assert.match(last(), /saiu R\$\s?45,00/);
+
+  // com IA: ela recebe os dados da conta (sem e-mail nem telefone) e a resposta vai para a pessoa; a conversa continua no "e o cartão?"
+  const realFetch = globalThis.fetch;
+  const bodies: { system: string; messages: { role: string; content: string }[] }[] = [];
+  config.anthropicApiKey = 'sk-ant-de-mentira';
+  globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+    if (!String(url).startsWith('https://api.anthropic.com/')) return realFetch(url as string, init);
+    bodies.push(JSON.parse(String(init?.body)));
+    return new Response(JSON.stringify({ content: [{ type: 'text', text: '**Tudo sob controle.** Você gastou R$ 45,00 neste mês.' }], usage: { input_tokens: 10, output_tokens: 10 } }), { status: 200, headers: { 'content-type': 'application/json' } });
+  }) as typeof fetch;
+  try {
+    const before = await entries();
+    sent.length = 0;
+    await say(P, 'Como está a situação da minha conta?');
+    assert.equal(last(), '*Tudo sob controle.* Você gastou R$ 45,00 neste mês.');
+    assert.match(bodies[0]!.messages.at(-1)!.content, /DADOS DA CONTA[\s\S]*saiu R\$\s?45,00/);
+    assert.ok(!/assist4@exemplo|5511977770004|11977770004/.test(JSON.stringify(bodies[0])), 'nada que identifique a pessoa vai para a IA');
+    await say(P, 'e o cartão?');
+    assert.equal(bodies[1]!.messages.length, 3, 'lembra da pergunta anterior');
+    await say(P, 'posso gastar 200 em roupa?');
+    assert.equal(await entries(), before, 'pergunta nunca vira lançamento');
+    assert.match(bodies[2]!.messages.at(-1)!.content, /posso gastar 200 em roupa/);
+    await say(P, 'sair');
+    const mem = await db.query(`SELECT 1 FROM app.settings WHERE key LIKE 'assistant_chat:%'`);
+    assert.equal(mem.rows.length, 0, 'desconectar apaga a memória da conversa');
+  } finally {
+    globalThis.fetch = realFetch;
+    config.anthropicApiKey = null as never;
+  }
+
+  // envio recusado pela Bird: não derruba nada e o motivo fica registrado (sem o telefone)
+  const link2 = (await c('POST', '/api/account/assistant/link')).json;
+  await say(P, `VINCULAR ${link2.pending.code}`);
+  failSend = true;
+  try {
+    assert.equal(await say(P, 'ajuda'), true);
+  } finally { failSend = false; }
+  const note = (await db.query<{ value: { msg: string | null } }>(`SELECT value FROM app.settings WHERE key = 'assistant_last_send'`)).rows[0]!.value;
+  assert.match(note.msg ?? '', /recusou o envio.*422|422.*recusou o envio/);
+  assert.ok(!/\d{8,}/.test(note.msg ?? ''), 'o telefone não é guardado');
+  await say(P, 'ajuda');
+  assert.equal((await db.query<{ value: { msg: string | null } }>(`SELECT value FROM app.settings WHERE key = 'assistant_last_send'`)).rows[0]!.value.msg, null, 'voltou a enviar: limpa o aviso');
 });

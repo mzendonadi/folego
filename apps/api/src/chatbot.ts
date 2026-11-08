@@ -239,7 +239,7 @@ async function aiBudgetLeft(ctx: Ctx): Promise<boolean> {
   return num(r.rows[0]?.n ?? 0) < AI_DAILY_CAP;
 }
 
-async function askModel(ctx: Ctx, system: string, history: { role: 'user' | 'assistant'; content: string }[]): Promise<{ text: string; inTok: number; outTok: number } | null> {
+export async function askModel(ctx: Ctx, system: string, history: { role: 'user' | 'assistant'; content: string }[]): Promise<{ text: string; inTok: number; outTok: number } | null> {
   const c = ctx.config;
   if (!c.aiEnabled || !c.anthropicApiKey) return null;
   if (!(await aiBudgetLeft(ctx))) return null;

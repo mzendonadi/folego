@@ -14,6 +14,7 @@ import { ensureHouseAccount, HOUSE_PARTNER_ID } from './wa-bird.ts';
 import { createBizEntry, businessOverview } from './business.ts';
 import { finishInvoice, finishReceipt, getPending, handleDocument, handleImage, hearAudio, mediaOf, setPending } from './assistant-media.ts';
 import type { MediaEnv, MediaRef } from './assistant-media.ts';
+import { accountFacts, answerQuestion, forgetTurns, looksLikeQuestion, situationReply, wantsSituation } from './assistant-brain.ts';
 
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // sem 0/O/1/I para não confundir ao digitar
 const CODE_MINUTES = 30;
@@ -34,10 +35,25 @@ function tooMany(key: string): boolean {
   return list.length > 30;
 }
 
+/** Guarda o resultado do último envio (null = deu certo) para o suporte ver na hora por que o assistente ficou mudo. Só texto técnico, sem telefone. */
+async function noteSend(ctx: Ctx, msg: string | null): Promise<void> {
+  await ctx.db
+    .query(`INSERT INTO app.settings(key, value) VALUES ('assistant_last_send', $1::jsonb) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`, [JSON.stringify({ at: new Date().toISOString(), msg })])
+    .catch(() => undefined);
+}
+
 async function reply(ctx: Ctx, digits: string, text: string): Promise<void> {
   const acc = (await loadAccount(ctx, HOUSE_PARTNER_ID)) ?? (await ensureHouseAccount(ctx));
-  if (!acc) return;
-  await transportOf(ctx, 'bird').sendText(credOf(acc), digits, text).catch(() => undefined); // fora da janela de 24 h ou Bird fora do ar: não há o que fazer
+  if (!acc) return noteSend(ctx, 'conta do Fôlego no WhatsApp não encontrada');
+  try {
+    await transportOf(ctx, 'bird').sendText(credOf(acc), digits, text);
+    await noteSend(ctx, null);
+  } catch (e) {
+    // fora da janela de 24 h ou Bird fora do ar: a pessoa fica sem resposta, então o motivo precisa ficar registrado (nunca em silêncio)
+    const why = `${e instanceof Error ? e.name : 'erro'}${(e as { status?: number }).status ? ` ${(e as { status?: number }).status}` : ''}: ${e instanceof Error ? e.message : String(e)}`.replace(/\d{8,}/g, '…').slice(0, 220);
+    console.error(JSON.stringify({ evento: 'assistente_envio_falhou', motivo: why }));
+    await noteSend(ctx, why);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -82,6 +98,17 @@ export async function startLink(ctx: Ctx, personId: string): Promise<AssistantVi
 
 export async function unlink(ctx: Ctx, personId: string): Promise<void> {
   await ctx.db.query(`DELETE FROM app.assistant_links WHERE subscriber_id = $1`, [personId]);
+  await forgetTurns(ctx, personId);
+}
+
+/** Pergunta em linguagem natural: responde com os dados da conta (IA) ou, sem IA, monta a situação pronta. false = não deu para responder. */
+async function answerFree(ctx: Ctx, digits: string, person: string, account: string, scope: 'pf' | 'pj', today: string, question: string, folded: string): Promise<boolean> {
+  await requireFeature(ctx, account, scope === 'pj' ? 'business' : 'ledger');
+  const facts = await accountFacts(ctx, account, scope, today);
+  const said = await answerQuestion(ctx, person, facts, question);
+  if (said) { await reply(ctx, digits, said); return true; }
+  if (wantsSituation(folded)) { await reply(ctx, digits, situationReply(facts)); return true; }
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -241,13 +268,14 @@ async function converse(ctx: Ctx, digits: string, link: Link, rawIn: string, med
       if (scope === 'pj') await requireFeature(ctx, account, 'business');
     }
   }
-  const t = fold(text);
+  // "Fôlego, saldo" / "Prumo me diga...": o nome de quem chama não atrapalha o comando.
+  const t = fold(text).replace(/^(folego|prumo|folia)\b[\s,:!.-]*/, '');
 
   if (pending && /^(cancelar|cancela|nao|descartar|deixa|esquece|deixa pra la)$/.test(t)) {
     await setPending(ctx, person, null);
     return reply(ctx, digits, 'Tudo bem, descartei.');
   }
-  if (/^(ajuda|menu|help|oi|ola|bom dia|boa tarde|boa noite|\?)$/.test(t)) return reply(ctx, digits, HELP);
+  if (t === '' || /^(ajuda|menu|help|oi|ola|bom dia|boa tarde|boa noite|\?)$/.test(t)) return reply(ctx, digits, HELP);
   if (/^(sair|parar|desvincular|desconectar|cancelar)$/.test(t)) {
     await unlink(ctx, person);
     return reply(ctx, digits, 'Tudo certo: este WhatsApp foi desconectado do Prumo. Para conectar de novo, gere um código no app.');
@@ -309,9 +337,18 @@ async function converse(ctx: Ctx, digits: string, link: Link, rawIn: string, med
   }
   if (pending?.kind === 'receipt' && !/\d/.test(text)) return finishReceipt(env, pending.receipt, text);
 
-  // Qualquer outra frase: tenta entender como lançamento.
+  // Pergunta ("como está a situação da minha conta?", "posso gastar 200 em roupa?"): responde com os dados da conta, nunca lança.
+  if (looksLikeQuestion(t)) {
+    if (await answerFree(ctx, digits, person, account, scope, today, text, t)) return;
+    return reply(ctx, digits, 'Não consegui analisar essa pergunta agora. Tente SALDO, CONTAS (vencimentos), METAS ou SITUAÇÃO DA CONTA. Digite AJUDA para ver tudo.');
+  }
+
+  // Qualquer outra frase: tenta entender como lançamento; sem valor, é conversa e a IA responde com os dados da conta.
   const entry = parseQuickEntry(text, today);
-  if (!entry) return reply(ctx, digits, 'Não achei o valor. Escreva junto o quanto foi, por exemplo: "mercado 45". Digite AJUDA para ver o que eu entendo.');
+  if (!entry) {
+    if (await answerFree(ctx, digits, person, account, scope, today, text, t)) return;
+    return reply(ctx, digits, 'Não achei o valor. Escreva junto o quanto foi, por exemplo: "mercado 45". Digite AJUDA para ver o que eu entendo.');
+  }
   if (!(await env.canWrite())) return reply(ctx, digits, 'Seu acesso a esta conta é só de consulta: quem lança é o titular.');
   if (pending) await setPending(ctx, person, null); // lançamento novo substitui o que estava esperando
   if (scope === 'pj') return saveBizEntry(ctx, digits, account, entry);
