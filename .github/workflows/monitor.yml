@@ -23,22 +23,52 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Conferir o site e a saúde
+        env:
+          # Opcional: segredo MONITOR_KEY (Settings > Secrets > Actions). Se existir, vai no cabeçalho X-Monitor-Key,
+          # para uma regra do Cloudflare (WAF > Skip) liberar o monitor sem abrir o site para robôs em geral.
+          MONITOR_KEY: ${{ secrets.MONITOR_KEY }}
         run: |
           falhas=""
-          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 https://folego.online/ || echo 000)
-          [ "$code" = "200" ] || falhas="$falhas\n- Página inicial respondeu $code"
-          # duas tentativas: um engasgo isolado não deve acordar ninguém
-          for i in 1 2; do
-            code=$(curl -s -o "$RUNNER_TEMP/deep.json" -w '%{http_code}' --max-time 20 https://folego.online/api/health/deep || echo 000)
-            [ "$code" = "200" ] && break
-            sleep 20
-          done
-          if [ "$code" != "200" ]; then
-            falhas="$falhas\n- Saúde profunda respondeu $code"
-            if [ -s "$RUNNER_TEMP/deep.json" ]; then
-              detalhe=$(node -e "const j=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));for(const [k,v] of Object.entries(j.checks||{}))if(!v.ok)console.log('  * '+k+': '+v.detail)" "$RUNNER_TEMP/deep.json" 2>/dev/null || true)
-              falhas="$falhas\n$detalhe"
+          avisos=""
+          UA="FolegoMonitor/1.0 (+https://github.com/mzendonadi/folego; GitHub Actions)"
+          args=(-s -A "$UA" --max-time 20)
+          [ -n "$MONITOR_KEY" ] && args+=(-H "X-Monitor-Key: $MONITOR_KEY")
+
+          # Pede a URL até 3 vezes (um engasgo isolado não deve acordar ninguém).
+          # Escreve em $RUNNER_TEMP/<nome>.code e .hdr; devolve o código HTTP em $code.
+          pedir() {
+            nome="$1"; url="$2"; code=000
+            for i in 1 2 3; do
+              code=$(curl "${args[@]}" -D "$RUNNER_TEMP/$nome.hdr" -o "$RUNNER_TEMP/$nome.json" -w '%{http_code}' "$url" || echo 000)
+              [ "$code" = "200" ] && return 0
+              [ "$i" = "3" ] || sleep $((i * 15))
+            done
+            return 1
+          }
+
+          # 403 com cabeçalho cf-mitigated = o Cloudflare respondeu e barrou o monitor (não é o site fora do ar).
+          bloqueado_cf() { [ "$code" = "403" ] && grep -qi '^cf-mitigated' "$RUNNER_TEMP/$1.hdr" 2>/dev/null; }
+
+          pedir home https://folego.online/ || {
+            if bloqueado_cf home; then avisos="$avisos\n- Página inicial: Cloudflare barrou o monitor (403 cf-mitigated)"
+            else falhas="$falhas\n- Página inicial respondeu $code"; fi
+          }
+
+          pedir deep https://folego.online/api/health/deep || {
+            if bloqueado_cf deep; then
+              avisos="$avisos\n- Saúde profunda: Cloudflare barrou o monitor (403 cf-mitigated)"
+            else
+              falhas="$falhas\n- Saúde profunda respondeu $code"
+              if [ -s "$RUNNER_TEMP/deep.json" ]; then
+                detalhe=$(node -e "const j=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));for(const [k,v] of Object.entries(j.checks||{}))if(!v.ok)console.log('  * '+k+': '+v.detail)" "$RUNNER_TEMP/deep.json" 2>/dev/null || true)
+                falhas="$falhas\n$detalhe"
+              fi
             fi
+          }
+
+          if [ -n "$avisos" ]; then
+            echo "::warning::Monitor barrado pelo Cloudflare - a saúde não foi conferida nesta rodada. Crie a regra WAF (Skip) para o cabeçalho X-Monitor-Key e salve o segredo MONITOR_KEY."
+            printf "$avisos\n"
           fi
           if [ -n "$falhas" ]; then
             echo "::error::Fôlego com problema:"
