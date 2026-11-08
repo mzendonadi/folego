@@ -343,7 +343,16 @@ export async function handleBirdEvent(ctx: Ctx, event: unknown, opts: { log?: (e
     [ref ?? '', provider],
   );
   const m = row.rows[0];
-  if (!m) return { handled: await applyBirdStatus(ctx, type, data, str(obj(data.error).message) ?? str(data.error) ?? str(data.reason) ?? str(data.failure_reason) ?? type) }; // não é convite: pode ser mensagem da caixa de entrada
+  if (!m) {
+    const why = str(obj(data.error).message) ?? str(data.error) ?? str(data.reason) ?? str(data.failure_reason) ?? type;
+    const handled = await applyBirdStatus(ctx, type, data, why); // não é convite: pode ser mensagem da caixa de entrada
+    if (!handled && next === 'falhou') {
+      // Resposta do assistente que a Bird recusou depois de aceitar o envio (ex.: "no credit available"): sem isto a pessoa fica sem resposta e ninguém sabe por quê.
+      await ctx.db.query(`INSERT INTO app.settings(key, value) VALUES ('assistant_last_send', $1::jsonb) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`, [JSON.stringify({ at: new Date().toISOString(), msg: `A Bird recusou o envio: ${why}`.replace(/\d{8,}/g, '…').slice(0, 220) })]).catch(() => undefined);
+      opts.log?.({ evento: 'bird_resposta_recusada', motivo: why.slice(0, 120) });
+    }
+    return { handled };
+  }
   if (next === 'falhou') {
     if ((RANK[m.status] ?? 0) >= RANK.entregue!) return { handled: true }; // já entregue: um "falhou" atrasado não desfaz
     const why = str(obj(data.error).message) ?? str(data.error) ?? str(data.reason) ?? str(data.failure_reason) ?? type;

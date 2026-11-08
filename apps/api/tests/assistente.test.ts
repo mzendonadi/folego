@@ -205,3 +205,10 @@ test('assistente de verdade: responde "como está minha conta" com os dados dela
   await say(P, 'ajuda');
   assert.equal((await db.query<{ value: { msg: string | null } }>(`SELECT value FROM app.settings WHERE key = 'assistant_last_send'`)).rows[0]!.value.msg, null, 'voltou a enviar: limpa o aviso');
 });
+
+test('assistente: aviso da Bird de resposta recusada (sem crédito) fica registrado', async () => {
+  const { handleBirdEvent } = await import('../src/bird.ts');
+  await handleBirdEvent(ctx(), { type: 'whatsapp.failed', data: { id: 'msg-sem-credito', metadata: { ref: null }, reason: 'no credit available: no credit available' } });
+  const note = (await db.query<{ value: { msg: string } }>(`SELECT value FROM app.settings WHERE key = 'assistant_last_send'`)).rows[0]!.value;
+  assert.match(note.msg, /recusou o envio: no credit available/);
+});
