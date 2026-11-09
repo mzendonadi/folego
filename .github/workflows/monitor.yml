@@ -31,15 +31,20 @@ jobs:
           falhas=""
           avisos=""
           UA="FolegoMonitor/1.0 (+https://github.com/mzendonadi/folego; GitHub Actions)"
-          args=(-s -A "$UA" --max-time 20)
-          [ -n "$MONITOR_KEY" ] && args+=(-H "X-Monitor-Key: $MONITOR_KEY")
+          args=(-sS -A "$UA" --max-time 20)
+          # tira espaços e quebras de linha que costumam vir junto ao colar o segredo
+          MONITOR_KEY=$(printf '%s' "$MONITOR_KEY" | tr -d '[:space:]')
+          if [ -n "$MONITOR_KEY" ]; then args+=(-H "X-Monitor-Key: $MONITOR_KEY"); fi
 
           # Pede a URL até 3 vezes (um engasgo isolado não deve acordar ninguém).
           # Escreve em $RUNNER_TEMP/<nome>.code e .hdr; devolve o código HTTP em $code.
           pedir() {
             nome="$1"; url="$2"; code=000
             for i in 1 2 3; do
-              code=$(curl "${args[@]}" -D "$RUNNER_TEMP/$nome.hdr" -o "$RUNNER_TEMP/$nome.json" -w '%{http_code}' "$url" || echo 000)
+              rc=0
+              code=$(curl "${args[@]}" -D "$RUNNER_TEMP/$nome.hdr" -o "$RUNNER_TEMP/$nome.json" -w '%{http_code}' "$url" 2>"$RUNNER_TEMP/$nome.err") || rc=$?
+              code=${code:-000}
+              echo "[$nome] tentativa $i: HTTP $code (curl rc=$rc) $(tr '\n' ' ' < "$RUNNER_TEMP/$nome.err")"
               [ "$code" = "200" ] && return 0
               [ "$i" = "3" ] || sleep $((i * 15))
             done
