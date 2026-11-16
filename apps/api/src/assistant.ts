@@ -14,6 +14,7 @@ import { ensureHouseAccount, HOUSE_PARTNER_ID } from './wa-bird.ts';
 import { createBizEntry, businessOverview } from './business.ts';
 import { finishInvoice, finishReceipt, getPending, handleDocument, handleImage, hearAudio, mediaOf, setPending } from './assistant-media.ts';
 import type { MediaEnv, MediaRef } from './assistant-media.ts';
+import { noteActivity } from './activity.ts';
 import { accountFacts, answerQuestion, forgetTurns, looksLikeQuestion, situationReply, wantsSituation } from './assistant-brain.ts';
 
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // sem 0/O/1/I para não confundir ao digitar
@@ -220,6 +221,7 @@ async function saveBizEntry(ctx: Ctx, digits: string, account: string, entry: { 
 
 async function converse(ctx: Ctx, digits: string, link: Link, rawIn: string, mediaIn: MediaRef | null): Promise<void> {
   const person = link.subscriber_id;
+  await noteActivity(ctx, person, 'whatsapp'); // usuários ativos do Prumo no backoffice (uma gravação por dia)
   const account = await effectiveAccountId(ctx, person);
   const today = todaySaoPaulo();
   const month = today.slice(0, 7);

@@ -13,6 +13,13 @@ export const eventSchema = z.object({
 });
 export type EventInput = z.infer<typeof eventSchema>;
 
+/** Nomes das telas do app do Prumo (o site registra view "conta_<aba>"): usados na jornada do cliente. */
+export const PRUMO_TAB_LABEL: Record<string, string> = {
+  login: 'Entrar', planos: 'Escolher o plano', coach: 'Coach', geral: 'Visão geral', lancamentos: 'Lançamentos', orcamento: 'Orçamento', cobrancas: 'Cobranças', carteiras: 'Carteiras', cartoes: 'Cartões',
+  empresa: 'Empresa', contas: 'Contas conectadas', lembretes: 'Lembretes', dividas: 'Dívidas', cofre: 'Cofre', metas: 'Metas', ferias: 'Férias', investimentos: 'Investimentos', estrategias: 'Estratégias',
+  relatorios: 'Relatórios', planejador: 'Planejador', cenarios: 'E se...?', mercado: 'Mercado', treinador: 'Treinador', simulador: 'Simulador', familia: 'Compartilhar', indicar: 'Indique e ganhe', perfil: 'Perfil', plano: 'Plano e dados',
+};
+
 const BOT = /bot|crawl|spider|slurp|headless|lighthouse|facebookexternalhit|preview|monitor|uptime/i;
 
 /** Ignora robôs (não fazem parte do funil). Devolve true se gravou. */

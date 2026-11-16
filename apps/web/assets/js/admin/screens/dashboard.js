@@ -1,6 +1,66 @@
 // Dashboard: os indicadores que respondem "quantos vieram, quantos preencheram, quantos pagaram, como, e por quê não".
 import { api } from '../api.js';
-import { el, brl, int, pct, duration, card, cardOpts, kpi, kpis, grid, table, bar, columns, badge, drawer, periodSelect, EMPLOYMENT, PRODUCT, PLAN, WEEKDAY, VIEW } from '../ui.js';
+import { el, brl, int, pct, duration, card, cardOpts, kpi, kpis, grid, table, bar, columns, badge, drawer, periodSelect, EMPLOYMENT, PRODUCT, PLAN, WEEKDAY, VIEW, PRUMO_TAB } from '../ui.js';
+
+const PRUMO_CTA = { prumo_pedir_codigo: 'Pediram o código de acesso', prumo_entrou: 'Entraram com o código', prumo_plano_controle: 'Clicaram em Assinar o Controle (/prumo)', prumo_plano_ousado: 'Clicaram em Assinar o Ousado (/prumo)', prumo_plano_desbravador: 'Clicaram em Assinar o Desbravador (/prumo)' };
+const prumoCtaName = (id) => PRUMO_CTA[id] ?? (id.startsWith('prumo_tour_') ? `Exploraram "${PRUMO_TAB[id.slice(11)] ?? id.slice(11)}" na página /prumo` : id.startsWith('prumo_assinar_') ? `Escolheram assinar o ${PLAN[id.slice(14)] ?? id.slice(14)}` : id);
+const DEVICE = { mobile: 'Celular', tablet: 'Tablet', desktop: 'Computador', 'n/d': 'Não informado' };
+
+/** Indicadores do Prumo (página /prumo e app /conta): acessos, usuários ativos, funil até a assinatura, abas mais usadas e origem. */
+function prumoSection(pm, days) {
+  const k = pm.kpis;
+  const since = (v) => (v ? new Date(v).toLocaleDateString('pt-BR') : null);
+  const maxTab = Math.max(...pm.tabs.map((t) => t.sessions), 1);
+  const overview = card(
+    'Prumo: acessos e usuários ativos',
+    kpis(
+      kpi('Visitas em /prumo', int(k.landingVisitors), `${int(k.landingViews)} aberturas`),
+      kpi('Abriram o app (/conta)', int(k.appSessions), `${int(k.appViews)} telas abertas`),
+      kpi('Usuários ativos no período', int(k.activeUsers), `${int(k.activeApp)} no app · ${int(k.activeWhatsapp)} no WhatsApp`, 'good'),
+      kpi('Ativos hoje', int(k.dau), 'no app ou no WhatsApp'),
+      kpi('Ativos em 7 dias', int(k.wau)),
+      kpi('Ativos em 30 dias', int(k.mau), k.totalSubscribers ? `${pct((k.mau / k.totalSubscribers) * 100)} dos ${int(k.totalSubscribers)} assinantes` : ''),
+      kpi('Voltaram em 2+ dias', int(k.returningUsers), `${pct(k.returningPct)} dos ativos`),
+      kpi('Entradas (logins) e contas novas', `${int(k.logins)} · ${int(k.newAccounts)}`, 'pessoas distintas no período'),
+    ),
+    el('p', { class: 'fine' }, `Período: últimos ${days === 3650 ? 'todos os' : days} ${days === 3650 ? 'registros' : 'dias'}. "Ativos" vem do registro de uso no servidor${since(pm.activityTrackingSince) ? ` (desde ${since(pm.activityTrackingSince)})` : ' (começa a contar a partir de agora)'}; telas, cliques e origem vêm do rastreamento anônimo do site${since(pm.appTrackingSince) ? ` (app desde ${since(pm.appTrackingSince)})` : ''}.`),
+  );
+  const funnel = card(
+    'Funil do Prumo: da página à assinatura',
+    el('ol', { class: 'bo-funnel' }, ...pm.funnel.map((s, i) => el('li', {}, el('div', { class: 'bo-funnel-row' }, el('span', {}, s.label), el('strong', {}, int(s.count)), el('span', { class: 'muted' }, i === 0 ? '' : `${pct(s.pctOfPrev)} do passo anterior`)), bar(s.count, pm.funnel[0].count || 1, i === pm.funnel.length - 1 ? 'good' : 'primary')))),
+    el('p', { class: 'fine' }, 'Os três primeiros passos são do rastreamento anônimo (pessoas por navegador). Conta, cobrança e assinatura vêm dos registros reais; quem já tinha conta e só voltou não entra em "criaram a conta".'),
+    cardOpts({ sub: 'Cada pessoa conta uma vez por etapa.' }),
+  );
+  const dayLabel = (x) => new Date(`${x.day}T12:00:00`).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+  const byDay = grid(
+    2,
+    card('Usuários ativos por dia', columns(pm.byDay.map((x) => ({ label: dayLabel(x), value: x.users })), { label: 'Usuários ativos por dia' })),
+    card('Acessos por dia (pessoas por navegador)', columns(pm.byDay.map((x) => ({ label: dayLabel(x), value: x.landing + x.app })), { label: 'Acessos ao Prumo por dia' }), el('p', { class: 'fine' }, 'Soma das visitas à página /prumo e das aberturas do app.')),
+  );
+  const tabs = card(
+    'Abas mais usadas no app',
+    table(
+      [{ label: 'Aba', render: (t) => PRUMO_TAB[t.tab] ?? t.tab }, { label: 'Pessoas', align: 'right', render: (t) => int(t.sessions) }, { label: 'Assinantes', align: 'right', render: (t) => int(t.users) }, { label: 'Aberturas', align: 'right', render: (t) => int(t.events) }, { label: '', render: (t) => bar(t.sessions, maxTab) }],
+      pm.tabs,
+      { emptyText: 'Ainda sem aberturas de abas registradas (o rastreamento do app começa a contar a partir da publicação).' },
+    ),
+  );
+  const clicks = card(
+    'Cliques e passos no Prumo',
+    table([{ label: 'Ação', render: (c) => prumoCtaName(c.id) }, { label: 'Pessoas', align: 'right', render: (c) => int(c.sessions) }, { label: 'Cliques', align: 'right', render: (c) => int(c.clicks) }], pm.ctas, { emptyText: 'Sem cliques registrados ainda.' }),
+  );
+  const people = grid(
+    2,
+    card('Usuários ativos por plano', table([{ label: 'Plano', render: (p) => PLAN[p.plan] ?? (p.plan === 'sem_plano' ? 'Sem plano ativo' : p.plan) }, { label: 'Pessoas', align: 'right', render: (p) => int(p.users) }], pm.byPlan, { emptyText: 'Sem usuários ativos registrados ainda.' })),
+    card('Aparelhos de quem acessa o Prumo', table([{ label: 'Aparelho', render: (x) => DEVICE[x.device] ?? x.device }, { label: 'Pessoas', align: 'right', render: (x) => int(x.sessions) }], pm.devices, { emptyText: 'Sem dados.' })),
+  );
+  const sources = card(
+    'De onde vêm as visitas do Prumo',
+    table([{ label: 'Origem', render: (s) => (s.medium ? `${s.source} / ${s.medium}` : s.source) }, { label: 'Pessoas', align: 'right', render: (s) => int(s.sessions) }], pm.sources, { emptyText: 'Sem visitas rastreadas ainda.' }),
+    el('p', { class: 'fine' }, 'Use links com UTM ao divulgar o Prumo (ex.: folego.online/prumo?utm_source=instagram&utm_medium=bio).'),
+  );
+  return el('div', { class: 'bo-stack' }, overview, grid(2, funnel, tabs), byDay, grid(2, clicks, sources), people);
+}
 
 export async function dashboardScreen(ctx) {
   const days = ctx.state.days;
@@ -176,7 +236,7 @@ export async function dashboardScreen(ctx) {
 
   const ai = card('Uso de IA', kpis(kpi('Escritas pela IA', int(d.ai.ai), null, '', open('ai')), kpi('Pelo modelo fixo', int(d.ai.template), null, '', open('ai')), kpi('Tokens de entrada', int(d.ai.inputTokens), null, '', open('ai')), kpi('Tokens de saída', int(d.ai.outputTokens), null, '', open('ai'))), el('p', { class: 'fine' }, 'Compare os tokens com o custo da sua conta Anthropic para saber quanto a IA custa por entrega.'));
 
-  return el('div', { class: 'bo-stack' }, head, top, grid(2, funnel, aband), byDay, grid(2, products, methods), subs, profile, traffic, timing, ai, saudeCard(saude));
+  return el('div', { class: 'bo-stack' }, head, top, grid(2, funnel, aband), byDay, grid(2, products, methods), subs, profile, traffic, d.prumo ? prumoSection(d.prumo, days) : null, timing, ai, saudeCard(saude));
 }
 
 const SAUDE = { banco: 'Banco de dados', worker: 'Worker (entregas em segundo plano)', fila: 'Fila de entregas', webhooks: 'Eventos de pagamento', ebook: 'Envio do e-book', backup: 'Backup', disco: 'Disco do servidor', custos: 'Custos e limites (IA e e-mail)' };

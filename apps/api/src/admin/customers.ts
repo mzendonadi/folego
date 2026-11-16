@@ -5,6 +5,7 @@ import { AppError, notFound } from '../errors.ts';
 import type { Ctx } from '../services.ts';
 import { audit, num } from '../services.ts';
 import { SUB_STATUS_SQL } from './metrics.ts';
+import { PRUMO_TAB_LABEL } from './events.ts';
 import type { AdminUser } from './auth.ts';
 import { can } from './auth.ts';
 import { subscriberReferralView } from '../referrals.ts';
@@ -379,6 +380,27 @@ const VIEW_LABEL: Record<string, string> = {
   landing: 'Abriu a página inicial', intake: 'Abriu o formulário do diagnóstico', processing: 'Aguardou o cálculo', preview: 'Viu o resultado grátis',
   checkout: 'Abriu o pagamento', addon: 'Abriu a compra de um complemento', delivery: 'Abriu o Mapa completo', tools: 'Abriu as ferramentas grátis',
   translator: 'Abriu o Tradutor de Cobrança', account: 'Abriu a área da assinatura', partner: 'Abriu o portal do parceiro',
+  prumo: 'Abriu a página do Prumo (/prumo)',
+};
+const viewLabel = (view: unknown): string => {
+  const v = String(view);
+  if (VIEW_LABEL[v]) return VIEW_LABEL[v]!;
+  if (v.startsWith('conta_')) {
+    const tab = v.slice(6);
+    return tab === 'login' ? 'Abriu a tela de entrar no Prumo' : tab === 'planos' ? 'Viu a escolha de planos do Prumo' : `Abriu a aba "${PRUMO_TAB_LABEL[tab] ?? tab}" do Prumo`;
+  }
+  return `Abriu ${v}`;
+};
+const CTA_LABEL: Record<string, string> = {
+  prumo_pedir_codigo: 'Pediu o código de acesso ao Prumo', prumo_entrou: 'Entrou no Prumo com o código', prumo_plano_controle: 'Clicou em Assinar o Controle (página do Prumo)',
+  prumo_plano_ousado: 'Clicou em Assinar o Ousado (página do Prumo)', prumo_plano_desbravador: 'Clicou em Assinar o Desbravador (página do Prumo)',
+};
+const ctaLabel = (id: unknown): string => {
+  const v = String(id);
+  if (CTA_LABEL[v]) return CTA_LABEL[v]!;
+  if (v.startsWith('prumo_assinar_')) return `Escolheu assinar o plano ${v.slice(14)}`;
+  if (v.startsWith('prumo_tour_')) return `Explorou "${PRUMO_TAB_LABEL[v.slice(11)] ?? v.slice(11)}" na página do Prumo`;
+  return `Clicou em "${v}"`;
 };
 
 export async function sessionTimeline(ctx: Ctx, sessionIds: string[]): Promise<TimelineItem[]> {
@@ -387,8 +409,8 @@ export async function sessionTimeline(ctx: Ctx, sessionIds: string[]): Promise<T
   const out: TimelineItem[] = [];
   for (const e of ev.rows) {
     const at = iso(e.created_at)!;
-    if (e.name === 'view') out.push({ at, kind: 'view', label: VIEW_LABEL[String(e.props.view)] ?? `Abriu ${String(e.props.view)}` });
-    else if (e.name === 'cta') out.push({ at, kind: 'click', label: `Clicou em "${String(e.props.id)}"` });
+    if (e.name === 'view') out.push({ at, kind: 'view', label: viewLabel(e.props.view) });
+    else if (e.name === 'cta') out.push({ at, kind: 'click', label: ctaLabel(e.props.id) });
     else if (e.name === 'tool') out.push({ at, kind: 'tool', label: `Usou a ferramenta grátis "${String(e.props.tool)}"` });
     else if (e.name === 'intake_step') out.push({ at, kind: 'step', label: `Avançou para a etapa ${String(e.props.step)} do formulário` });
     if (e.props.attr && typeof e.props.attr === 'object') {

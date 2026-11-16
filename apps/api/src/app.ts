@@ -50,6 +50,7 @@ import { eventSchema, recordEvent } from './admin/events.ts';
 import { publicCatalog } from './admin/manage.ts';
 import * as redo from './redo.ts';
 import { mapOffer } from './map-offer.ts';
+import { noteActivity } from './activity.ts';
 import * as demoAccounts from './demo.ts';
 import { refreshRuntime } from './runtime.ts';
 import * as partnerPortal from './partner-portal.ts';
@@ -504,6 +505,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     });
     const subscriberId = await sub.subscriberOf(ctx, sessionId);
     if (!subscriberId) throw new AppError(401, 'not_logged_in', 'Entre com seu e-mail para continuar.');
+    await noteActivity(ctx, subscriberId, 'app'); // usuários ativos do Prumo no backoffice (uma gravação por dia)
     return subscriberId;
   };
   /** A conta cujos dados ela usa: a do titular, se ela for membro de uma conta compartilhada. */

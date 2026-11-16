@@ -10,6 +10,7 @@ import { installBanner, pushBanner, registerWorker } from './account-app.js';
 import { chartsForTab } from './account-charts-views.js';
 import { businessHomeCard } from './account-business-views.js';
 import { hideHeaderAvatar, showHeaderAvatar } from './account-avatar.js';
+import { track } from './track.js';
 
 const card = (...c) => el('section', { class: 'card d-section' }, ...c.filter(Boolean));
 const TAB_IDS = TABS.map((t) => t.id);
@@ -74,7 +75,8 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
 
   // ---------- login por código ----------
   function drawLogin() {
-    const email = el('input', { class: 'input', id: 'ac-email', type: 'email', autocomplete: 'email', required: true });
+    track('view', { view: 'conta_login' });
+    const email =el('input', { class: 'input', id: 'ac-email', type: 'email', autocomplete: 'email', required: true });
     const sendBtn = el('button', { class: 'btn btn-primary', type: 'submit' }, 'Enviar código');
     const sendForm = el('form', { class: 'tool-form' }, el('div', { class: 'field' }, el('label', { class: 'label', for: 'ac-email' }, 'Seu e-mail'), email), sendBtn);
     const codeBox = el('div', { hidden: true });
@@ -83,6 +85,7 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
       sendBtn.disabled = true;
       try {
         const out = await api.requestLoginCode(email.value.trim());
+        track('cta', { id: 'prumo_pedir_codigo' });
         drawCode(email.value.trim(), out.devCode);
       } catch (error) {
         sendBtn.disabled = false;
@@ -142,6 +145,7 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
         btn.disabled = true;
         try {
           await api.loginWithCode(addr, code.value.trim());
+          track('cta', { id: 'prumo_entrou' });
           boot();
         } catch {
           btn.disabled = false;
@@ -156,8 +160,10 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
 
   // ---------- sem plano ativo: escolher ----------
   function drawPlans(acc) {
+    track('view', { view: 'conta_planos' });
     const cards = PLANS.map((p) => {
       const btn = el('button', { class: 'btn btn-primary', type: 'button' }, `Assinar por ${brl(p.priceCents)}/mês`, icon('arrow-right'));
+      btn.addEventListener('click', () => track('cta', { id: `prumo_assinar_${p.code}` }));
       btn.addEventListener('click', () => drawCardCheckout(p, root, { api, before: 0, email: acc.email, onBack: () => drawPlans(acc), onDone: boot }));
       return el(
         'article', { class: 'script' },
@@ -210,6 +216,7 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
     let current = wantedTab;
     let token = 0;
     let stopPix = () => {};
+    let trackedTab = null; // cada abertura de aba conta uma vez (trocar o mês ou recarregar a mesma aba não conta de novo)
 
     const panel = el('div', { class: 'acc-panel', role: 'tabpanel', tabindex: '-1' });
     const tabButtons = TABS.map((t) => {
@@ -275,6 +282,10 @@ export function renderAccount(root, { api, tab: initialTab = null }) {
       stopPix();
       current = id;
       wantedTab = id;
+      if (trackedTab !== id) {
+        trackedTab = id;
+        track('view', { view: `conta_${id}` });
+      }
       const mine = ++token;
       tabButtons.forEach((b) => {
         const on = b.dataset.tab === id;

@@ -5,6 +5,7 @@ import { el, icon } from './dom.js';
 import { brl } from './format.js';
 import { donut, bars, line, hbars } from './charts.js';
 import { bindStaticPrices } from './prices.js';
+import { track } from './track.js';
 
 const R = (n) => Math.round(n * 100); // reais -> centavos
 
@@ -221,7 +222,10 @@ function tour(root) {
   const body = el('div', { class: 'pm-tabpanel', role: 'tabpanel', tabindex: '-1' });
   const btns = TABS.map((t) => {
     const b = el('button', { class: 'pm-tab', type: 'button', role: 'tab', id: `pm-tab-${t.id}`, 'aria-controls': 'pm-panel', 'aria-selected': 'false' }, t.label);
-    b.addEventListener('click', () => show(t.id));
+    b.addEventListener('click', () => {
+      track('cta', { id: `prumo_tour_${t.id}` }); // qual tela do Prumo a pessoa foi conhecer
+      show(t.id);
+    });
     return b;
   });
   btns.forEach((b) => list.append(b));
@@ -257,7 +261,9 @@ function plans(root) {
   const copy = grid.cloneNode(true);
   const names = ['Controle', 'Ousado', 'Desbravador'];
   copy.querySelectorAll('article.plan-card').forEach((a, i) => {
-    a.append(el('a', { class: `btn btn-block ${a.classList.contains('plan-featured') ? 'btn-primary' : 'btn-secondary'}`, href: '/conta' }, `Assinar o ${names[i] ?? 'plano'}`));
+    const buy = el('a', { class: `btn btn-block ${a.classList.contains('plan-featured') ? 'btn-primary' : 'btn-secondary'}`, href: '/conta' }, `Assinar o ${names[i] ?? 'plano'}`);
+    buy.addEventListener('click', () => track('cta', { id: `prumo_plano_${(names[i] ?? 'plano').toLowerCase()}` }));
+    a.append(buy);
   });
   root.replaceChildren(copy);
   bindStaticPrices(root);

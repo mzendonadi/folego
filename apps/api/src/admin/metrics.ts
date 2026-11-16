@@ -361,7 +361,133 @@ export async function partnerships(ctx: Ctx, days: number) {
 // ---------------------------------------------------------------------------
 // Visão do dashboard (junta o essencial em uma chamada)
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Prumo (a página /prumo e o app /conta): acessos, usuários ativos, abas mais usadas e o funil até a assinatura.
+// Só contagens. As telas vêm do rastreamento anônimo do site (app.events); "ativos" vêm do registro de uso do servidor (app.subscriber_activity).
+// ---------------------------------------------------------------------------
+const APP_VIEW = `(e.props->>'view' = 'account' OR left(coalesce(e.props->>'view', ''), 6) = 'conta_')`;
+const PRUMO_ANY = `(e.props->>'view' = 'prumo' OR ${APP_VIEW})`;
+const TODAY = `(now() AT TIME ZONE ${TZ})::date`;
+
+export async function prumo(ctx: Ctx, days: number) {
+  const from = `now() - make_interval(days => $1)`;
+  const since = `${TODAY} - ($1::int - 1)`; // início do período em dias de Brasília
+  const view = `e.name = 'view' AND e.created_at >= ${from}`;
+
+  const k = await one(
+    ctx,
+    `SELECT
+       (SELECT count(DISTINCT e.session_id) FROM app.events e WHERE ${view} AND e.props->>'view' = 'prumo') AS landing,
+       (SELECT count(DISTINCT e.session_id) FROM app.events e WHERE ${view} AND ${APP_VIEW}) AS app_sessions,
+       (SELECT count(*) FROM app.events e WHERE ${view} AND ${APP_VIEW}) AS app_views,
+       (SELECT count(*) FROM app.events e WHERE ${view} AND e.props->>'view' = 'prumo') AS landing_views,
+       (SELECT min(e.created_at) FROM app.events e WHERE left(coalesce(e.props->>'view', ''), 6) = 'conta_') AS app_tracking_since`,
+    [days],
+  );
+  const act = await one(
+    ctx,
+    `SELECT
+       count(DISTINCT subscriber_id) FILTER (WHERE day >= ${TODAY}) AS dau,
+       count(DISTINCT subscriber_id) FILTER (WHERE day >= ${TODAY} - 6) AS wau,
+       count(DISTINCT subscriber_id) FILTER (WHERE day >= ${TODAY} - 29) AS mau,
+       count(DISTINCT subscriber_id) FILTER (WHERE day >= ${since}) AS period_users,
+       count(DISTINCT subscriber_id) FILTER (WHERE day >= ${since} AND channel = 'app') AS period_app,
+       count(DISTINCT subscriber_id) FILTER (WHERE day >= ${since} AND channel = 'whatsapp') AS period_whatsapp,
+       min(day) AS tracking_since
+       FROM app.subscriber_activity`,
+    [days],
+  );
+  const ret = await one(
+    ctx,
+    `SELECT count(*) AS active, count(*) FILTER (WHERE d >= 2) AS returning
+       FROM (SELECT subscriber_id, count(DISTINCT day) AS d FROM app.subscriber_activity WHERE day >= ${since} GROUP BY 1) x`,
+    [days],
+  );
+  const byPlan = await rows<{ plan: string; n: string }>(
+    ctx,
+    `SELECT coalesce(s.plan, 'sem_plano') AS plan, count(DISTINCT a.subscriber_id) AS n
+       FROM app.subscriber_activity a LEFT JOIN app.subscriptions s ON s.subscriber_id = a.subscriber_id
+      WHERE a.day >= ${since} GROUP BY 1 ORDER BY 2 DESC`,
+    [days],
+  );
+  const dayViews = await rows<{ day: string; landing: string; app: string }>(
+    ctx,
+    `SELECT to_char((e.created_at AT TIME ZONE ${TZ})::date, 'YYYY-MM-DD') AS day,
+            count(DISTINCT e.session_id) FILTER (WHERE e.props->>'view' = 'prumo') AS landing,
+            count(DISTINCT e.session_id) FILTER (WHERE ${APP_VIEW}) AS app
+       FROM app.events e WHERE ${view} AND ${PRUMO_ANY} GROUP BY 1 ORDER BY 1`,
+    [days],
+  );
+  const dayUsers = await rows<{ day: string; users: string; whatsapp: string }>(
+    ctx,
+    `SELECT to_char(day, 'YYYY-MM-DD') AS day, count(DISTINCT subscriber_id) AS users, count(DISTINCT subscriber_id) FILTER (WHERE channel = 'whatsapp') AS whatsapp
+       FROM app.subscriber_activity WHERE day >= ${since} GROUP BY 1 ORDER BY 1`,
+    [days],
+  );
+  const dayKeys = [...new Set([...dayViews.map((d) => d.day), ...dayUsers.map((d) => d.day)])].sort();
+  const tabs = await rows<{ tab: string; n: string; s: string; u: string }>(
+    ctx,
+    `SELECT substr(e.props->>'view', 7) AS tab, count(*) AS n, count(DISTINCT e.session_id) AS s, count(DISTINCT x.subscriber_id) AS u
+       FROM app.events e LEFT JOIN app.sessions x ON x.id = e.session_id
+      WHERE ${view} AND left(coalesce(e.props->>'view', ''), 6) = 'conta_' AND e.props->>'view' NOT IN ('conta_login', 'conta_planos')
+      GROUP BY 1 ORDER BY 3 DESC, 2 DESC`,
+    [days],
+  );
+  const ctas = await rows<{ id: string; n: string; s: string }>(
+    ctx,
+    `SELECT e.props->>'id' AS id, count(*) AS n, count(DISTINCT e.session_id) AS s
+       FROM app.events e WHERE e.name = 'cta' AND e.created_at >= ${from} AND left(coalesce(e.props->>'id', ''), 6) = 'prumo_' GROUP BY 1 ORDER BY 2 DESC`,
+    [days],
+  );
+  const f = await one(
+    ctx,
+    `SELECT
+       (SELECT count(DISTINCT e.session_id) FROM app.events e WHERE ${view} AND e.props->>'view' = 'prumo') AS landing,
+       (SELECT count(DISTINCT e.session_id) FROM app.events e WHERE ${view} AND ${APP_VIEW}) AS opened_app,
+       (SELECT count(DISTINCT e.session_id) FROM app.events e WHERE e.name = 'cta' AND e.created_at >= ${from} AND e.props->>'id' = 'prumo_pedir_codigo') AS asked_code,
+       (SELECT count(*) FROM app.subscribers WHERE deleted_at IS NULL AND created_at >= ${from}) AS new_accounts,
+       (SELECT count(DISTINCT subscriber_id) FROM app.orders WHERE subscriber_id IS NOT NULL AND created_at >= ${from}) AS started_checkout,
+       (SELECT count(*) FROM (SELECT subscriber_id, min(paid_at) AS first_paid FROM app.orders WHERE subscriber_id IS NOT NULL AND status = 'paid' GROUP BY 1) x WHERE first_paid >= ${from}) AS subscribed,
+       (SELECT count(DISTINCT entity_id) FROM app.audit_log WHERE entity = 'subscriber' AND action = 'subscriber_login' AND occurred_at >= ${from}) AS logins`,
+    [days],
+  );
+  const steps = [
+    { key: 'landing', label: 'Visitaram a página do Prumo (/prumo)', count: num(f.landing) },
+    { key: 'opened_app', label: 'Abriram o app (/conta)', count: num(f.opened_app) },
+    { key: 'asked_code', label: 'Pediram o código de acesso', count: num(f.asked_code) },
+    { key: 'new_accounts', label: 'Criaram a conta (primeiro acesso)', count: num(f.new_accounts) },
+    { key: 'started_checkout', label: 'Geraram a cobrança do plano', count: num(f.started_checkout) },
+    { key: 'subscribed', label: 'Assinaram (primeiro pagamento)', count: num(f.subscribed) },
+  ];
+  const funnelSteps = steps.map((s, i) => ({ ...s, pctOfPrev: i === 0 ? null : pct(Math.min(s.count, steps[i - 1]!.count), steps[i - 1]!.count), pctOfFirst: pct(Math.min(s.count, steps[0]!.count), steps[0]!.count) }));
+  const fa = `first_attr AS (SELECT DISTINCT ON (session_id) session_id, coalesce(nullif(props->'attr'->>'source',''), 'direto') AS source, coalesce(nullif(props->'attr'->>'medium',''), '') AS medium, props->'attr'->>'device' AS device FROM app.events WHERE props ? 'attr' ORDER BY session_id, id)`;
+  const sessionsIn = `s AS (SELECT DISTINCT e.session_id FROM app.events e WHERE ${view} AND ${PRUMO_ANY})`;
+  const sources = await rows<{ source: string; medium: string; n: string }>(ctx, `WITH ${sessionsIn}, ${fa} SELECT coalesce(a.source, 'direto') AS source, coalesce(a.medium, '') AS medium, count(*) AS n FROM s LEFT JOIN first_attr a ON a.session_id = s.session_id GROUP BY 1, 2 ORDER BY 3 DESC LIMIT 15`, [days]);
+  const devices = await rows<{ device: string; n: string }>(ctx, `WITH ${sessionsIn}, ${fa} SELECT coalesce(a.device, 'n/d') AS device, count(*) AS n FROM s LEFT JOIN first_attr a ON a.session_id = s.session_id GROUP BY 1 ORDER BY 2 DESC`, [days]);
+  const subs = await one(ctx, `SELECT count(*) AS total FROM app.subscribers WHERE deleted_at IS NULL`);
+
+  return {
+    days,
+    kpis: {
+      landingVisitors: num(k.landing), landingViews: num(k.landing_views), appSessions: num(k.app_sessions), appViews: num(k.app_views),
+      activeUsers: num(act.period_users), activeApp: num(act.period_app), activeWhatsapp: num(act.period_whatsapp),
+      dau: num(act.dau), wau: num(act.wau), mau: num(act.mau),
+      returningUsers: num(ret.returning), returningPct: pct(num(ret.returning), num(ret.active)),
+      logins: num(f.logins), newAccounts: num(f.new_accounts), totalSubscribers: num(subs.total),
+    },
+    funnel: funnelSteps,
+    byDay: dayKeys.map((day) => ({ day, landing: num(dayViews.find((d) => d.day === day)?.landing ?? 0), app: num(dayViews.find((d) => d.day === day)?.app ?? 0), users: num(dayUsers.find((d) => d.day === day)?.users ?? 0), whatsapp: num(dayUsers.find((d) => d.day === day)?.whatsapp ?? 0) })),
+    tabs: tabs.map((t) => ({ tab: t.tab, events: num(t.n), sessions: num(t.s), users: num(t.u) })),
+    ctas: ctas.map((c) => ({ id: c.id, clicks: num(c.n), sessions: num(c.s) })),
+    byPlan: byPlan.map((p) => ({ plan: p.plan, users: num(p.n) })),
+    sources: sources.map((s) => ({ source: s.source, medium: s.medium, sessions: num(s.n) })),
+    devices: devices.map((d) => ({ device: d.device, sessions: num(d.n) })),
+    appTrackingSince: k.app_tracking_since ?? null,
+    activityTrackingSince: act.tracking_since ?? null,
+  };
+}
+
 export async function dashboard(ctx: Ctx, days: number) {
-  const [f, rev, subs, prof, tr, ai] = await Promise.all([funnel(ctx, days), revenue(ctx, days), subscriptions(ctx, days), customerProfile(ctx, days), traffic(ctx, days), aiUsage(ctx, days)]);
-  return { days, generatedAt: new Date().toISOString(), funnel: f, revenue: rev, subscriptions: subs, profile: prof, traffic: tr, ai };
+  const [f, rev, subs, prof, tr, ai, pm] = await Promise.all([funnel(ctx, days), revenue(ctx, days), subscriptions(ctx, days), customerProfile(ctx, days), traffic(ctx, days), aiUsage(ctx, days), prumo(ctx, days)]);
+  return { days, generatedAt: new Date().toISOString(), funnel: f, revenue: rev, subscriptions: subs, profile: prof, traffic: tr, ai, prumo: pm };
 }
