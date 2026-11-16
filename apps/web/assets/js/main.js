@@ -50,7 +50,7 @@ const ROUTES = {
   unsubscribe: '/descadastrar',
 };
 const TITLES = {
-  landing: 'Fôlego — organize suas dívidas e só pague se gostar',
+  landing: 'Fôlego — organize suas dívidas com o Mapa da Virada grátis',
   intake: 'Diagnóstico grátis — Fôlego',
   processing: 'Fazendo as contas — Fôlego',
   preview: 'Seu diagnóstico — Fôlego',

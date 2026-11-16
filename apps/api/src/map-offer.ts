@@ -32,6 +32,8 @@ export async function subscriberMapTerms(ctx: Ctx, sessionId: string): Promise<S
     const sub = (await accountView(ctx, owner)).subscription;
     if (!sub?.active) return null;
     const accountIds = [...new Set([self, owner])];
+    // Mapa grátis para todos (interruptor do backoffice): o Ousado não paga o preço especial, entra no mesmo fluxo grátis de qualquer pessoa.
+    if (sub.plan === 'ousado' && ctx.config.mapFree) return null;
     if (sub.plan === 'ousado') return { subscriberId: self, accountIds, plan: 'ousado', mode: 'paid', priceCents: ctx.config.subscriberMapPriceCents, days: ctx.config.subscriberMapDays, periodEnd: sub.periodEnd };
     if (sub.plan === 'desbravador') return { subscriberId: self, accountIds, plan: 'desbravador', mode: 'free', priceCents: 0, days: Math.min(1100, Math.max(1, Math.ceil((sub.periodEnd - Date.now()) / DAY))), periodEnd: sub.periodEnd };
     return null;

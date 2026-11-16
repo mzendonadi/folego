@@ -111,3 +111,39 @@ test('banner do parceiro: só campanha ativa, parceiro ativo e banner ligado; li
   await db.query(`UPDATE app.partners SET status = 'suspended' WHERE id = $1`, [partnerId]);
   assert.equal((await c('GET', `/api/orders/${order.json.orderId}/delivery`)).json.banner, null, 'parceiro suspenso não aparece');
 });
+
+test('Ousado também recebe o Mapa grátis quando o interruptor está ligado (sem o preço especial)', async () => {
+  const { handleWebhook } = await import('../src/services.ts');
+  const gw = new FakeGateway(config.webhookSecret);
+  const app2 = await buildApp({ config, db, gateway: gw, email: mailbox, rateLimits: 'relaxed' });
+  try {
+    let cookie = '';
+    const c = async (method: 'GET' | 'POST', url: string, body?: unknown, headers: Record<string, string> = {}) => {
+      const res = await app2.inject({ method, url, headers: { 'x-folego': '1', ...(body === undefined ? {} : { 'content-type': 'application/json' }), ...(cookie ? { cookie } : {}), ...headers }, payload: body === undefined ? undefined : JSON.stringify(body) });
+      const set = res.headers['set-cookie'];
+      const raw = Array.isArray(set) ? set[0] : set;
+      if (raw) cookie = raw.split(';')[0]!;
+      let json: any = null;
+      try { json = res.body ? JSON.parse(res.body) : null; } catch { json = null; }
+      return { status: res.statusCode, json };
+    };
+    mailbox.sent.length = 0;
+    await c('POST', '/api/account/login-code', { email: 'ousado-gratis@exemplo.com' });
+    await c('POST', '/api/account/login', { email: 'ousado-gratis@exemplo.com', code: /\b(\d{6})\b/.exec(mailbox.sent.at(-1)!.text)![1] });
+    const co = await c('POST', '/api/account/subscription-checkout', { plan: 'ousado', acceptTerms: true });
+    const p = await db.query<{ provider_payment_id: string }>(`SELECT provider_payment_id FROM app.payments WHERE order_id = $1`, [co.json.orderId]);
+    gw.markPaid(p.rows[0]!.provider_payment_id);
+    await handleWebhook({ db, config, gateway: gw, email: mailbox }, { 'x-webhook-secret': config.webhookSecret }, { eventId: 'evt-ousado-gratis', paymentId: p.rows[0]!.provider_payment_id });
+
+    config.mapFree = true;
+    assert.equal((await c('GET', '/api/account/map-offer')).json.eligible, false, 'sem oferta especial: vale o fluxo grátis de todos');
+    const created = await c('POST', '/api/cases', caseBody);
+    const order = await c('POST', '/api/orders', { caseId: created.json.caseId, products: ['recovery_map'], contact: { ...contact, email: 'ousado-gratis@exemplo.com' } }, { 'idempotency-key': 'gratis-ousado-1' });
+    assert.equal(order.json.status, 'paid');
+    assert.equal(order.json.totalCents, 0);
+    config.mapFree = false;
+    assert.equal((await c('GET', '/api/account/map-offer')).json.priceCents, config.subscriberMapPriceCents, 'desligado, o preço especial do Ousado volta');
+  } finally {
+    await app2.close();
+  }
+});
