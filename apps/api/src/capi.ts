@@ -112,7 +112,7 @@ export async function purchase(ctx: Ctx, providerPaymentId: string): Promise<voi
     [providerPaymentId],
   );
   const row = r.rows[0];
-  if (!row || row.provider === 'demo' || row.provider === 'plan') return; // conta de teste e Mapa incluído no plano não são venda
+  if (!row || row.provider === 'demo' || row.provider === 'plan' || row.provider === 'free') return; // conta de teste e Mapa incluído no plano não são venda
   const isSub = Boolean(row.sid);
   await sendCapi(ctx, {
     name: 'Purchase',

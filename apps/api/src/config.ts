@@ -62,6 +62,8 @@ export interface Config {
   /** Ajustes que o dono muda pelo backoffice sem reiniciar (ver runtime.ts). Valores iniciais vêm do ambiente. */
   aiEnabled: boolean;
   salesPaused: boolean;
+  /** Mapa da Virada grátis para todos (30 dias), em troca do e-mail e do celular. O dono liga e desliga no backoffice. */
+  mapFree: boolean;
   announcement: { text: string; tone: 'info' | 'warn' } | null;
   /** Preço fechado do Kit Completo (Mapa + Cartas + Calendário). */
   bundlePriceCents: number;
@@ -169,6 +171,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     adminEmails: (env.ADMIN_EMAILS ?? '').split(',').map((e) => e.trim().toLowerCase()).filter((e) => e.includes('@')),
     aiEnabled: true,
     salesPaused: false,
+    mapFree: false,
     announcement: null,
     bundlePriceCents: 5990,
     subscriberMapPriceCents: 1299,

@@ -1,11 +1,14 @@
 // Preços e avisos que vêm do servidor (o dono edita no backoffice). Aqui só ficam os valores padrão de reserva
 // (para o site continuar funcionando se o catálogo demorar) e a troca dos textos fixos do HTML.
 import { el } from './dom.js';
-import { CATALOG, SUB_MAP, applyCatalog, priceLabel } from './catalog.js';
+import { CATALOG, MAP_FREE, SUB_MAP, applyCatalog, priceLabel } from './catalog.js';
 import * as api from './api.js';
 
 /** Troca os preços escritos no HTML: [data-price="codigo"] → "R$ 29"; [data-price-int] / [data-price-dec] para o cartão grande. */
 export function bindStaticPrices(root = document) {
+  // Mapa grátis: troca os textos de preço por os de "grátis" (e vice-versa).
+  root.querySelectorAll('[data-map-free]').forEach((n) => { n.hidden = !MAP_FREE.on; });
+  root.querySelectorAll('[data-map-paid]').forEach((n) => { n.hidden = MAP_FREE.on; });
   root.querySelectorAll('[data-price]').forEach((n) => {
     const code = n.dataset.price;
     if (code === 'bundle') n.textContent = priceLabel('bundle');
@@ -53,7 +56,7 @@ export async function loadCatalog() {
     const c = await Promise.race([api.getCatalog(), new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 4000))]);
     applyCatalog(c);
     try {
-      localStorage.setItem(CACHE_KEY, JSON.stringify({ products: c.products, bundlePriceCents: c.bundlePriceCents, subscriberMapPriceCents: c.subscriberMapPriceCents, subscriberMapDays: c.subscriberMapDays }));
+      localStorage.setItem(CACHE_KEY, JSON.stringify({ products: c.products, mapFree: c.mapFree, bundlePriceCents: c.bundlePriceCents, subscriberMapPriceCents: c.subscriberMapPriceCents, subscriberMapDays: c.subscriberMapDays }));
     } catch {
       /* sem armazenamento */
     }

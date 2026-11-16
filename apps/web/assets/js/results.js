@@ -11,7 +11,7 @@ import { strategiesSection } from './strategies.js';
 import { kindText } from './copy.js';
 import { leadsSection } from './leads.js';
 import { referralCard } from './referral.js';
-import { CATALOG, priceLabel, daysOf } from './catalog.js';
+import { CATALOG, MAP_FREE, priceLabel, daysOf } from './catalog.js';
 import { accessBanner } from './access-banner.js';
 import { FORGOTTEN_DIRECTORY } from '../vendor/engine.js';
 
@@ -56,11 +56,12 @@ function tickList(items) {
 // ---------- PREVIEW ----------
 /** Cartão "tem mais no seu diagnóstico": só sinais e contagens do preview (nunca o conteúdo pago). */
 /** Texto do botão que libera o Mapa: preço normal, preço de assinante (Ousado) ou incluso no plano (Desbravador). */
-const buyText = (offer) => (offer?.mode === 'free' ? 'Abrir meu Mapa · incluso no seu plano' : `Liberar meu Mapa · ${offer ? brl(offer.priceCents) : priceLabel('recovery_map')} no Pix`);
+const freeForAll = (offer) => MAP_FREE.on && !offer; // Mapa grátis para todos (visitante ou assinante sem oferta própria)
+const buyText = (offer) => (offer?.mode === 'free' ? 'Abrir meu Mapa · incluso no seu plano' : freeForAll(offer) ? 'Liberar meu Mapa grátis' : `Liberar meu Mapa · ${offer ? brl(offer.priceCents) : priceLabel('recovery_map')} no Pix`);
 
 /** Por que o preço compensa: preço por dia, pagamento único e o custo de não agir. Só afirma o que é verdade para qualquer pessoa. */
 function worthIt(offer, preview) {
-  if (offer?.mode === 'free') return null;
+  if (offer?.mode === 'free' || freeForAll(offer)) return null;
   const price = offer ? offer.priceCents : CATALOG.recovery_map.cents;
   const days = offer?.days ?? daysOf('recovery_map');
   const perDay = Math.ceil(price / days);
@@ -101,7 +102,7 @@ function discoveryCard(preview, offer = null) {
     el('ul', { class: 'discover-list' }, ...found.map((t) => el('li', {}, icon('lock', 'icon icon-lock'), t))),
     worthIt(offer, preview),
     el('button', { class: 'btn btn-primary btn-lg btn-block', type: 'button', 'data-buy': '' }, buyText(offer), icon('arrow-right')),
-    el('p', { class: 'fine center' }, offer?.mode === 'free' ? 'O Mapa faz parte do seu plano Desbravador. Sem cobrança.' : 'Você só paga porque já viu o que tem aqui. Não gostou? É só fechar a página.'),
+    el('p', { class: 'fine center' }, offer?.mode === 'free' ? 'O Mapa faz parte do seu plano Desbravador. Sem cobrança.' : freeForAll(offer) ? 'Grátis por 30 dias. Pedimos só seu e-mail e celular para enviar o acesso.' : 'Você só paga porque já viu o que tem aqui. Não gostou? É só fechar a página.'),
   );
 }
 
@@ -183,10 +184,14 @@ export function renderPreview(root, preview, { onBuy, onWipe, offer = null }) {
   const shown = offer ? offer.priceCents : CATALOG.recovery_map.cents;
   const priceBlock = offer?.mode === 'free'
     ? el('p', { class: 'price price-sm price-included' }, 'Incluso no seu plano')
-    : el('p', { class: 'price price-sm' }, el('span', { class: 'price-cur' }, 'R$'), ` ${Math.floor(shown / 100)}`, el('span', { class: 'price-cents' }, `,${String(shown % 100).padStart(2, '0')}`), el('span', { class: 'price-pix' }, 'no Pix'));
+    : freeForAll(offer)
+      ? el('p', { class: 'price price-sm price-included' }, 'Grátis por 30 dias')
+      : el('p', { class: 'price price-sm' }, el('span', { class: 'price-cur' }, 'R$'), ` ${Math.floor(shown / 100)}`, el('span', { class: 'price-cents' }, `,${String(shown % 100).padStart(2, '0')}`), el('span', { class: 'price-pix' }, 'no Pix'));
   const priceNote = offer?.mode === 'free'
     ? 'Sem cobrança: o Mapa faz parte do Desbravador enquanto a assinatura valer.'
-    : offer
+    : freeForAll(offer)
+      ? 'Sem Pix e sem cobrança. Pedimos só seu e-mail e celular para enviar o seu acesso.'
+      : offer
       ? `Pagamento uma vez só. Preço normal ${brl(offer.regularCents)}: você economiza ${brl(offer.discountCents)} por assinar o Ousado.`
       : '';
   const accessText = offer?.mode === 'free' ? 'acesso enquanto a assinatura valer' : `${offer?.days ?? daysOf('recovery_map')} dias de acesso`;
@@ -241,7 +246,19 @@ function section(id, title, ...children) {
   return el('section', { class: 'card d-section', id, 'aria-labelledby': `${id}-t` }, el('h2', { id: `${id}-t` }, title), ...children);
 }
 
-export function renderDelivery(root, { input, diagnosis: d, items, generated, extras = {}, strategies = null, accessUntil, lettersEligible = 0, leads = null }, { onLead = async () => {}, onLeadRevoke = async () => {}, onInviteFriend = null, onWipe, onAddon = () => {}, makeLink = async () => '', sendEmail = null, onIncomeInterview = async () => {}, onIncomeTask = async () => {}, onRedo = null }) {
+/** Banner de um parceiro (publicidade): identificado como tal, abre em outra aba e não leva nenhum dado da pessoa. Aparece no topo e no fim do Mapa. */
+function partnerAd(banner, where) {
+  if (!banner) return null;
+  const link = el('a', { class: 'btn btn-secondary partner-ad-cta', href: banner.url, target: '_blank', rel: 'sponsored noopener noreferrer' }, banner.cta, icon('arrow-right'));
+  return el(
+    'aside', { class: `partner-ad partner-ad-${where} no-print`, 'aria-label': `Publicidade de ${banner.partner}` },
+    banner.imageUrl ? el('img', { class: 'partner-ad-img', src: banner.imageUrl, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' }) : null,
+    el('div', { class: 'partner-ad-copy' }, el('p', { class: 'partner-ad-tag' }, `Publicidade · ${banner.partner}`), el('h2', { class: 'partner-ad-title' }, banner.title), el('p', {}, banner.text)),
+    link,
+  );
+}
+
+export function renderDelivery(root, { input, diagnosis: d, items, generated, extras = {}, strategies = null, accessUntil, lettersEligible = 0, leads = null, banner = null }, { onLead = async () => {}, onLeadRevoke = async () => {}, onInviteFriend = null, onWipe, onAddon = () => {}, makeLink = async () => '', sendEmail = null, onIncomeInterview = async () => {}, onIncomeTask = async () => {}, onRedo = null }) {
   const debtById = new Map(input.debts.map((x) => [x.id, x]));
   const diagById = new Map(d.debts.map((x) => [x.debtId, x]));
   const band = d.health.band;
@@ -379,7 +396,7 @@ export function renderDelivery(root, { input, diagnosis: d, items, generated, ex
   // replaceChildren() é API nativa: diferente do nosso el(), ela NÃO ignora null/undefined — transforma em texto "null" na tela. Por isso filtramos aqui.
   root.replaceChildren(
     ...[
-      header, accessBanner({ accessUntil, what: 'Mapa', onRedo }), acesso, nav, resumo, ordem, orcamento, linha, estrategias, roteiros, cartas, calendario, renda, complementos, propostas, indicar, dinheiro,
+      header, partnerAd(banner, 'top'), accessBanner({ accessUntil, what: 'Mapa', onRedo }), acesso, nav, resumo, ordem, orcamento, linha, estrategias, roteiros, cartas, calendario, renda, complementos, propostas, indicar, dinheiro, partnerAd(banner, 'end'),
       el('p', { class: 'fine' }, 'Estimativas educativas, calculadas com o que você informou. O Fôlego não é escritório de advocacia, banco ou consultoria de investimentos, e não negocia por você.'),
     ].filter(Boolean),
   );

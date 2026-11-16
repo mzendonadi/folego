@@ -649,6 +649,15 @@ ul, ol { margin: 0; padding: 0; }
 .tool-out { display: grid; gap: var(--s3); margin-top: var(--s3); }
 .fieldset { border: 0; padding: 0; margin: 0; }
 .resume-banner { background: var(--mint); color: var(--mint-ink); }
+
+/* Banner de parceiro no Mapa (topo e fim): publicidade identificada, discreta, sem imitar o conteúdo do Mapa. */
+.partner-ad { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: var(--s4); margin: var(--s5) 0; padding: var(--s4) var(--s5); background: var(--surface); border: 1px dashed var(--field); border-radius: var(--radius); }
+.partner-ad-img { width: 72px; height: 72px; object-fit: contain; border-radius: var(--radius-sm); background: var(--sunken); }
+.partner-ad-tag { margin: 0 0 var(--s1); font-size: 0.8125rem; color: var(--muted); }
+.partner-ad-title { margin: 0 0 var(--s1); font-size: 1.125rem; line-height: 1.3; }
+.partner-ad-copy p:last-child { margin: 0; color: var(--ink-2); }
+@media (max-width: 640px) { .partner-ad { grid-template-columns: 1fr; } .partner-ad-img { width: 56px; height: 56px; } .partner-ad-cta { width: 100%; justify-content: center; } }
+@media print { .partner-ad { display: none; } }
 .resume-inner { display: flex; gap: var(--s3); align-items: center; justify-content: space-between; flex-wrap: wrap; padding-block: 10px; }
 @media (max-width: 480px) { .agenda-item { grid-template-columns: 1fr; gap: var(--s2); } }
 @media print { .agenda-item, .addon { break-inside: avoid; } }

@@ -24,6 +24,7 @@ async function siteTab(ctx) {
   const leads = toggle('cf-leads', 'Propostas de parceiros (leads)', 'Mostra "Quero propostas para o meu perfil" no resultado e libera o portal dos parceiros.', s.leadsEnabled);
   const ai = toggle('cf-ai', 'IA nas entregas (roteiros e plano de renda extra)', env.aiKeyConfigured ? 'Desligada, as entregas saem pelos modelos fixos, sem custo de IA.' : 'Não há chave da Anthropic configurada no servidor: mesmo ligada, sai o modelo fixo.', s.aiEnabled);
   const paused = toggle('cf-paused', 'Pausar as vendas', 'Ninguém consegue assinar nem gerar Pix novo (visitantes veem um aviso). Quem já assina continua usando e sendo cobrado normalmente. O resultado grátis continua funcionando.', s.salesPaused);
+  const mapFree = toggle('cf-mapfree', 'Mapa da Virada grátis para todos', 'O Mapa completo sai sem Pix, com 30 dias de acesso, e a pessoa informa só e-mail e celular. Os banners dos parceiros (topo e fim do Mapa) e o consentimento opcional para propostas continuam funcionando. Complementos seguem pagos.', Boolean(s.mapFree));
   const cap = el('input', { class: 'input input-sm', type: 'number', min: '0', max: '100000', value: String(s.aiMaxCallsPerDay), 'aria-label': 'Teto diário de chamadas à IA' });
   const aiMonth = el('input', { class: 'input input-sm', type: 'number', min: '0', max: '1000000', value: String(s.aiMonthlyCallsLimit ?? 4000), 'aria-label': 'Teto mensal de chamadas à IA' });
   const mailDay = el('input', { class: 'input input-sm', type: 'number', min: '0', max: '1000000', value: String(s.emailDailyLimit ?? 100), 'aria-label': 'Limite diário de e-mails' });
@@ -42,7 +43,7 @@ async function siteTab(ctx) {
     save.disabled = true;
     try {
       await api.salvarConfig({
-        subscriptionsEnabled: subs.input.checked, leadsEnabled: leads.input.checked, aiEnabled: ai.input.checked, salesPaused: paused.input.checked,
+        subscriptionsEnabled: subs.input.checked, leadsEnabled: leads.input.checked, aiEnabled: ai.input.checked, salesPaused: paused.input.checked, mapFree: mapFree.input.checked,
         aiMaxCallsPerDay: Number(cap.value) || 0, aiMonthlyCallsLimit: Number(aiMonth.value) || 0, emailDailyLimit: Number(mailDay.value) || 0, emailMonthlyLimit: Number(mailMonth.value) || 0, campaignDailyCap: Number(campCap.value) || 0, canceledPurgeDays: Math.min(180, Math.max(1, Number(purge.value) || 15)), referralEnabled: referralOn.input.checked, referralDiscountPct: Math.min(50, Math.max(0, Math.round(Number(referralPct.value) || 0))), reminderDaysBefore: Number(remind.value) || 3,
         announcement: bannerOn.input.checked ? { text: bannerText.value.trim(), tone: bannerTone.value } : null,
       });
@@ -54,7 +55,7 @@ async function siteTab(ctx) {
   });
   return el(
     'div', { class: 'bo-stack' },
-    card('Recursos do site', subs.node, leads.node, ai.node, paused.node, referralOn.node),
+    card('Recursos do site', subs.node, leads.node, ai.node, paused.node, mapFree.node, referralOn.node),
     card('Aviso no site', bannerOn.node, el('div', { class: 'bo-actions' }, field('Texto', bannerText), field('Tipo', bannerTone))),
     card('Assinaturas e IA', el('div', { class: 'bo-actions' }, field('Lembrete de vencimento (dias antes)', remind, 'O e-mail é enviado uma vez, nesta antecedência.'), field('Teto diário de chamadas à IA', cap, 'Acima disso, as entregas usam o modelo fixo (controle de custo).'), field('Teto diário de e-mails de campanha', campCap, 'Protege a reputação do e-mail do Fôlego. 0 = nenhuma campanha sai.'), field('Desconto por indicação que assina (%)', referralPct, 'Vale um mês, na próxima fatura de quem indicou. Os meses se acumulam. Ao mudar, só as próximas indicações usam o valor novo.'), field('Guarda dos dados de quem cancelou (dias)', purge, 'Depois do fim do acesso, você tem este prazo para baixar o pacote em Assinaturas > Cancelados. Passado o prazo, os dados são apagados sozinhos.')), el('p', { class: 'fine' }, 'Preços dos planos e o Kit Completo ficam em Produtos e preços.')),
     card('Custos e limites', el('p', { class: 'muted' }, 'Quando o uso passa de 80% de qualquer limite, o card "Sistema saudável" do Painel acende e o Monitor avisa por e-mail. A IA para sozinha no teto diário (acima); o e-mail só avisa: use o limite do seu plano no Resend.'), el('div', { class: 'bo-actions' }, field('IA: chamadas por mês', aiMonth), field('E-mails por dia', mailDay), field('E-mails por mês', mailMonth))),

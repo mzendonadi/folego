@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Fôlego — organize suas dívidas e só pague se gostar</title>
-  <meta name="description" content="Conte o que você deve em 3 minutos, veja seu diagnóstico na hora e só pague se gostar, por Pix. Sem cadastro, sem CPF, sem assinatura.">
+  <meta name="description" content="Conte o que você deve em 3 minutos, veja seu diagnóstico na hora e libere o Mapa da Virada completo grátis. Sem CPF e sem assinatura.">
   <link rel="canonical" href="https://folego.online/">
   <meta name="theme-color" content="#F6F3EC" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#0E1714" media="(prefers-color-scheme: dark)">
@@ -102,7 +102,8 @@
           <div class="hero-copy">
             <p class="eyebrow">Organizador de dívidas · sem cadastro, sem assinatura</p>
             <h1 id="hero-title">Respira. A gente organiza suas dívidas <em>com você.</em></h1>
-            <p class="lede">Conte o que você deve em cerca de 3 minutos. Você vê seu diagnóstico na hora e só paga — <strong><span data-price="recovery_map">R$ 29,99</span> no Pix</strong> — se gostar do que viu. Se não gostar, fecha a página e não deve nada.</p>
+            <p class="lede" data-map-paid>Conte o que você deve em cerca de 3 minutos. Você vê seu diagnóstico na hora e só paga — <strong><span data-price="recovery_map">R$ 29,99</span> no Pix</strong> — se gostar do que viu. Se não gostar, fecha a página e não deve nada.</p>
+            <p class="lede" data-map-free hidden>Conte o que você deve em cerca de 3 minutos e veja seu diagnóstico na hora. O <strong>Mapa da Virada completo é grátis</strong>: ordem de pagamento, roteiros de negociação e plano mês a mês, com 30 dias de acesso. Pedimos só seu e-mail e celular para enviar o acesso.</p>
             <div class="hero-cta">
               <button class="btn btn-primary btn-lg" type="button" data-start>
                 Ver meu diagnóstico grátis
@@ -168,7 +169,8 @@
             <li class="reveal">
               <span class="step-num" aria-hidden="true">3</span>
               <h3>Você decide</h3>
-              <p>Gostou? Libera o Mapa completo por <span data-price="recovery_map">R$ 29,99</span> no Pix. Não gostou? Não paga nada e a gente apaga seus dados.</p>
+              <p data-map-paid>Gostou? Libera o Mapa completo por <span data-price="recovery_map">R$ 29,99</span> no Pix. Não gostou? Não paga nada e a gente apaga seus dados.</p>
+              <p data-map-free hidden>Quer o Mapa completo? É grátis: informe seu e-mail e celular e ele abre na hora, por 30 dias. Não quer? Fecha a página e a gente apaga seus dados.</p>
             </li>
           </ol>
         </div>
@@ -239,11 +241,13 @@
         <div class="wrap price-wrap">
           <header class="section-head">
             <p class="eyebrow">Preço</p>
-            <h2 id="preco-title">Mapa da Virada: um preço, sem mensalidade</h2>
+            <h2 id="preco-title"><span data-map-paid>Mapa da Virada: um preço, sem mensalidade</span><span data-map-free hidden>Mapa da Virada: grátis, sem mensalidade</span></h2>
           </header>
           <div class="price-card reveal">
-            <p class="price"><span class="price-cur">R$</span> <span data-price-int="recovery_map">29</span><span class="price-cents" data-price-dec="recovery_map">,99</span></p>
-            <p class="price-sub">no Pix, uma vez só, e só depois de ver o resultado</p>
+            <p class="price" data-map-paid><span class="price-cur">R$</span> <span data-price-int="recovery_map">29</span><span class="price-cents" data-price-dec="recovery_map">,99</span></p>
+            <p class="price-sub" data-map-paid>no Pix, uma vez só, e só depois de ver o resultado</p>
+            <p class="price" data-map-free hidden>Grátis</p>
+            <p class="price-sub" data-map-free hidden>por 30 dias, com e-mail e celular para enviar o seu acesso</p>
             <ul class="tick-list">
               <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Diagnóstico, orçamento e ordem de pagamento</li>
               <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Roteiros de negociação por credor</li>
@@ -417,9 +421,9 @@
             <details><summary>Vocês limpam meu nome ou negociam por mim?</summary><div><p>Não. O Fôlego mostra o melhor caminho e ensina o que dizer; quem negocia é você, com os roteiros. Desconfie de quem promete “limpar nome” cobrando adiantado.</p></div></details>
             <details><summary>Como vocês calculam os números?</summary><div><p>Com regras fixas: juros mensais, parcelas, prazos e uma ordem de prioridade que considera contas essenciais e o custo de cada dívida. Quando você não sabe a taxa, usamos uma média de mercado e avisamos.</p></div></details>
             <details><summary>Isso é orientação jurídica ou financeira?</summary><div><p>Não. É informação e organização. Para decisões sobre prescrição, processos ou investimentos, procure um advogado, a Defensoria Pública ou um profissional habilitado.</p></div></details>
-            <details><summary>O que é o Prumo? Preciso dele para ver o Mapa?</summary><div><p>Não. O Mapa continua sem cadastro e sem mensalidade. O Prumo é a área opcional de assinatura: um app de finanças com coach, controle de gastos, dívidas, metas e lembretes, para quem quer acompanhar o dinheiro todo mês.</p></div></details>
+            <details><summary>O que é o Prumo? Preciso dele para ver o Mapa?</summary><div><p><span data-map-paid>Não. O Mapa continua sem cadastro e sem mensalidade.</span><span data-map-free hidden>Não. O Mapa é grátis e sem mensalidade; pedimos só e-mail e celular para enviar o seu acesso.</span> O Prumo é a área opcional de assinatura: um app de finanças com coach, controle de gastos, dívidas, metas e lembretes, para quem quer acompanhar o dinheiro todo mês.</p></div></details>
             <details><summary>Como funciona o presente e a indicação de amigos?</summary><div><p>Quem assina o Ousado ou o Desbravador recebe automaticamente, por e-mail, o eBook do Fôlego em PDF. E quem assina o Prumo pode indicar amigos: a cada indicação que vira assinatura, você ganha 10% de desconto na próxima fatura, acumulando mês a mês. Quem compra um produto no Pix também pode indicar um amigo, mas sem desconto: é só um convite simpático.</p></div></details>
-            <details><summary>Como funciona o pagamento?</summary><div><p>Por Pix, direto na página. A confirmação chega em segundos e o Mapa é liberado na hora.</p></div></details>
+            <details><summary>Como funciona o pagamento?</summary><div><p data-map-paid>Por Pix, direto na página. A confirmação chega em segundos e o Mapa é liberado na hora.</p><p data-map-free hidden>O Mapa da Virada é grátis: você informa e-mail e celular e ele abre na hora. Os complementos opcionais (cartas, calendário, guias) são pagos por Pix, direto na página, e só se você quiser.</p></div></details>
             <details><summary>Por quanto tempo tenho acesso e posso refazer?</summary><div><p>Todo produto pago no Pix vale por 30 dias a partir do pagamento. Nesse prazo você pode refazer com dados novos (outra renda, outra dívida, outro texto de cobrança) quantas vezes quiser, sem pagar de novo. Uma contagem regressiva mostra quantos dias faltam. A data final não muda quando você refaz; depois dela o conteúdo deixa de abrir e os dados são apagados.</p></div></details>
             <details><summary>Meus dados ficam salvos?</summary><div><p>Só o tempo necessário: até 7 dias se você não comprar; 30 dias depois do último acesso se comprar. Depois disso, tudo é apagado. Você pode apagar antes, quando quiser.</p></div></details>
           </div>

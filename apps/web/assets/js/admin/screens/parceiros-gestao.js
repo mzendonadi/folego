@@ -40,6 +40,14 @@ function campaignForm(c = {}, prefix = 'cp') {
   const url = text('Endereço do webhook (https)', { type: 'url', maxlength: '500', value: c.webhookUrl ?? '', placeholder: 'https://parceiro.com.br/webhooks/folego' });
   const emp = chips(Object.entries(EMPLOYMENT), c.employmentTypes ?? [], `${prefix}-emp`);
   const ufs = chips(UFS.map((u) => [u, u]), c.ufs ?? [], `${prefix}-uf`);
+  // Banner no Mapa da Virada (publicidade do parceiro, topo e fim). Só na edição: a campanha já existe e o parceiro já foi combinado.
+  const editing = Boolean(c.id);
+  const bOn = el('input', { type: 'checkbox', id: `${prefix}-bon`, checked: Boolean(c.bannerOn) });
+  const bTitle = text('Título do banner', { maxlength: '80', value: c.bannerTitle ?? '', placeholder: 'Ex.: Compare propostas de consignado' });
+  const bText = text('Texto do banner', { maxlength: '200', value: c.bannerText ?? '', placeholder: 'Uma frase curta, sem prometer aprovação nem juros' });
+  const bCta = text('Texto do botão', { maxlength: '30', value: c.bannerCta ?? '', placeholder: 'Ver condições' });
+  const bUrl = text('Link do banner (https)', { type: 'url', maxlength: '500', value: c.bannerUrl ?? '', placeholder: 'https://parceiro.com.br/oferta' });
+  const bImg = text('Imagem do banner (https, opcional)', { type: 'url', maxlength: '500', value: c.bannerImageUrl ?? '', placeholder: 'https://parceiro.com.br/logo.png' });
   const node = el(
     'div', { class: 'bo-form-grid' },
     field('Nome da campanha', name),
@@ -53,6 +61,12 @@ function campaignForm(c = {}, prefix = 'cp') {
     el('div', { class: 'wide' }, field('Endereço do webhook (opcional)', url, 'Para onde o contato é entregue, em https e público. Vazio = o contato aparece só no portal do parceiro.')),
     el('div', { class: 'wide' }, field('Vínculos aceitos', emp.node, 'Nada marcado = todos.')),
     el('div', { class: 'wide' }, field('Estados atendidos', ufs.node, 'Nada marcado = todos.')),
+    ...(editing ? [
+      el('div', { class: 'wide' }, el('div', { class: 'check' }, bOn, el('label', { for: `${prefix}-bon` }, 'Mostrar o banner deste parceiro no topo e no fim do Mapa da Virada'))),
+      field('Título do banner', bTitle), field('Texto do botão', bCta),
+      el('div', { class: 'wide' }, field('Texto do banner', bText, 'Aparece marcado como "Publicidade". Sem prometer aprovação, taxa ou prazo que o parceiro não garanta.')),
+      field('Link do banner (https)', bUrl, 'Abre em outra aba. Nenhum dado da pessoa vai junto.'), field('Imagem (https, opcional)', bImg),
+    ] : []),
   );
   const read = () => {
     const out = {
@@ -68,6 +82,15 @@ function campaignForm(c = {}, prefix = 'cp') {
     if (budget.cents()) out.monthlyBudgetCents = budget.cents();
     if (minI.cents()) out.minIncomeCents = minI.cents();
     if (maxI.cents()) out.maxIncomeCents = maxI.cents();
+    if (editing) {
+      // Em edição o campo esvaziado vai como null (o servidor só mexe no que vem no corpo). Banner ligado precisa de título, texto e link.
+      out.bannerOn = bOn.checked;
+      out.bannerTitle = bTitle.value.trim() || null;
+      out.bannerText = bText.value.trim() || null;
+      out.bannerCta = bCta.value.trim() || null;
+      out.bannerUrl = bUrl.value.trim() || null;
+      out.bannerImageUrl = bImg.value.trim() || null;
+    }
     return out;
   };
   return { node, read, nullable: { monthlyBudgetCents: () => budget.cents(), minIncomeCents: () => minI.cents(), maxIncomeCents: () => maxI.cents() } };
@@ -249,6 +272,7 @@ export function partnersManager(ctx, { onChange }) {
     save.addEventListener('click', async () => {
       const body = form.read();
       if (body.name.length < 2) return toast('Dê um nome para a campanha.');
+      if (body.bannerOn && !(body.bannerTitle && body.bannerText && body.bannerUrl)) return toast('Para mostrar o banner, preencha título, texto e link (https).');
       save.disabled = true;
       try {
         if (c) {

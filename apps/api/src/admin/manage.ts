@@ -106,6 +106,7 @@ export async function publicCatalog(ctx: Ctx) {
     subscriberMapPriceCents: ctx.config.subscriberMapPriceCents,
     subscriberMapDays: ctx.config.subscriberMapDays,
     salesPaused: ctx.config.salesPaused,
+    mapFree: ctx.config.mapFree,
     announcement: ctx.config.announcement,
   };
 }

@@ -24,7 +24,10 @@ export const partnerPatchSchema = z.strictObject({
   address: z.string().trim().max(200).nullable().optional(),
 });
 export const campaignCreateSchema = campaignFields;
-export const campaignPatchSchema = campaignFields.partial().extend({ webhookUrl: z.string().url().max(500).nullable().optional(), status: z.enum(['active', 'paused', 'ended']).optional(), monthlyBudgetCents: z.number().int().positive().nullable().optional(), minIncomeCents: z.number().int().nonnegative().nullable().optional(), maxIncomeCents: z.number().int().nonnegative().nullable().optional() }).strict();
+export const campaignPatchSchema = campaignFields.partial().extend({ webhookUrl: z.string().url().max(500).nullable().optional(), status: z.enum(['active', 'paused', 'ended']).optional(), monthlyBudgetCents: z.number().int().positive().nullable().optional(), minIncomeCents: z.number().int().nonnegative().nullable().optional(), maxIncomeCents: z.number().int().nonnegative().nullable().optional(),
+  // Banner no Mapa (publicidade do parceiro): só texto curto e links https.
+  bannerOn: z.boolean().optional(), bannerTitle: z.string().trim().min(1).max(80).nullable().optional(), bannerText: z.string().trim().min(1).max(200).nullable().optional(), bannerCta: z.string().trim().min(1).max(30).nullable().optional(),
+  bannerUrl: z.string().trim().regex(/^https:\/\/[^\s]+$/, 'Use um link https.').max(500).nullable().optional(), bannerImageUrl: z.string().trim().regex(/^https:\/\/[^\s]+$/, 'Use um link https.').max(500).nullable().optional() }).strict();
 
 const iso = (d: unknown): string => new Date(d as string).toISOString();
 
@@ -40,8 +43,9 @@ export async function listPartners(ctx: Ctx) {
             (SELECT count(*) FROM app.lead_deliveries d WHERE d.partner_id = p.id AND d.status IN ('contacted','converted'))::text AS contacts
        FROM app.partners p WHERE NOT p.internal ORDER BY p.legal_name`,
   );
-  const c = await ctx.db.query<{ id: string; partner_id: string; name: string; status: string; consent_category: string; employment_types: string[]; ufs: string[]; min_income_cents: string | null; max_income_cents: string | null; price_per_lead_cents: string; commission_bps: number; daily_cap: number; monthly_budget_cents: string | null; webhook_url: string | null; sent: string }>(
+  const c = await ctx.db.query<{ id: string; partner_id: string; name: string; status: string; consent_category: string; employment_types: string[]; ufs: string[]; min_income_cents: string | null; max_income_cents: string | null; price_per_lead_cents: string; commission_bps: number; daily_cap: number; monthly_budget_cents: string | null; webhook_url: string | null; banner_on: boolean; banner_title: string | null; banner_text: string | null; banner_cta: string | null; banner_url: string | null; banner_image_url: string | null; sent: string }>(
     `SELECT c.id, c.partner_id, c.name, c.status, c.consent_category, c.employment_types, c.ufs::text[] AS ufs, c.min_income_cents, c.max_income_cents, c.price_per_lead_cents, c.commission_bps, c.daily_cap, c.monthly_budget_cents, c.webhook_url,
+            c.banner_on, c.banner_title, c.banner_text, c.banner_cta, c.banner_url, c.banner_image_url,
             (SELECT count(*) FROM app.lead_deliveries d WHERE d.campaign_id = c.id)::text AS sent
        FROM app.partner_campaigns c ORDER BY c.created_at`,
   );
@@ -77,6 +81,7 @@ export async function listPartners(ctx: Ctx) {
           dailyCap: k.daily_cap,
           monthlyBudgetCents: k.monthly_budget_cents === null ? null : num(k.monthly_budget_cents),
           webhookUrl: k.webhook_url,
+          bannerOn: k.banner_on, bannerTitle: k.banner_title, bannerText: k.banner_text, bannerCta: k.banner_cta, bannerUrl: k.banner_url, bannerImageUrl: k.banner_image_url,
           sent: num(k.sent),
         })),
     })),
@@ -212,6 +217,7 @@ export async function updateCampaign(ctx: Ctx, actor: string, id: string, patch:
   const map: [string, unknown, string][] = [
     ['name', patch.name, ''], ['status', patch.status, ''], ['consent_category', patch.consentCategory, ''], ['employment_types', patch.employmentTypes, '::text[]'], ['ufs', patch.ufs, '::char(2)[]'],
     ['min_income_cents', patch.minIncomeCents, ''], ['max_income_cents', patch.maxIncomeCents, ''], ['price_per_lead_cents', patch.pricePerLeadCents, ''], ['commission_bps', patch.commissionBps, ''], ['daily_cap', patch.dailyCap, ''], ['monthly_budget_cents', patch.monthlyBudgetCents, ''], ['webhook_url', patch.webhookUrl, ''],
+    ['banner_on', patch.bannerOn, ''], ['banner_title', patch.bannerTitle, ''], ['banner_text', patch.bannerText, ''], ['banner_cta', patch.bannerCta, ''], ['banner_url', patch.bannerUrl, ''], ['banner_image_url', patch.bannerImageUrl, ''],
   ];
   const sets: string[] = [];
   const params: unknown[] = [id];

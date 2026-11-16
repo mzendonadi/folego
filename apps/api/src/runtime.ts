@@ -11,6 +11,7 @@ export const runtimeSchema = z.object({
   aiEnabled: z.boolean(),
   aiMaxCallsPerDay: z.number().int().min(0).max(100_000),
   salesPaused: z.boolean(),
+  mapFree: z.boolean(),
   announcement: z.object({ text: z.string().trim().min(1).max(240), tone: z.enum(['info', 'warn']) }).nullable(),
   bundlePriceCents: z.number().int().min(100).max(1_000_000),
   subscriberMapPriceCents: z.number().int().min(100).max(1_000_000),
@@ -32,6 +33,7 @@ export interface RuntimeSettings {
   aiEnabled: boolean;
   aiMaxCallsPerDay: number;
   salesPaused: boolean;
+  mapFree: boolean;
   announcement: { text: string; tone: 'info' | 'warn' } | null;
   bundlePriceCents: number;
   subscriberMapPriceCents: number;
@@ -52,6 +54,7 @@ export const currentSettings = (config: Config): RuntimeSettings => ({
   aiEnabled: config.aiEnabled,
   aiMaxCallsPerDay: config.aiMaxCallsPerDay,
   salesPaused: config.salesPaused,
+  mapFree: config.mapFree,
   announcement: config.announcement,
   bundlePriceCents: config.bundlePriceCents,
   subscriberMapPriceCents: config.subscriberMapPriceCents,
@@ -72,6 +75,7 @@ function apply(config: Config, patch: RuntimePatch): void {
   if (patch.aiEnabled !== undefined) config.aiEnabled = patch.aiEnabled;
   if (patch.aiMaxCallsPerDay !== undefined) config.aiMaxCallsPerDay = patch.aiMaxCallsPerDay;
   if (patch.salesPaused !== undefined) config.salesPaused = patch.salesPaused;
+  if (patch.mapFree !== undefined) config.mapFree = patch.mapFree;
   if (patch.announcement !== undefined) config.announcement = patch.announcement;
   if (patch.bundlePriceCents !== undefined) config.bundlePriceCents = patch.bundlePriceCents;
   if (patch.subscriberMapPriceCents !== undefined) config.subscriberMapPriceCents = patch.subscriberMapPriceCents;

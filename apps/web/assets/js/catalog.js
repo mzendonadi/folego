@@ -44,6 +44,9 @@ export const SUB_MAP = { cents: 1299, days: 90 };
 
 export const ADDONS = ['defense_letters', 'calendar_30d', 'extra_income_plan'];
 
+/** Mapa da Virada grátis para todos (30 dias, com e-mail e celular). O dono liga no backoffice; o servidor é quem decide o que vale. */
+export const MAP_FREE = { on: false };
+
 /** Aplica o catálogo vindo do servidor (GET /api/catalog). */
 export function applyCatalog(server) {
   for (const p of server?.products ?? []) {
@@ -57,6 +60,7 @@ export function applyCatalog(server) {
     if (Number.isInteger(p.accessDays)) item.days = p.accessDays;
     if (p.name) item.name = p.name;
   }
+  if (typeof server?.mapFree === 'boolean') MAP_FREE.on = server.mapFree;
   if (Number.isInteger(server?.bundlePriceCents)) BUNDLE.cents = server.bundlePriceCents;
   if (Number.isInteger(server?.subscriberMapPriceCents)) SUB_MAP.cents = server.subscriberMapPriceCents;
   if (Number.isInteger(server?.subscriberMapDays)) SUB_MAP.days = server.subscriberMapDays;

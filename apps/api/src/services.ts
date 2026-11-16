@@ -239,7 +239,18 @@ export async function createOrder(ctx: Ctx, args: { sessionId: string; caseId: s
     prices.set('recovery_map', terms.mode === 'free' ? 0 : Math.min(prices.get('recovery_map')!, terms.priceCents));
     itemDays.set('recovery_map', terms.days);
   }
-  const isBundle = !terms && ['recovery_map', 'defense_letters', 'calendar_30d'].every((c) => codes.includes(c));
+  // Mapa grátis para todos (o dono liga no backoffice): 30 dias, em troca do e-mail e do celular (para enviar o acesso). O compartilhamento com parceiros
+  // continua sendo um consentimento à parte, opcional e desmarcado (leads.ts): nunca é condição para receber o Mapa.
+  const freeMap = !demo && !terms && ctx.config.mapFree && codes.includes('recovery_map');
+  if (freeMap) {
+    if (!args.contact) {
+      const has = await ctx.db.query(`SELECT 1 FROM app.cases WHERE id = $1 AND contact_email_enc IS NOT NULL`, [args.caseId]);
+      if (has.rows.length === 0) throw new AppError(422, 'contact_required', 'Informe seu e-mail e celular para liberar o Mapa.');
+    }
+    prices.set('recovery_map', 0);
+    itemDays.set('recovery_map', 30);
+  }
+  const isBundle = !terms && !freeMap && ['recovery_map', 'defense_letters', 'calendar_30d'].every((c) => codes.includes(c));
   if (isBundle) {
     const sum = prices.get('recovery_map')! + prices.get('defense_letters')! + prices.get('calendar_30d')!;
     const discount = Math.max(0, sum - ctx.config.bundlePriceCents);
@@ -248,9 +259,9 @@ export async function createOrder(ctx: Ctx, args: { sessionId: string; caseId: s
   // Conta de teste (demo) ativa: o pedido é confirmado na hora, sem cobrança e sem chamar o provedor. Total 0 e provedor "demo"
   // mantêm a receita e os relatórios limpos; o conteúdo e o prazo de acesso são exatamente os de um pedido pago.
   // Desbravador: o Mapa já está no plano. O pedido nasce confirmado, com o prazo da assinatura, e não gera cobrança.
-  const included = !demo && terms?.mode === 'free' && [...prices.values()].every((v) => v === 0);
+  const included = !demo && (terms?.mode === 'free' || freeMap) && [...prices.values()].every((v) => v === 0);
   if (demo || included) {
-    const provider = demo ? 'demo' : 'plan';
+    const provider = demo ? 'demo' : freeMap ? 'free' : 'plan';
     const instantId = await ctx.db.tx(async (q) => {
       const created = await q.query<{ id: string }>(
         `INSERT INTO app.orders(case_id, session_id, status, total_cents, idempotency_key) VALUES ($1,$2,'pending',0,$3) ON CONFLICT (session_id, idempotency_key) DO NOTHING RETURNING id`,
@@ -261,10 +272,10 @@ export async function createOrder(ctx: Ctx, args: { sessionId: string; caseId: s
       for (const code of prices.keys()) await q.query(`INSERT INTO app.order_items(order_id, product_code, unit_price_cents, access_days) VALUES ($1,$2,0,$3)`, [id, code, itemDays.get(code) ?? null]);
       await q.query(
         `INSERT INTO app.payments(order_id, provider, provider_payment_id, method, amount_cents, status, pix_copy_paste, pix_expires_at) VALUES ($1,$2,$3,'pix',0,'pending',$4, now() + interval '30 minutes')`,
-        [id, provider, `${provider}-${id}`, demo ? 'CONTA-DE-TESTE-SEM-COBRANCA' : 'INCLUIDO-NO-PLANO'],
+        [id, provider, `${provider}-${id}`, demo ? 'CONTA-DE-TESTE-SEM-COBRANCA' : freeMap ? 'MAPA-GRATIS' : 'INCLUIDO-NO-PLANO'],
       );
       if (terms) await q.query(`UPDATE app.cases SET owner_subscriber_id = $2 WHERE id = $1`, [args.caseId, terms.subscriberId]);
-      await audit(q, `session:${args.sessionId}`, demo ? 'demo_order_created' : 'plan_order_created', 'order', id, { items: [...prices.keys()] });
+      await audit(q, `session:${args.sessionId}`, demo ? 'demo_order_created' : freeMap ? 'free_map_order_created' : 'plan_order_created', 'order', id, { items: [...prices.keys()] });
       return id;
     });
     await confirmPayment(ctx, `${provider}-${instantId}`, provider);
@@ -452,6 +463,22 @@ export interface Delivery {
   lettersEligible: number;
   /** Propostas de parceiros (só se ligado neste servidor). */
   leads: LeadState;
+  /** Banner de um parceiro ativo (publicidade, exibido no topo e no fim do Mapa). Nulo = nenhum parceiro com banner ligado. */
+  banner: PartnerBanner | null;
+}
+
+export interface PartnerBanner { campaignId: string; partner: string; title: string; text: string; cta: string; url: string; imageUrl: string | null }
+
+/** Um banner entre as campanhas ativas de parceiros ativos (sorteado, para dividir a vitrine). Só a oferta do parceiro: nenhum dado da pessoa. */
+async function pickBanner(ctx: Ctx): Promise<PartnerBanner | null> {
+  const r = await ctx.db.query<{ id: string; partner: string; title: string; text: string; cta: string | null; url: string; image: string | null }>(
+    `SELECT c.id, coalesce(nullif(trim(p.trade_name), ''), p.legal_name) AS partner, c.banner_title AS title, c.banner_text AS text, c.banner_cta AS cta, c.banner_url AS url, c.banner_image_url AS image
+       FROM app.partner_campaigns c JOIN app.partners p ON p.id = c.partner_id
+      WHERE c.status = 'active' AND p.status = 'active' AND c.banner_on AND c.banner_title IS NOT NULL AND c.banner_text IS NOT NULL AND c.banner_url IS NOT NULL
+      ORDER BY random() LIMIT 1`,
+  ).catch(() => ({ rows: [] as never[] })); // o Mapa nunca deixa de abrir por causa do banner
+  const b = r.rows[0];
+  return b ? { campaignId: b.id, partner: b.partner, title: b.title, text: b.text, cta: b.cta ?? 'Saiba mais', url: b.url, imageUrl: b.image } : null;
 }
 
 export async function getDelivery(ctx: Ctx, sessionId: string, orderId: string): Promise<Delivery> {
@@ -526,6 +553,7 @@ export async function getDelivery(ctx: Ctx, sessionId: string, orderId: string):
     accessUntil: new Date(ent.rows[0]!.expires_at).getTime(),
     lettersEligible: cr.inputs.debts.filter((d) => d.daysOverdue > 0 || diagnosis.heldAsideIds.includes(d.id)).length,
     leads: await leadState(ctx, order.case_id, diagnosis, cr.inputs.debts),
+    banner: await pickBanner(ctx),
   };
 }
 

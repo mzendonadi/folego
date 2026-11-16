@@ -5,7 +5,7 @@ import { brl, mmss } from './format.js';
 import { qrSvg } from '../vendor/qr.js';
 import { DEV } from '../config.js';
 import { track } from './meta-pixel.js';
-import { CATALOG, BUNDLE, daysOf } from './catalog.js';
+import { CATALOG, BUNDLE, MAP_FREE, daysOf } from './catalog.js';
 
 /**
  * @param root elemento onde desenhar
@@ -21,7 +21,9 @@ export function renderCheckout(root, ctx) {
   let disposed = false;
   // Assinante do Prumo: o servidor já calculou o preço e o prazo do Mapa dele (Ousado: valor especial no Pix; Desbravador: incluso no plano).
   const offer = ctx.mapOffer && !ctx.addon ? ctx.mapOffer : null;
-  const included = offer?.mode === 'free';
+  // Mapa grátis para todos (o dono liga no backoffice): sem Pix, mas com e-mail e celular para enviar o acesso.
+  const freePublic = MAP_FREE.on && !ctx.addon && !offer;
+  const included = offer?.mode === 'free' || freePublic;
   let contact = { email: offer?.email ?? '', phone: '' };
 
   const stop = () => {
@@ -39,10 +41,10 @@ export function renderCheckout(root, ctx) {
   let needContact = !addon || standalone;
 
   // Valores lidos do catálogo na hora (o dono pode mudar); o servidor sempre recalcula o preço que vale.
-  const MAP_CENTS = () => (offer ? offer.priceCents : CATALOG.recovery_map.cents);
+  const MAP_CENTS = () => (offer ? offer.priceCents : freePublic ? 0 : CATALOG.recovery_map.cents);
   const LETTERS_CENTS = () => CATALOG.defense_letters.cents;
   const BUNDLE_CENTS = () => BUNDLE.cents;
-  const isBundle = () => !addon && !offer && withLetters && withCalendar; // quem assina o Prumo tem o preço dele no Mapa: o combo não se soma
+  const isBundle = () => !addon && !offer && !freePublic && withLetters && withCalendar; // quem assina o Prumo tem o preço dele no Mapa: o combo não se soma
   const isFreeOrder = () => included && !addon && !withLetters && !withCalendar; // só o Mapa incluso no plano: sem Pix e sem contato
   const bundleDiscount = () => (isBundle() ? MAP_CENTS() + LETTERS_CENTS() + CATALOG.calendar_30d.cents - BUNDLE_CENTS() : 0);
   const codes = () => addon ?? ['recovery_map', ...(withLetters ? ['defense_letters'] : []), ...(withCalendar ? ['calendar_30d'] : [])];
@@ -73,8 +75,9 @@ export function renderCheckout(root, ctx) {
     const lines = addon
       ? addon.map((code) => line(CATALOG[code].name, CATALOG[code].cents))
       : [
-          offer ? line('Mapa da Virada', offer.regularCents) : line('Mapa da Virada', MAP_CENTS()),
+          offer ? line('Mapa da Virada', offer.regularCents) : line('Mapa da Virada', freePublic ? CATALOG.recovery_map.cents : MAP_CENTS()),
           offer && offer.regularCents > offer.priceCents ? line(included ? 'Incluso no seu plano Desbravador' : 'Desconto de assinante Ousado', -(offer.regularCents - offer.priceCents), 'co-discount') : null,
+          freePublic ? line('Grátis por tempo limitado', -CATALOG.recovery_map.cents, 'co-discount') : null,
           withLetters ? line('Kit de Cartas e Defesas', LETTERS_CENTS()) : null,
           withCalendar ? line('Calendário dos 30 dias', CATALOG.calendar_30d.cents) : null,
           isBundle() ? line('Desconto Kit Completo', -bundleDiscount(), 'co-discount') : null,
@@ -85,10 +88,12 @@ export function renderCheckout(root, ctx) {
       ...bumps,
       ...(!addon && !offer && !isBundle() && ctx.offerLetters ? [el('p', { class: 'fine' }, `Mapa + Cartas + Calendário juntos saem por ${brl(BUNDLE_CENTS())} (Kit Completo).`)] : []),
       el('div', { class: 'co-total' }, el('span', {}, 'Total'), el('strong', { 'aria-live': 'polite' }, brl(total()))),
-      el('p', { class: 'note' }, icon('info'), el('span', {}, included
+      el('p', { class: 'note' }, icon('info'), el('span', {}, freePublic
+        ? 'O Mapa fica liberado por 30 dias e você pode refazer com dados novos quantas vezes quiser nesse prazo. Uma contagem regressiva mostra quantos dias faltam.'
+        : included
         ? 'O Mapa fica liberado enquanto a sua assinatura do Desbravador valer, e você pode refazer com dados novos quantas vezes quiser. Uma contagem regressiva mostra quantos dias faltam.'
         : `Depois de pagar, você tem ${offer ? offer.days : daysOf(addon ? addon[0] : 'recovery_map')} dias de acesso e pode refazer com dados novos quantas vezes quiser, sem pagar de novo. Uma contagem regressiva mostra quantos dias faltam.`)),
-      el('p', { class: 'fine' }, included && total() === 0 ? 'Sem cobrança: faz parte do seu plano.' : 'Pagamento único por Pix. Sem assinatura e sem renovação automática.'),
+      el('p', { class: 'fine' }, freePublic && total() === 0 ? 'Sem cobrança. Seu contato só vai a parceiros se você autorizar, em separado e de forma opcional, depois de abrir o Mapa.' : included && total() === 0 ? 'Sem cobrança: faz parte do seu plano.' : 'Pagamento único por Pix. Sem assinatura e sem renovação automática.'),
     );
   }
 
@@ -110,11 +115,12 @@ export function renderCheckout(root, ctx) {
   function drawIntro() {
     if (isFreeOrder()) {
       payCard.replaceChildren(...[
-        el('h2', { id: 'co-pay-title' }, 'Abrir o seu Mapa'),
-        el('p', { class: 'muted' }, 'O Mapa da Virada faz parte do seu plano Desbravador. Não há Pix nem cobrança: é só abrir.'),
-        el('button', { class: 'btn btn-primary btn-lg btn-block', type: 'button', id: 'gen-pix' }, 'Abrir meu Mapa', icon('arrow-right')),
+        el('h2', { id: 'co-pay-title' }, freePublic ? 'Liberar o seu Mapa grátis' : 'Abrir o seu Mapa'),
+        el('p', { class: 'muted' }, freePublic ? 'Não há Pix nem cobrança. Informe seu e-mail e celular para enviarmos o seu acesso e o Mapa abre na hora.' : 'O Mapa da Virada faz parte do seu plano Desbravador. Não há Pix nem cobrança: é só abrir.'),
+        freePublic ? contactFields() : null,
+        el('button', { class: 'btn btn-primary btn-lg btn-block', type: 'button', id: 'gen-pix' }, freePublic ? 'Liberar meu Mapa grátis' : 'Abrir meu Mapa', icon('arrow-right')),
         el('p', { class: 'fine' }, 'Dúvida? Escreva para ', el('a', { class: 'link', href: 'mailto:suporte@folego.online' }, 'suporte@folego.online'), '.'),
-      ]);
+      ].filter(Boolean));
       payCard.querySelector('#gen-pix').addEventListener('click', generate);
       return;
     }
@@ -154,7 +160,8 @@ export function renderCheckout(root, ctx) {
       orderId = order.orderId;
       // Conta de teste ligada pelo dono: o servidor já confirmou o pedido, sem Pix e sem cobrança.
       if (order.status === 'paid') {
-        toast(included ? 'Pronto: o Mapa está no seu plano.' : 'Conta de teste: liberado sem cobrança.');
+        if (freePublic) track('Lead', {}, `lead-${ctx.caseId}`);
+        toast(freePublic ? 'Pronto: seu Mapa está liberado por 30 dias.' : included ? 'Pronto: o Mapa está no seu plano.' : 'Conta de teste: liberado sem cobrança.');
         return ctx.onPaid(order.orderId);
       }
       // Pix gerado com e-mail e celular: Lead e InitiateCheckout. O servidor manda os mesmos eventos com estes ids (lead-<caso>, ic-<pedido>).
