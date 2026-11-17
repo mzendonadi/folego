@@ -187,25 +187,24 @@ async function usersTab(ctx) {
   return host;
 }
 
-async function auditTab() {
+async function auditTab(ctx) {
   const host = el('div', {});
-  let scope = 'admin';
-  let page = 0;
+  const au = ctx.state.configAuditoria ?? (ctx.state.configAuditoria = { scope: 'admin', page: 0 }); // guardado enquanto a sessão estiver ativa
   async function draw() {
     host.replaceChildren(loading());
     try {
-      const { items } = await api.auditoria({ escopo: scope, pagina: page });
-      const all = el('button', { class: 'bo-chip', type: 'button', 'aria-pressed': String(scope === 'todos') }, 'Incluir eventos do sistema');
-      all.addEventListener('click', () => { scope = scope === 'todos' ? 'admin' : 'todos'; page = 0; draw(); });
-      const prev = el('button', { class: 'btn btn-quiet btn-sm', type: 'button', disabled: page === 0 }, 'Anterior');
+      const { items } = await api.auditoria({ escopo: au.scope, pagina: au.page });
+      const all = el('button', { class: 'bo-chip', type: 'button', 'aria-pressed': String(au.scope === 'todos') }, 'Incluir eventos do sistema');
+      all.addEventListener('click', () => { au.scope = au.scope === 'todos' ? 'admin' : 'todos'; au.page = 0; draw(); });
+      const prev = el('button', { class: 'btn btn-quiet btn-sm', type: 'button', disabled: au.page === 0 }, 'Anterior');
       const next = el('button', { class: 'btn btn-quiet btn-sm', type: 'button', disabled: items.length < 60 }, 'Próxima');
-      prev.addEventListener('click', () => { page -= 1; draw(); });
-      next.addEventListener('click', () => { page += 1; draw(); });
+      prev.addEventListener('click', () => { au.page -= 1; draw(); });
+      next.addEventListener('click', () => { au.page += 1; draw(); });
       host.replaceChildren(card('Registro de auditoria', el('div', { class: 'bo-toolbar' }, el('p', { class: 'muted' }, 'Tudo o que foi feito no backoffice, com quem e quando. O registro é imutável.'), all), table(
         [{ label: 'Quando', render: (a) => dt(a.at) }, { label: 'Quem', render: (a) => a.actor }, { label: 'O quê', render: (a) => ACTION[a.action] ?? a.action }, { label: 'Sobre', render: (a) => `${a.entity} ${a.entityId ? String(a.entityId).slice(0, 12) : ''}` }, { label: 'Detalhe', render: (a) => detail(a.data) }],
         items,
         { emptyText: 'Nada registrado ainda.' },
-      ), el('div', { class: 'bo-pager' }, prev, el('span', { class: 'muted' }, `Página ${page + 1}`), next)));
+      ), el('div', { class: 'bo-pager' }, prev, el('span', { class: 'muted' }, `Página ${au.page + 1}`), next)));
     } catch (e) {
       host.replaceChildren(errorBox(e, draw));
     }
@@ -224,11 +223,12 @@ export async function configScreen(ctx) {
   const st = ctx.state.config ?? (ctx.state.config = { tab: ctx.can('config_site') ? 'site' : ctx.can('config_usuarios') ? 'usuarios' : 'auditoria' });
   const host = el('div', { class: 'bo-stack' });
   const items = [ctx.can('config_site') ? ['site', 'Site e recursos'] : null, ctx.can('config_usuarios') ? ['usuarios', 'Usuários e permissões'] : null, ctx.can('auditoria') ? ['auditoria', 'Auditoria'] : null].filter(Boolean);
+  if (!items.some(([k]) => k === st.tab)) st.tab = items[0]?.[0] ?? 'auditoria'; // a aba guardada pode não ser permitida a quem entrou agora
   async function draw() {
     const body = el('div', {}, loading());
     host.replaceChildren(tabs(items, st.tab, (t) => { st.tab = t; draw(); }), body);
     try {
-      body.replaceChildren(st.tab === 'site' ? await siteTab(ctx) : st.tab === 'usuarios' ? await usersTab(ctx) : await auditTab());
+      body.replaceChildren(st.tab === 'site' ? await siteTab(ctx) : st.tab === 'usuarios' ? await usersTab(ctx) : await auditTab(ctx));
     } catch (e) {
       body.replaceChildren(errorBox(e, draw));
     }

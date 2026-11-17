@@ -4,7 +4,8 @@ import { api } from '../api.js';
 import { el, brl, int, dt, shortId, card, table, tabs, pager, badge, loading, errorBox, EMPLOYMENT, PRODUCT, PLAN, SUB_STATUS } from '../ui.js';
 import { caseDrawer, subscriberDrawer } from './shared.js';
 
-const FILTERS = [['todos', 'Todos'], ['pagaram', 'Pagaram'], ['nao_pagaram', 'Não pagaram'], ['abandonaram_checkout', 'Abriram o Pix e não pagaram']];
+// O Mapa é grátis: os filtros separam quem parou onde, quem seguiu depois do Mapa e quem pagou um produto cobrado.
+const FILTERS = [['todos', 'Todos'], ['sem_mapa', 'Viram o resultado e não abriram o Mapa'], ['mapa_liberado', 'Abriram o Mapa'], ['mapa_sem_seguir', 'Abriram o Mapa e não seguiram'], ['autorizou_parceiro', 'Preencheram o formulário do parceiro'], ['pagaram', 'Pagaram (produto cobrado)'], ['abandonaram_checkout', 'Abriram o Pix e não pagaram'], ['nao_pagaram', 'Nunca pagaram']];
 
 export async function clientesScreen(ctx) {
   const st = ctx.state.clientes ?? (ctx.state.clientes = { tab: 'avulsos', filtro: 'todos', q: '', page: 0 });

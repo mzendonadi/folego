@@ -12,7 +12,7 @@ export async function whatsappScreen(ctx = {}) {
   const prefill = ctx.state?.waStart ?? null;
   if (ctx.state) ctx.state.waStart = null;
   const host = el('div', { class: 'bo-stack' });
-  const st = { tab: 'conversas' };
+  const st = ctx.state.whatsapp ?? (ctx.state.whatsapp = { tab: 'conversas', stateFilter: '' }); // aba e filtro guardados enquanto a sessão estiver ativa
   let inbox = null;
   const stopInbox = () => { inbox?.stop(); inbox = null; };
   let acc = await api.wa.call('GET', '/account');
@@ -47,7 +47,7 @@ export async function whatsappScreen(ctx = {}) {
   // O que foi enviado aos parceiros: o envio é automático (webhook assinado, feito pelo worker); aqui só se acompanha o andamento de cada um.
   const STATE = { pendente: ['Pendente', 'warn'], tentando: ['Tentando de novo', 'warn'], enviado: ['Enviado', 'ok'], falhou: ['Falhou', 'bad'], contatado: ['Parceiro já falou', 'ok'], contratado: ['Contratado', 'ok'], recusado: ['Recusado', 'muted'], sem_parceiro: ['Sem parceiro compatível', 'muted'] };
   const EMP = { clt: 'CLT', inss_retiree: 'Aposentado/pensionista', public_servant: 'Servidor público', self_employed: 'Autônomo/MEI', other: 'Outra situação' };
-  let stateFilter = '';
+  let stateFilter = st.stateFilter ?? '';
 
   async function oportunidades() {
     const d = await api.wa.call('GET', '/oportunidades');
@@ -69,7 +69,7 @@ export async function whatsappScreen(ctx = {}) {
         { emptyText: 'Nada por aqui ainda. Quem pedir para falar com um parceiro aparece nesta lista.' },
       ));
     };
-    sel.addEventListener('change', () => { stateFilter = sel.value; paint(); });
+    sel.addEventListener('change', () => { stateFilter = sel.value; st.stateFilter = stateFilter; paint(); });
     paint();
     return el('div', { class: 'bo-stack' },
       kpis(
@@ -90,7 +90,7 @@ export async function whatsappScreen(ctx = {}) {
   }
   // ------------------------------------------------------------------------------------------ Modelos
   // Lista dos modelos salvos (o que já foi aprovado na Bird) com ver, editar, excluir, situação, busca e filtro.
-  const tplFilter = { q: '', status: '' };
+  const tplFilter = ctx.state.waModelos ?? (ctx.state.waModelos = { q: '', status: '' });
   const preview = (t, filled = null) => t.body.replace(/\{\{(\d+)\}\}/g, (_, n) => (filled ? filled[Number(n) - 1] || `[${t.paramNames?.[Number(n) - 1] ?? `variável ${n}`}]` : `[${t.paramNames?.[Number(n) - 1] ?? `variável ${n}`}]`));
 
   function templateEditor(t, done) {

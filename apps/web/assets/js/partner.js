@@ -5,6 +5,7 @@ import { viewPainel, viewFolego, viewBase, viewContratos } from './partner-views
 import { viewImportar } from './partner-import.js';
 import { viewWhatsapp } from './partner-wa.js';
 import { withEye } from './pw-eye.js';
+import { persistentState } from './ui-state.js';
 
 const TABS = [
   ['painel', 'Painel', 'chart'],
@@ -17,6 +18,12 @@ const TABS = [
 const VIEWS = { painel: viewPainel, folego: viewFolego, whatsapp: viewWhatsapp, base: viewBase, contratos: viewContratos, importar: viewImportar };
 
 export function renderPartner(root) {
+  // Aba, filtros e página de cada tela ficam guardados enquanto o login do portal estiver ativo (sobrevivem a trocar de aba e a recarregar).
+  const ui = persistentState('folego:parceiro:ui', { tab: 'painel', views: {} });
+  const resetUi = () => {
+    ui.tab = 'painel';
+    for (const k of Object.keys(ui.views)) delete ui.views[k];
+  };
   let token = '';
   try {
     token = sessionStorage.getItem('folego:parceiro') || '';
@@ -25,6 +32,7 @@ export function renderPartner(root) {
   }
   const keep = (value) => {
     token = value;
+    if (!value) resetUi(); // saiu ou a sessão terminou: o próximo login começa do padrão
     try {
       if (value) sessionStorage.setItem('folego:parceiro', value);
       else sessionStorage.removeItem('folego:parceiro');
@@ -138,7 +146,8 @@ export function renderPartner(root) {
     email.focus();
   }
 
-  async function drawShell(tab = 'painel') {
+  async function drawShell(tab = ui.tab) {
+    if (!VIEWS[tab]) tab = 'painel';
     let profile;
     try {
       profile = await call('GET', '/partner/me');
@@ -150,8 +159,10 @@ export function renderPartner(root) {
     const side = el('aside', { class: 'pt-side', id: 'pt-side' });
     // `raw`: chamada sem JSON (envio de arquivo e download de mídia), com o mesmo login do portal. Devolve a Response.
     const raw = (method, path, headers = {}, body) => fetch(`/api${path}`, { method, headers: { 'x-folego': '1', ...(token ? { authorization: `Bearer ${token}` } : {}), ...headers }, body });
-    const ctx = { call, raw, profile, toast, go: (t, opts) => show(t, opts) };
+    // `ui(tela, padrão)`: o estado guardado daquela tela (filtros, busca, página, aba interna).
+    const ctx = { call, raw, profile, toast, go: (t, opts) => show(t, opts), ui: (view, defaults) => { if (!ui.views[view]) ui.views[view] = defaults; return ui.views[view]; } };
     const show = async (id, opts = {}) => {
+      ui.tab = id;
       side.classList.remove('is-open');
       nav.querySelectorAll('button').forEach((b) => b.setAttribute('aria-current', b.dataset.tab === id ? 'page' : 'false'));
       stage.replaceChildren(el('p', { class: 'muted', role: 'status' }, 'Carregando…'));

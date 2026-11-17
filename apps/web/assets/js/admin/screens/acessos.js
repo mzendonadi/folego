@@ -9,7 +9,7 @@ const FILTERS = [['ativos', 'Ativos'], ['vencendo', 'Vencem em 7 dias'], ['venci
 const daysBadge = (x) => (x.expired ? badge('Encerrado', 'muted') : x.daysLeft <= 2 ? badge(`${x.daysLeft} ${x.daysLeft === 1 ? 'dia' : 'dias'}`, 'bad') : x.daysLeft <= 7 ? badge(`${x.daysLeft} dias`, 'warn') : badge(`${x.daysLeft} dias`, 'ok'));
 
 export async function acessosScreen(ctx) {
-  const st = { filtro: 'ativos', produto: '', page: 0 };
+  const st = ctx.state.acessos ?? (ctx.state.acessos = { filtro: 'ativos', produto: '', page: 0 }); // guardado enquanto a sessão estiver ativa
   const host = el('div', { class: 'bo-stack' });
 
   async function draw() {

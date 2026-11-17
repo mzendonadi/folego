@@ -13,6 +13,7 @@ import { leadsSection } from './leads.js';
 import { referralCard } from './referral.js';
 import { CATALOG, MAP_FREE, priceLabel, daysOf } from './catalog.js';
 import { accessBanner } from './access-banner.js';
+import { track as trackSite } from './track.js';
 import { FORGOTTEN_DIRECTORY } from '../vendor/engine.js';
 
 // ---------- componentes ----------
@@ -250,6 +251,7 @@ function section(id, title, ...children) {
 function partnerAd(banner, where) {
   if (!banner) return null;
   const link = el('a', { class: 'btn btn-secondary partner-ad-cta', href: banner.url, target: '_blank', rel: 'sponsored noopener noreferrer' }, banner.cta, icon('arrow-right'));
+  link.addEventListener('click', () => trackSite('cta', { id: 'banner_clique', camp: banner.campaignId, where })); // clique por campanha (só o nome do evento e a campanha, nada da pessoa)
   return el(
     'aside', { class: `partner-ad partner-ad-${where} no-print`, 'aria-label': `Publicidade de ${banner.partner}` },
     banner.imageUrl ? el('img', { class: 'partner-ad-img', src: banner.imageUrl, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' }) : null,
@@ -400,6 +402,8 @@ export function renderDelivery(root, { input, diagnosis: d, items, generated, ex
       el('p', { class: 'fine' }, 'Estimativas educativas, calculadas com o que você informou. O Fôlego não é escritório de advocacia, banco ou consultoria de investimentos, e não negocia por você.'),
     ].filter(Boolean),
   );
+
+  if (banner) trackSite('view', { view: 'mapa_banner', camp: banner.campaignId }); // exibição do banner (uma por abertura do Mapa)
 
   root.onclick = (e) => {
     const btn = e.target instanceof Element ? e.target.closest('button') : null;

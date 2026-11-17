@@ -260,8 +260,11 @@ test('dashboard: funil, abandono, receita por produto e por meio de pagamento, e
   const step = (k: string) => d.funnel.steps.find((s: any) => s.key === k).count;
   assert.ok(step('diagnosed') >= 3);
   assert.ok(step('paid') >= 1);
-  assert.ok(d.funnel.abandonment.abandonedCheckout >= 1, 'quem gerou Pix e não pagou');
-  assert.ok(d.funnel.abandonment.neverOpenedCheckout >= 1, 'quem só viu o resultado');
+  assert.ok(step('mapped') >= 1, 'quem liberou o Mapa (aqui, pagando, porque o Mapa grátis está desligado)');
+  assert.ok(d.funnel.abandonment.diagnosedNoMap >= 2, 'quem gerou o Pix do Mapa e não pagou, e quem só viu o resultado');
+  assert.equal(typeof d.funnel.abandonment.startedNotFinished, 'number');
+  assert.ok(d.funnel.products.some((p: any) => p.code === 'defense_letters' && p.paid >= 1), 'pagamentos por produto cobrado');
+  assert.equal(d.funnel.banner.shown, 0);
   assert.ok(d.revenue.grossCents >= 4800);
   assert.ok(d.revenue.byProduct.some((p: any) => p.code === 'defense_letters' && p.units >= 1));
   assert.ok(d.revenue.byMethod.some((m: any) => m.method === 'pix'));

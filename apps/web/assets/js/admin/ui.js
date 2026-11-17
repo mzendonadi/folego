@@ -30,7 +30,7 @@ export const PRUMO_TAB = {
   empresa: 'Empresa', contas: 'Contas conectadas', lembretes: 'Lembretes', dividas: 'Dívidas', cofre: 'Cofre', metas: 'Metas', ferias: 'Férias', investimentos: 'Investimentos', estrategias: 'Estratégias',
   relatorios: 'Relatórios', planejador: 'Planejador', cenarios: 'E se...?', mercado: 'Mercado', treinador: 'Treinador', simulador: 'Simulador', familia: 'Compartilhar', indicar: 'Indique e ganhe', perfil: 'Perfil', plano: 'Plano e dados',
 };
-export const VIEW = { landing: 'Página inicial', intake: 'Formulário', processing: 'Cálculo', preview: 'Resultado grátis', checkout: 'Pagamento', addon: 'Compra de complemento', delivery: 'Mapa completo', tools: 'Ferramentas grátis', translator: 'Tradutor', account: 'Prumo: área da assinatura', prumo: 'Prumo: página /prumo', partner: 'Portal do parceiro', ...Object.fromEntries(Object.entries(PRUMO_TAB).map(([k, v]) => [`conta_${k}`, `Prumo · ${v}`])) };
+export const VIEW = { landing: 'Página inicial', intake: 'Formulário', processing: 'Cálculo', preview: 'Resultado grátis', checkout: 'Pagamento', addon: 'Compra de complemento', delivery: 'Mapa completo', tools: 'Ferramentas grátis', translator: 'Tradutor', account: 'Prumo: área da assinatura', prumo: 'Prumo: página /prumo', partner: 'Portal do parceiro', mapa_banner: 'Mapa: banner do parceiro exibido', ...Object.fromEntries(Object.entries(PRUMO_TAB).map(([k, v]) => [`conta_${k}`, `Prumo · ${v}`])) };
 export const CATEGORY = { consignado: 'Consignado', renegotiation: 'Renegociação', personal_credit: 'Crédito pessoal', empreendedorismo: 'Empreendedorismo' };
 export const WEEKDAY = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 

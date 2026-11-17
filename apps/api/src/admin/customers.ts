@@ -209,13 +209,19 @@ export async function listCases(ctx: Ctx, opts: { filter?: string; q?: string; p
   else if (opts.kind !== 'todos') where.push(`c.product_kind = 'map'`);
   if (opts.filter === 'pagaram') where.push(`t.paid > 0`);
   if (opts.filter === 'nao_pagaram') where.push(`coalesce(t.paid,0) = 0`);
-  if (opts.filter === 'abandonaram_checkout') where.push(`coalesce(t.paid,0) = 0 AND t.orders > 0`);
+  if (opts.filter === 'abandonaram_checkout') where.push(`coalesce(t.paid,0) = 0 AND t.orders > 0`); // gerou o Pix de um produto cobrado e não pagou (o Mapa grátis não conta)
+  // O Mapa é grátis: "liberou o Mapa" e "viu o resultado e parou" são o que separa quem seguiu de quem não seguiu.
+  const MAPPED = `EXISTS (SELECT 1 FROM app.order_items i JOIN app.orders o ON o.id = i.order_id WHERE o.case_id = c.id AND o.status = 'paid' AND i.product_code = 'recovery_map')`;
+  if (opts.filter === 'mapa_liberado') where.push(MAPPED);
+  if (opts.filter === 'sem_mapa') where.push(`c.product_kind = 'map' AND NOT ${MAPPED}`);
+  if (opts.filter === 'autorizou_parceiro') where.push(`EXISTS (SELECT 1 FROM app.v_current_consents v WHERE v.case_id = c.id AND v.purpose = 'lead_sharing' AND v.action = 'grant')`);
+  if (opts.filter === 'mapa_sem_seguir') where.push(`${MAPPED} AND coalesce(t.paid,0) = 0 AND t.orders = 0 AND NOT EXISTS (SELECT 1 FROM app.v_current_consents v WHERE v.case_id = c.id AND v.purpose = 'lead_sharing' AND v.action = 'grant')`);
   if (opts.q && opts.q.trim()) {
     params.push(`${opts.q.trim().toLowerCase().replace(/[^a-f0-9-]/g, '')}%`);
     where.push(`c.id::text LIKE $${params.length}`);
   }
   const from = `FROM app.cases c
-      LEFT JOIN (SELECT o.case_id, sum(o.total_cents) FILTER (WHERE o.status = 'paid') AS paid, count(*) AS orders, max(o.created_at) AS last_order
+      LEFT JOIN (SELECT o.case_id, sum(o.total_cents) FILTER (WHERE o.status = 'paid') AS paid, count(*) FILTER (WHERE o.total_cents > 0) AS orders, max(o.created_at) AS last_order
                    FROM app.orders o WHERE o.case_id IS NOT NULL GROUP BY 1) t ON t.case_id = c.id
       ${where.length ? `WHERE ${where.join(' AND ')}` : ''}`;
   const total = await ctx.db.query<{ n: string }>(`SELECT count(*) AS n ${from}`, params);

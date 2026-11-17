@@ -27,14 +27,15 @@ export async function viewWhatsapp(ctx) {
   const root = el('div', { class: 'pt-stack pt-wa' });
   const body = el('div', { class: 'pt-stack' });
   let acc = await ctx.call('GET', '/partner/wa/account');
-  let tab = acc.connected ? (ctx.opts?.startContact || ctx.opts?.startDelivery || ctx.opts?.thread ? 'conversas' : 'conversas') : 'conexao';
+  const ui = ctx.ui('whatsapp', { tab: 'conversas' }); // a aba interna fica guardada enquanto o login estiver ativo
+  let tab = acc.connected ? (ctx.opts?.startContact || ctx.opts?.startDelivery || ctx.opts?.thread ? 'conversas' : TABS.some(([k]) => k === ui.tab) ? ui.tab : 'conversas') : 'conexao';
   let stopInbox = null;
   const stop = () => { stopInbox?.(); stopInbox = null; };
 
   const bar = el('div', { class: 'pt-filters', role: 'tablist' });
   const paintBar = () => bar.replaceChildren(...TABS.map(([k, l]) => {
     const b = el('button', { class: 'pt-chip', type: 'button', role: 'tab', 'aria-selected': String(tab === k) }, l);
-    b.addEventListener('click', () => { tab = k; show(); });
+    b.addEventListener('click', () => { tab = k; ui.tab = k; show(); });
     return b;
   }));
 

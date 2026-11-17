@@ -14,8 +14,8 @@ const followUp = (l) => `Olá${firstName(l) ? `, ${firstName(l)}` : ''}! Aqui é
 
 export async function chatbotScreen(ctx) {
   const days = ctx.state.days;
-  const st = { status: '', origin: '', q: '', page: 0 };
-  const [m, first] = await Promise.all([api.chatResumo(days), api.chatContatos({ pagina: 0 })]);
+  const st = ctx.state.chatbot ?? (ctx.state.chatbot = { status: '', origin: '', q: '', page: 0 }); // guardado enquanto a sessão estiver ativa
+  const [m, first] = await Promise.all([api.chatResumo(days), api.chatContatos({ status: st.status, origem: st.origin, busca: st.q, pagina: st.page })]);
 
   const head = el('div', { class: 'bo-toolbar' }, el('p', { class: 'muted' }, `Período: últimos ${days === 3650 ? 'todos os' : days} ${days === 3650 ? 'registros' : 'dias'}. Quem chama o chat informa celular com DDD e e-mail antes de conversar.`), periodSelect(days, (v) => ctx.setDays(v)));
 
@@ -53,6 +53,9 @@ export async function chatbotScreen(ctx) {
   const statusSel = el('select', { class: 'input input-sm', 'aria-label': 'Filtrar por situação' }, el('option', { value: '' }, 'Todas as situações'), ...Object.entries(STATUS).map(([k, [l]]) => el('option', { value: k }, l)));
   const originSel = el('select', { class: 'input input-sm', 'aria-label': 'Filtrar por origem' }, el('option', { value: '' }, 'Site e Prumo'), el('option', { value: 'landing' }, 'Só o site'), el('option', { value: 'prumo' }, 'Só o Prumo'));
   const search = el('input', { class: 'input input-sm', type: 'search', placeholder: 'Buscar nome, e-mail ou celular', 'aria-label': 'Buscar contato' });
+  statusSel.value = st.status;
+  originSel.value = st.origin;
+  search.value = st.q;
   const reloadList = async () => {
     const r = await api.chatContatos({ status: st.status, origem: st.origin, busca: st.q, pagina: st.page });
     draw(r);

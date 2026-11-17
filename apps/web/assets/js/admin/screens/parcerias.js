@@ -19,7 +19,10 @@ export async function parceriasScreen(ctx) {
   const pctOf = (n) => (pot.cases ? `${Math.round((n / pot.cases) * 100)}% dos diagnósticos` : '');
 
   // ---- envio e acompanhamento ----
-  const st = { tab: 'contatos', filtro: 'nao_enviados', categoria: '', parceiro: '', page: 0, situacao: '', selected: new Set() };
+  // Aba, filtros e página ficam guardados enquanto a sessão estiver ativa; a seleção de contatos é só desta tela (não vai para o armazenamento).
+  const saved = ctx.state.parcerias ?? (ctx.state.parcerias = { tab: 'contatos', filtro: 'nao_enviados', categoria: '', parceiro: '', page: 0, situacao: '' });
+  const st = { selected: new Set() };
+  for (const k of Object.keys(saved)) Object.defineProperty(st, k, { enumerable: true, get: () => saved[k], set: (v) => { saved[k] = v; } });
   const host = el('div', { class: 'bo-stack' });
 
   async function drawContacts() {

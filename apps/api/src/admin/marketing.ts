@@ -30,33 +30,53 @@ export async function insights(ctx: Ctx, days: number): Promise<{ days: number; 
   const f = d.funnel;
   const visitors = f.steps[0]!.count;
   const ab = f.abandonment;
-  const totalCases = ab.filledNotPaid + ab.paid;
+  const totalCases = f.steps[2]!.count; // diagnósticos feitos
 
   const note = d.traffic.trackingSince ? null : 'O rastreamento de navegação começou a valer agora: os números de visitas e origens só existem daqui para a frente.';
   if (visitors < 30) {
     out.push({ id: 'dados_poucos', area: 'dados', priority: 'baixa', title: 'Ainda há poucos dados para conclusões firmes', evidence: `Nos últimos ${days} dias foram ${visitors} visitantes e ${totalCases} diagnósticos. Percentuais com amostra pequena oscilam muito.`, actions: ['Use os números como direção, não como verdade.', 'Aumente o período (90 dias ou tudo) para ver tendências.', 'Rode 1–2 semanas de divulgação com links UTM para medir de onde vem cada pessoa.'] });
   }
 
-  if (totalCases >= 5 && ab.filledNotPaid > 0) {
-    const rate = ab.conversionPct ?? 0;
+  // O Mapa é grátis: o que importa é terminar o diagnóstico, liberar o Mapa e o que a pessoa faz depois (parceiro, outros produtos).
+  if (ab.startedNotFinished >= 5) {
     out.push({
-      id: 'abandono_preview', area: 'conversao', priority: rate < 10 ? 'alta' : 'media',
-      title: `${ab.filledNotPaid} pessoas preencheram o diagnóstico e não pagaram`,
-      evidence: `De ${totalCases} diagnósticos, ${ab.paid} pagaram (${rate}%). ${ab.neverOpenedCheckout} nem abriram a tela de pagamento; ${ab.abandonedCheckout} abriram e desistiram.`,
-      actions: [
-        'Quem nem abre o pagamento não viu valor suficiente no resultado grátis: destaque a economia em reais (a manchete "você deixa de pagar R$ X em juros") logo acima do botão.',
-        'Teste um preço menor por uma semana em Produtos e preços e compare a taxa de conversão do período.',
-        'Reforce a promessa "só paga se gostar" e mostre o que vem no Mapa (roteiros, orçamento, linha do tempo).',
-      ],
-      plan: { title: 'Aumentar a conversão do resultado grátis para o pagamento', goal: `Sair de ${rate}% para ${Math.min(100, Math.round(rate + 5))}% de conversão`, segment: 'Quem preenche o diagnóstico', channel: 'Site (tela de resultado)' },
+      id: 'abandono_formulario', area: 'conversao', priority: ab.startedNotFinished >= totalCases ? 'alta' : 'media',
+      title: `${ab.startedNotFinished} pessoas começaram o diagnóstico e não terminaram`,
+      evidence: `Nos últimos ${days} dias, ${totalCases} diagnósticos foram concluídos e ${ab.startedNotFinished} pessoas abandonaram o formulário. Veja em Jornada e funil em qual etapa elas saem.`,
+      actions: ['Olhe a etapa em que mais gente desiste e simplifique-a (menos campos, exemplos prontos).', 'Mostre desde o começo que o resultado sai em cerca de 3 minutos e que não pede CPF.'],
     });
   }
-  if (ab.abandonedCheckout >= 3) {
+  if (ab.diagnosedNoMap >= 3) {
     out.push({
-      id: 'abandono_checkout', area: 'conversao', priority: 'media',
-      title: `${ab.abandonedCheckout} pessoas geraram o Pix e não pagaram`,
-      evidence: `Pedidos não pagos no período: ${Object.entries(d.revenue.unpaidOrders).map(([k, v]) => `${v} ${k}`).join(', ') || 'nenhum'}.`,
-      actions: ['O Pix vale 30 minutos: avise na tela quanto tempo falta e deixe claro que dá para gerar de novo.', 'Sugira "copiar código" como caminho principal no celular (é onde a maioria abre o app do banco).', 'Como a compra é anônima, não há como cobrar depois: a recuperação precisa acontecer dentro do site.'],
+      id: 'sem_mapa', area: 'conversao', priority: 'media',
+      title: `${ab.diagnosedNoMap} pessoas viram o resultado e não liberaram o Mapa grátis`,
+      evidence: `De ${totalCases} diagnósticos, ${ab.mapReleased} liberaram o Mapa (${ab.mapRatePct ?? 0}%). Para liberar, a pessoa informa e-mail e celular.`,
+      actions: ['Deixe claro, ao lado do botão, que é grátis e por que pedimos e-mail e celular (enviar o acesso).', 'Mostre no resultado o que vem no Mapa (ordem de pagamento, roteiros, plano mês a mês).'],
+    });
+  }
+  if (ab.mapReleased >= 5 && ab.mapNoFollow > 0) {
+    out.push({
+      id: 'mapa_sem_seguir', area: 'receita', priority: ab.followRatePct !== null && ab.followRatePct < 20 ? 'alta' : 'media',
+      title: `${ab.mapNoFollow} pessoas abriram o Mapa e não seguiram`,
+      evidence: `De ${ab.mapReleased} Mapas liberados, ${ab.mapFollowed} seguiram (${ab.followRatePct ?? 0}%): ${ab.mapPartner} preencheram o formulário do parceiro, ${ab.mapOther} viram outros produtos, ${ab.mapBanner} clicaram no banner. Como o Mapa é grátis, é aqui que a receita aparece.`,
+      actions: ['Coloque o convite para falar com um parceiro e a oferta de um complemento em pontos em que a pessoa já viu valor (fim do resumo e da ordem de pagamento).', 'Conferir se há parceiro com banner ligado em Parcerias: sem banner, esse canal não rende.', 'Teste textos diferentes do banner e do convite e compare a taxa de quem segue.'],
+      plan: { title: 'Fazer mais gente seguir depois de abrir o Mapa', goal: `Sair de ${ab.followRatePct ?? 0}% para ${Math.min(100, Math.round((ab.followRatePct ?? 0) + 10))}% dos Mapas`, segment: 'Quem abriu o Mapa', channel: 'Site (tela do Mapa)' },
+    });
+  }
+  if (ab.mapReleased >= 10 && (ab.partnerRatePct ?? 0) < 10) {
+    out.push({
+      id: 'parceiro_baixo', area: 'receita', priority: 'media',
+      title: `Só ${ab.partnerRatePct ?? 0}% de quem abriu o Mapa preencheu o formulário do parceiro`,
+      evidence: `${ab.mapPartner} de ${ab.mapReleased} Mapas. O repasse do contato só acontece com a autorização da pessoa, dada em separado e de forma opcional.`,
+      actions: ['Explique em uma frase o que a pessoa ganha ao falar com o parceiro (comparar condições antes de decidir) e o que será compartilhado.', 'Mantenha a autorização opcional e desmarcada: pressionar invalida o consentimento (LGPD).'],
+    });
+  }
+  if (d.funnel.banner.shown >= 20 && (d.funnel.banner.ctrPct ?? 0) < 1) {
+    out.push({
+      id: 'banner_ctr', area: 'receita', priority: 'baixa',
+      title: `O banner do parceiro tem poucos cliques (${d.funnel.banner.ctrPct ?? 0}%)`,
+      evidence: `${d.funnel.banner.clicks} cliques em ${d.funnel.banner.shown} exibições no período.`,
+      actions: ['Teste outro título e outro texto (mais específicos, sem promessa de aprovação).', 'Peça ao parceiro uma imagem e um link de oferta mais claros.'],
     });
   }
 
@@ -90,12 +110,12 @@ export async function insights(ctx: Ctx, days: number): Promise<{ days: number; 
   if (wasted) out.push({ id: 'origem_sem_pagante', area: 'aquisicao', priority: 'media', title: `${wasted.source} traz visita, mas nenhum pagamento`, evidence: `${wasted.visitors} visitas e ${wasted.cases} diagnósticos sem pagamento.`, actions: ['Revise a mensagem desse canal (promete algo diferente do produto?).', 'Se for pago, pause e redirecione o orçamento.'] });
 
   // Complementos
-  const units = (code: string) => d.revenue.byProduct.find((x) => x.code === code)?.units ?? 0;
-  const maps = units('recovery_map');
+  const units = (code: string) => d.funnel.products.find((x) => x.code === code)?.paid ?? 0;
+  const maps = ab.mapReleased; // o Mapa é grátis: a base de comparação é quem abriu o Mapa
   if (maps >= 5) {
     for (const code of ['defense_letters', 'calendar_30d', 'extra_income_plan']) {
       const rate = Math.round((units(code) / maps) * 100);
-      if (rate < 15) out.push({ id: `attach_${code}`, area: 'receita', priority: 'baixa', title: `${PRODUCT_NAME[code]}: só ${rate}% dos compradores do Mapa levam`, evidence: `${units(code)} vendas para ${maps} Mapas no período.`, actions: ['Ofereça no momento certo (logo depois de o cliente abrir o Mapa, quando está motivado).', 'Teste o Kit Completo com desconto como caminho principal.'], plan: { title: `Aumentar a venda de ${PRODUCT_NAME[code]}`, goal: 'Subir a taxa de complemento por Mapa', segment: 'Compradores do Mapa', channel: 'Site (tela do Mapa)' } });
+      if (rate < 15) out.push({ id: `attach_${code}`, area: 'receita', priority: 'baixa', title: `${PRODUCT_NAME[code]}: só ${rate}% de quem abriu o Mapa compra`, evidence: `${units(code)} vendas para ${maps} Mapas liberados no período.`, actions: ['Ofereça no momento certo (logo depois de o cliente abrir o Mapa, quando está motivado).', 'Teste o Kit Completo com desconto como caminho principal.'], plan: { title: `Aumentar a venda de ${PRODUCT_NAME[code]}`, goal: 'Subir a taxa de complemento por Mapa', segment: 'Compradores do Mapa', channel: 'Site (tela do Mapa)' } });
     }
   }
   if (units('collection_translator') >= 3) out.push({ id: 'translator_cross', area: 'receita', priority: 'baixa', title: 'Quem usa o Tradutor é público para o Mapa', evidence: `${units('collection_translator')} pessoas pagaram o Tradutor no período: têm uma cobrança real na mão.`, actions: ['Ao fim da tradução, ofereça o diagnóstico completo das dívidas ("agora veja quanto isso pesa no seu mês").'] });

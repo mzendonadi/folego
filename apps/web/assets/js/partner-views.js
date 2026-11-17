@@ -340,17 +340,17 @@ function exportModal(ctx, leads) {
 
 export async function viewFolego(ctx) {
   const root = el('div', { class: 'pt-stack' });
-  let filter = 'todos';
+  const ui = ctx.ui('folego', { filter: 'todos' }); // a situação escolhida fica guardada enquanto o login estiver ativo
   let leads = [];
   const draw = () => {
-    const shown = leads.filter((l) => filter === 'todos' || l.status === filter);
+    const shown = leads.filter((l) => ui.filter === 'todos' || l.status === ui.filter);
     const tabs = [['todos', 'Todos'], ['delivered', 'Novos'], ['contacted', 'Em contato'], ['converted', 'Contrato fechado'], ['rejected', 'Descartados']];
     const count = (k) => (k === 'todos' ? leads.length : leads.filter((l) => l.status === k).length);
     const exportBtn = el('button', { class: 'btn btn-secondary', type: 'button', ...(leads.some((l) => !l.revoked && l.phone) ? {} : { disabled: true }) }, 'Exportar');
     exportBtn.addEventListener('click', () => exportModal(ctx, leads));
     root.replaceChildren(
       head('Contatos do Fôlego', 'Pessoas que autorizaram falar com um parceiro e foram enviadas a você. A comissão do Fôlego vale sobre os contratos fechados com elas.', exportBtn),
-      el('div', { class: 'pt-filters', role: 'tablist' }, ...tabs.map(([k, l]) => { const b = el('button', { class: 'pt-chip', type: 'button', role: 'tab', 'aria-selected': String(filter === k) }, `${l} `, el('span', {}, String(count(k)))); b.addEventListener('click', () => { filter = k; draw(); }); return b; })),
+      el('div', { class: 'pt-filters', role: 'tablist' }, ...tabs.map(([k, l]) => { const b = el('button', { class: 'pt-chip', type: 'button', role: 'tab', 'aria-selected': String(ui.filter === k) }, `${l} `, el('span', {}, String(count(k)))); b.addEventListener('click', () => { ui.filter = k; draw(); }); return b; })),
       shown.length === 0 ? empty('Nenhum contato aqui', leads.length === 0 ? 'Quando o Fôlego enviar contatos para você, eles aparecem nesta tela.' : 'Nenhum contato nesta situação.') : el('div', { class: 'pt-list' }, ...shown.map(leadCard)),
     );
   };
@@ -409,7 +409,9 @@ export async function viewFolego(ctx) {
 export async function viewBase(ctx) {
   const root = el('div', { class: 'pt-stack' });
   const facets = await ctx.call('GET', '/partner/contacts/facets');
-  const f = { q: '', etapa: '', orgao: '', situacao: '', margem: '', ordem: ctx.opts?.due ? 'acao' : 'recentes', vencidas: ctx.opts?.due ? '1' : '', pagina: 0 };
+  // Busca, filtros, ordem e página ficam guardados enquanto o login estiver ativo; "Ver agora" (retornos de hoje) começa uma busca nova.
+  const f = ctx.ui('base', { q: '', etapa: '', orgao: '', situacao: '', margem: '', ordem: 'recentes', vencidas: '', pagina: 0 });
+  if (ctx.opts?.due) Object.assign(f, { q: '', etapa: '', orgao: '', situacao: '', margem: '', ordem: 'acao', vencidas: '1', pagina: 0 });
   const results = el('div', { class: 'pt-results', 'aria-live': 'polite' });
 
   const input = (attrs) => el('input', { class: 'input', ...attrs });
@@ -419,7 +421,15 @@ export async function viewBase(ctx) {
   const situacao = el('select', { class: 'input', 'aria-label': 'Situação funcional' }, el('option', { value: '' }, 'Toda situação'), ...facets.statuses.map((x) => el('option', { value: x.key }, `${x.key} (${x.count})`)));
   const margem = input({ type: 'text', inputmode: 'numeric', placeholder: 'Margem mínima (R$)', 'aria-label': 'Margem livre mínima em reais', maxlength: '9' });
   const ordem = el('select', { class: 'input', 'aria-label': 'Ordenar por' }, ...[['recentes', 'Mais recentes'], ['margem', 'Maior margem'], ['nome', 'Nome (A–Z)'], ['acao', 'Próximo retorno']].map(([v, l]) => el('option', { value: v }, l)));
+  // Mostra o que ficou guardado; uma opção que não existe mais (ou o campo vazio) volta ao padrão.
+  q.value = f.q;
+  margem.value = f.margem;
+  for (const [node, key] of [[etapa, 'etapa'], [orgao, 'orgao'], [situacao, 'situacao']]) {
+    node.value = f[key];
+    if (node.value !== f[key]) f[key] = '';
+  }
   ordem.value = f.ordem;
+  if (ordem.value !== f.ordem) { f.ordem = 'recentes'; ordem.value = 'recentes'; }
   const due = el('input', { type: 'checkbox', id: 'pt-due', checked: f.vencidas === '1' });
   let timer = 0;
   const load = async () => {
@@ -534,7 +544,13 @@ export async function viewContratos(ctx) {
   const month = el('input', { class: 'input', type: 'month', 'aria-label': 'Mês', max: todayISO().slice(0, 7) });
   const origin = el('select', { class: 'input', 'aria-label': 'Origem' }, el('option', { value: '' }, 'Todas as origens'), el('option', { value: 'folego' }, 'Contatos do Fôlego'), el('option', { value: 'propria' }, 'Minha base'));
   const body = el('div', {});
+  const u = ctx.ui('contratos', { month: '', origin: '' }); // mês e origem ficam guardados enquanto o login estiver ativo
+  month.value = u.month;
+  origin.value = u.origin;
+  if (origin.value !== u.origin) u.origin = origin.value = '';
   const load = async () => {
+    u.month = month.value;
+    u.origin = origin.value;
     const p = new URLSearchParams();
     if (month.value) p.set('mes', month.value);
     if (origin.value) p.set('origem', origin.value);

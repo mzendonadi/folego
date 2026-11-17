@@ -4,6 +4,7 @@ import { api, ApiError } from './api.js';
 import { loading, errorBox, drawer } from './ui.js';
 import { createBell } from './bell.js';
 import { withEye } from '../pw-eye.js';
+import { persistentState } from '../ui-state.js';
 
 const MENU = [
   { id: 'painel', label: 'Painel', icon: 'chart', perm: ['dashboard'], load: () => import('./screens/dashboard.js').then((m) => m.dashboardScreen) },
@@ -22,7 +23,13 @@ const MENU = [
 ];
 
 const root = document.getElementById('bo-root');
-const state = { days: 30 };
+// Filtros, busca, página, aba e período de cada tela ficam guardados enquanto a sessão estiver ativa (sobrevivem a trocar de tela e a recarregar).
+const state = persistentState('folego:gestao:ui', { days: 30 }, { transient: ['waStart'] }); // waStart leva o celular de um contato à tela do WhatsApp: nunca fica guardado
+/** Esquece os filtros ao sair da conta ou quando a sessão termina: a próxima pessoa começa do padrão. */
+function resetUi() {
+  for (const k of Object.keys(state)) delete state[k];
+  state.days = 30;
+}
 let me = null;
 
 // ---------- entrada: senha → código por e-mail (duas etapas) ----------
@@ -185,6 +192,7 @@ function logoutButton() {
   b.addEventListener('click', async () => {
     await api.logout().catch(() => {});
     bell.stop();
+    resetUi();
     me = null;
     drawLogin();
   });
@@ -217,7 +225,10 @@ async function renderScreen(route, content) {
     if (mine === renderToken) content.replaceChildren(node);
   } catch (err) {
     if (mine !== renderToken) return;
-    if (err instanceof ApiError && err.status === 401) return drawLogin('Sua sessão terminou. Entre de novo.');
+    if (err instanceof ApiError && err.status === 401) {
+      resetUi();
+      return drawLogin('Sua sessão terminou. Entre de novo.');
+    }
     console.error(err);
     content.replaceChildren(errorBox(err, () => renderScreen(route, content)));
   }

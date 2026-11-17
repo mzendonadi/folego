@@ -24,56 +24,136 @@ const pct = (a: number, b: number): number | null => (b > 0 ? Math.round((a / b)
 // ---------------------------------------------------------------------------
 // Funil (por sessão) e abandono
 // ---------------------------------------------------------------------------
+// O Mapa da Virada é grátis (a pessoa só informa e-mail e celular): o funil conta quem viu o resultado, quem liberou o Mapa e o que fez DEPOIS dele
+// (formulário do parceiro, outros produtos, banner do parceiro). "Pagou" é só produto cobrado (cartas, calendário, tradutor, guias, renda extra).
+// Tudo por PESSOA (sessão): quem refaz o diagnóstico gera vários formulários e não pode contar duas vezes.
 export async function funnel(ctx: Ctx, days: number) {
   const from = `now() - make_interval(days => $1)`;
+  const since = `${TODAY} - ($1::int - 1)`;
   const v = await one(
     ctx,
-    `SELECT
-       (SELECT count(DISTINCT session_id) FROM app.events WHERE created_at >= ${from}) AS visitors,
-       (SELECT count(DISTINCT session_id) FROM app.events WHERE created_at >= ${from} AND name = 'view' AND props->>'view' IN ('intake','processing')) AS started,
-       (SELECT count(DISTINCT c.session_id) FROM app.cases c WHERE c.created_at >= ${from} AND ${NOT_TRANSLATOR}) AS diagnosed,
-       (SELECT count(DISTINCT session_id) FROM app.events WHERE created_at >= ${from} AND name = 'view' AND props->>'view' = 'preview') AS previewed,
-       (SELECT count(*) FROM (
-          SELECT session_id FROM app.events WHERE created_at >= ${from} AND name = 'view' AND props->>'view' IN ('checkout','addon')
-          UNION SELECT o.session_id FROM app.orders o JOIN app.cases c ON c.id = o.case_id WHERE o.created_at >= ${from} AND ${NOT_TRANSLATOR}) x) AS checkout,
-       (SELECT count(DISTINCT o.session_id) FROM app.orders o JOIN app.cases c ON c.id = o.case_id WHERE o.created_at >= ${from} AND ${NOT_TRANSLATOR}) AS pix,
-       (SELECT count(DISTINCT o.session_id) FROM app.orders o JOIN app.cases c ON c.id = o.case_id WHERE o.paid_at >= ${from} AND o.status = 'paid' AND ${NOT_TRANSLATOR}) AS paid`,
+    `WITH
+       vis AS (SELECT DISTINCT session_id FROM app.events WHERE created_at >= ${from} AND session_id IS NOT NULL),
+       started AS (SELECT DISTINCT session_id FROM app.events WHERE created_at >= ${from} AND name = 'view' AND props->>'view' IN ('intake','processing') AND session_id IS NOT NULL),
+       diagnosed AS (SELECT DISTINCT c.session_id FROM app.cases c WHERE c.created_at >= ${from} AND ${NOT_TRANSLATOR} AND c.session_id IS NOT NULL),
+       mapped AS (SELECT DISTINCT o.session_id FROM app.orders o JOIN app.order_items i ON i.order_id = o.id AND i.product_code = 'recovery_map' JOIN app.cases c ON c.id = o.case_id
+                   WHERE o.status = 'paid' AND o.paid_at >= ${from} AND ${NOT_TRANSLATOR} AND o.session_id IS NOT NULL),
+       partner AS (SELECT DISTINCT c.session_id FROM app.consents k JOIN app.cases c ON c.id = k.case_id
+                    WHERE k.purpose = 'lead_sharing' AND k.action = 'grant' AND k.created_at >= ${from} AND ${NOT_TRANSLATOR} AND c.session_id IS NOT NULL),
+       addon_view AS (SELECT DISTINCT session_id FROM app.events WHERE created_at >= ${from} AND name = 'view' AND props->>'view' = 'addon' AND session_id IS NOT NULL),
+       addon_order AS (SELECT DISTINCT o.session_id FROM app.orders o JOIN app.order_items i ON i.order_id = o.id JOIN app.cases c ON c.id = o.case_id
+                        WHERE o.created_at >= ${from} AND i.product_code <> 'recovery_map' AND ${NOT_TRANSLATOR} AND o.session_id IS NOT NULL),
+       other AS (SELECT session_id FROM addon_view UNION SELECT session_id FROM addon_order),
+       banner AS (SELECT DISTINCT session_id FROM app.events WHERE created_at >= ${from} AND name = 'cta' AND props->>'id' = 'banner_clique' AND session_id IS NOT NULL),
+       followed AS (SELECT session_id FROM partner UNION SELECT session_id FROM other UNION SELECT session_id FROM banner),
+       paid AS (SELECT DISTINCT o.session_id FROM app.orders o JOIN app.cases c ON c.id = o.case_id
+                 WHERE o.status = 'paid' AND o.total_cents > 0 AND o.paid_at >= ${from} AND ${NOT_TRANSLATOR} AND o.session_id IS NOT NULL)
+     SELECT
+       (SELECT count(*) FROM vis) AS visitors,
+       (SELECT count(*) FROM started) AS started,
+       (SELECT count(*) FROM diagnosed) AS diagnosed,
+       (SELECT count(*) FROM started WHERE session_id NOT IN (SELECT session_id FROM diagnosed)) AS started_not_finished,
+       (SELECT count(*) FROM mapped) AS mapped,
+       (SELECT count(*) FROM diagnosed WHERE session_id NOT IN (SELECT session_id FROM mapped)) AS diagnosed_no_map,
+       (SELECT count(*) FROM partner) AS partner_forms,
+       (SELECT count(*) FROM mapped WHERE session_id IN (SELECT session_id FROM partner)) AS map_partner,
+       (SELECT count(*) FROM mapped WHERE session_id IN (SELECT session_id FROM other)) AS map_other,
+       (SELECT count(*) FROM mapped WHERE session_id IN (SELECT session_id FROM banner)) AS map_banner,
+       (SELECT count(*) FROM mapped WHERE session_id IN (SELECT session_id FROM followed)) AS map_followed,
+       (SELECT count(*) FROM other) AS viewed_other,
+       (SELECT count(*) FROM paid) AS paid`,
     [days],
   );
   const steps = [
     { key: 'visitors', label: 'Visitaram o site', count: num(v.visitors) },
     { key: 'started', label: 'Começaram o diagnóstico', count: num(v.started) },
     { key: 'diagnosed', label: 'Preencheram e viram o resultado', count: num(v.diagnosed) },
-    { key: 'checkout', label: 'Abriram o pagamento', count: num(v.checkout) },
-    { key: 'pix', label: 'Geraram o Pix', count: num(v.pix) },
-    { key: 'paid', label: 'Pagaram', count: num(v.paid) },
+    { key: 'mapped', label: 'Liberaram o Mapa grátis', count: num(v.mapped) },
+    { key: 'followed', label: 'Seguiram além do Mapa (parceiro, outro produto ou banner)', count: num(v.map_followed) },
+    { key: 'paid', label: 'Compraram um produto pago', count: num(v.paid) },
   ];
   const withRates = steps.map((s, i) => ({ ...s, pctOfPrev: i === 0 ? null : pct(Math.min(s.count, steps[i - 1]!.count), steps[i - 1]!.count), pctOfFirst: pct(Math.min(s.count, steps[0]!.count), steps[0]!.count) }));
+  const mapped = num(v.mapped);
+  const diagnosed = num(v.diagnosed);
 
-  const ab = await one(
+  // Os produtos que ainda são cobrados: quantos pedidos, quantos pagos, quanto rendeu, e quem gerou o Pix e não pagou.
+  const byProduct = await rows<{ code: string; name: string; kind: string; created: string; paid: string; cents: string; buyers: string }>(
     ctx,
-    `SELECT
-       count(*) FILTER (WHERE NOT paid) AS not_paid,
-       count(*) FILTER (WHERE NOT paid AND has_order) AS abandoned_checkout,
-       count(*) FILTER (WHERE NOT paid AND NOT has_order) AS never_checkout,
-       count(*) FILTER (WHERE paid) AS paid
-     FROM (SELECT s.session_id,
-                  -- por PESSOA (sessão), como o funil: quem refaz o diagnóstico gera vários formulários e não pode contar duas vezes;
-                  -- e quem pagou em qualquer um deles não é "não pagou".
-                  EXISTS (SELECT 1 FROM app.orders o JOIN app.cases c ON c.id = o.case_id WHERE o.session_id = s.session_id AND o.status = 'paid' AND ${NOT_TRANSLATOR}) AS paid,
-                  EXISTS (SELECT 1 FROM app.orders o JOIN app.cases c ON c.id = o.case_id WHERE o.session_id = s.session_id AND ${NOT_TRANSLATOR}) AS has_order
-             FROM (SELECT DISTINCT c.session_id FROM app.cases c WHERE c.created_at >= ${from} AND ${NOT_TRANSLATOR}) s) t`,
+    `SELECT p.code, p.name, p.kind, count(DISTINCT o.id) AS created,
+            count(DISTINCT o.id) FILTER (WHERE o.status = 'paid' AND o.paid_at >= ${from}) AS paid,
+            coalesce(sum(i.unit_price_cents) FILTER (WHERE o.status = 'paid' AND o.paid_at >= ${from}), 0) AS cents,
+            count(DISTINCT o.session_id) FILTER (WHERE o.status = 'paid' AND o.paid_at >= ${from}) AS buyers
+       FROM app.order_items i JOIN app.orders o ON o.id = i.order_id JOIN app.products p ON p.code = i.product_code
+      WHERE o.created_at >= ${from} AND i.unit_price_cents > 0 AND o.case_id IS NOT NULL AND p.kind <> 'subscription'
+      GROUP BY p.code, p.name, p.kind, p.sort ORDER BY p.sort`,
     [days],
   );
+  const mapsBySource = await rows<{ provider: string; n: string }>(
+    ctx,
+    `SELECT pay.provider, count(DISTINCT o.id) AS n
+       FROM app.orders o JOIN app.order_items i ON i.order_id = o.id AND i.product_code = 'recovery_map' JOIN app.payments pay ON pay.order_id = o.id
+      WHERE o.status = 'paid' AND o.paid_at >= ${from} GROUP BY 1 ORDER BY 2 DESC`,
+    [days],
+  );
+
+  // O que o Fôlego ganha com parceiros: autorizações, contatos entregues, contratos fechados e comissão.
+  const pc = await one(
+    ctx,
+    `SELECT
+       (SELECT count(DISTINCT k.case_id) FROM app.consents k WHERE k.purpose = 'lead_sharing' AND k.action = 'grant' AND k.created_at >= ${from}) AS granted,
+       (SELECT count(*) FROM app.consents k WHERE k.purpose = 'lead_sharing' AND k.action = 'revoke' AND k.created_at >= ${from}) AS revoked,
+       (SELECT count(*) FROM app.v_current_consents WHERE purpose = 'lead_sharing' AND action = 'grant') AS active_total,
+       (SELECT count(*) FROM app.lead_deliveries d WHERE d.created_at >= ${from}) AS deliveries,
+       (SELECT coalesce(sum(d.price_cents) FILTER (WHERE d.status IN ('delivered','contacted','converted')), 0) FROM app.lead_deliveries d WHERE d.created_at >= ${from}) AS lead_cents,
+       (SELECT count(*) FROM app.partner_deals WHERE origin = 'folego' AND status = 'fechado' AND signed_on >= ${since}) AS deals,
+       (SELECT coalesce(sum(amount_cents), 0) FROM app.partner_deals WHERE origin = 'folego' AND status = 'fechado' AND signed_on >= ${since}) AS volume,
+       (SELECT coalesce(sum(commission_cents) FILTER (WHERE commission_status = 'a_receber'), 0) FROM app.partner_deals WHERE origin = 'folego' AND status = 'fechado' AND signed_on >= ${since}) AS due,
+       (SELECT coalesce(sum(commission_cents) FILTER (WHERE commission_status = 'recebida'), 0) FROM app.partner_deals WHERE origin = 'folego' AND status = 'fechado' AND signed_on >= ${since}) AS received`,
+    [days],
+  );
+  const deliveryStatus = await rows<{ status: string; n: string }>(ctx, `SELECT d.status, count(*) AS n FROM app.lead_deliveries d WHERE d.created_at >= ${from} GROUP BY 1 ORDER BY 2 DESC`, [days]);
+
+  // Banner do parceiro no Mapa: quantas vezes apareceu e quantas pessoas clicaram, por campanha.
+  const bn = await rows<{ camp: string | null; shown: string; clicks: string; people: string }>(
+    ctx,
+    `SELECT e.props->>'camp' AS camp, count(*) FILTER (WHERE e.name = 'view') AS shown, count(*) FILTER (WHERE e.name = 'cta') AS clicks, count(DISTINCT e.session_id) FILTER (WHERE e.name = 'cta') AS people
+       FROM app.events e WHERE e.created_at >= ${from} AND ((e.name = 'view' AND e.props->>'view' = 'mapa_banner') OR (e.name = 'cta' AND e.props->>'id' = 'banner_clique')) GROUP BY 1`,
+    [days],
+  );
+  const camps = bn.length
+    ? await rows<{ id: string; name: string; partner: string }>(ctx, `SELECT c.id::text AS id, c.name, coalesce(nullif(trim(p.trade_name), ''), p.legal_name) AS partner FROM app.partner_campaigns c JOIN app.partners p ON p.id = c.partner_id`)
+    : [];
+  const bannerRows = bn.map((b) => ({ campaignId: b.camp, campaign: camps.find((c) => c.id === b.camp)?.name ?? 'Campanha removida', partner: camps.find((c) => c.id === b.camp)?.partner ?? '—', shown: num(b.shown), clicks: num(b.clicks), people: num(b.people), ctrPct: pct(num(b.clicks), num(b.shown)) }));
+  const shown = bannerRows.reduce((s, b) => s + b.shown, 0);
+  const clicks = bannerRows.reduce((s, b) => s + b.clicks, 0);
+
   return {
     steps: withRates,
     abandonment: {
-      filledNotPaid: num(ab.not_paid),
-      abandonedCheckout: num(ab.abandoned_checkout),
-      neverOpenedCheckout: num(ab.never_checkout),
-      paid: num(ab.paid),
-      conversionPct: pct(num(ab.paid), num(ab.not_paid) + num(ab.paid)),
+      startedNotFinished: num(v.started_not_finished),
+      diagnosedNoMap: num(v.diagnosed_no_map),
+      mapReleased: mapped,
+      mapNoFollow: Math.max(0, mapped - num(v.map_followed)),
+      mapFollowed: num(v.map_followed),
+      mapPartner: num(v.map_partner),
+      mapOther: num(v.map_other),
+      mapBanner: num(v.map_banner),
+      partnerForms: num(v.partner_forms),
+      viewedOtherProducts: num(v.viewed_other),
+      paid: num(v.paid),
+      mapRatePct: pct(mapped, diagnosed),
+      followRatePct: pct(num(v.map_followed), mapped),
+      partnerRatePct: pct(num(v.map_partner), mapped),
+      payRatePct: pct(num(v.paid), mapped),
     },
+    mapsBySource: mapsBySource.map((m) => ({ provider: m.provider, maps: num(m.n) })),
+    products: byProduct.map((p) => ({ code: p.code, name: p.name, kind: p.kind, orders: num(p.created), paid: num(p.paid), unpaid: Math.max(0, num(p.created) - num(p.paid)), revenueCents: num(p.cents), buyers: num(p.buyers), conversionPct: pct(num(p.paid), num(p.created)) })),
+    partners: {
+      consentsGranted: num(pc.granted), consentsRevoked: num(pc.revoked), consentsActive: num(pc.active_total),
+      deliveries: num(pc.deliveries), deliveriesByStatus: Object.fromEntries(deliveryStatus.map((d) => [d.status, num(d.n)])), leadRevenueCents: num(pc.lead_cents),
+      deals: num(pc.deals), volumeCents: num(pc.volume), commissionDueCents: num(pc.due), commissionReceivedCents: num(pc.received),
+    },
+    banner: { shown, clicks, ctrPct: pct(clicks, shown), byCampaign: bannerRows.sort((a, b) => b.shown - a.shown) },
   };
 }
 
@@ -82,31 +162,31 @@ export async function funnel(ctx: Ctx, days: number) {
 // ---------------------------------------------------------------------------
 export async function revenue(ctx: Ctx, days: number) {
   const from = `now() - make_interval(days => $1)`;
-  const tot = await one(ctx, `SELECT coalesce(sum(total_cents),0) AS gross, count(*) AS orders FROM app.orders WHERE status = 'paid' AND paid_at >= ${from}`, [days]);
+  const tot = await one(ctx, `SELECT coalesce(sum(total_cents),0) AS gross, count(*) AS orders FROM app.orders WHERE status = 'paid' AND total_cents > 0 AND paid_at >= ${from}`, [days]); // só o que foi cobrado: o Mapa grátis (R$ 0) não entra
   const byDay = await rows<{ day: string; cents: string; orders: string }>(
     ctx,
     `SELECT to_char((paid_at AT TIME ZONE ${TZ})::date, 'YYYY-MM-DD') AS day, sum(total_cents) AS cents, count(*) AS orders
-       FROM app.orders WHERE status = 'paid' AND paid_at >= ${from} GROUP BY 1 ORDER BY 1`,
+       FROM app.orders WHERE status = 'paid' AND total_cents > 0 AND paid_at >= ${from} GROUP BY 1 ORDER BY 1`,
     [days],
   );
   const byProduct = await rows<{ code: string; name: string; kind: string; units: string; cents: string }>(
     ctx,
     `SELECT p.code, p.name, p.kind, count(*) AS units, sum(i.unit_price_cents) AS cents
        FROM app.order_items i JOIN app.orders o ON o.id = i.order_id JOIN app.products p ON p.code = i.product_code
-      WHERE o.status = 'paid' AND o.paid_at >= ${from} GROUP BY p.code, p.name, p.kind, p.sort ORDER BY p.sort`,
+      WHERE o.status = 'paid' AND o.paid_at >= ${from} AND i.unit_price_cents > 0 GROUP BY p.code, p.name, p.kind, p.sort ORDER BY p.sort`,
     [days],
   );
   const byMethod = await rows<{ provider: string; method: string; orders: string; cents: string }>(
     ctx,
     `SELECT pay.provider, pay.method, count(*) AS orders, sum(pay.amount_cents) AS cents
-       FROM app.payments pay WHERE pay.status = 'confirmed' AND pay.confirmed_at >= ${from} GROUP BY 1, 2 ORDER BY 4 DESC`,
+       FROM app.payments pay WHERE pay.status = 'confirmed' AND pay.amount_cents > 0 AND pay.confirmed_at >= ${from} GROUP BY 1, 2 ORDER BY 4 DESC`,
     [days],
   );
   const pending = await rows<{ status: string; n: string }>(ctx, `SELECT status, count(*) AS n FROM app.orders WHERE created_at >= ${from} AND status <> 'paid' GROUP BY 1`, [days]);
   const timing = await rows<{ h: number; wd: number; n: string }>(
     ctx,
     `SELECT extract(hour FROM paid_at AT TIME ZONE ${TZ})::int AS h, extract(dow FROM paid_at AT TIME ZONE ${TZ})::int AS wd, count(*) AS n
-       FROM app.orders WHERE status = 'paid' AND paid_at >= ${from} GROUP BY 1, 2`,
+       FROM app.orders WHERE status = 'paid' AND total_cents > 0 AND paid_at >= ${from} GROUP BY 1, 2`,
     [days],
   );
   const hours = Array.from({ length: 24 }, (_, h) => ({ hour: h, orders: timing.filter((t) => t.h === h).reduce((s, t) => s + num(t.n), 0) }));
@@ -181,7 +261,7 @@ export async function subscriptions(ctx: Ctx, days: number) {
 // ---------------------------------------------------------------------------
 // Perfil dos clientes (o que interessa a parceiros e a campanhas)
 // ---------------------------------------------------------------------------
-const PAID_CASE = `EXISTS (SELECT 1 FROM app.orders o WHERE o.case_id = c.id AND o.status = 'paid')`;
+const PAID_CASE = `EXISTS (SELECT 1 FROM app.orders o WHERE o.case_id = c.id AND o.status = 'paid' AND o.total_cents > 0)`; // pagou um produto cobrado (o Mapa grátis não conta)
 const INCOME_BAND = `CASE WHEN c.net_income_cents IS NULL THEN 'n/d'
     WHEN c.net_income_cents < 150000 THEN 'até R$ 1.500'
     WHEN c.net_income_cents < 300000 THEN 'R$ 1.500 a 3.000'
@@ -239,7 +319,7 @@ export async function customerProfile(ctx: Ctx, days: number) {
 // ---------------------------------------------------------------------------
 export async function traffic(ctx: Ctx, days: number) {
   const from = `now() - make_interval(days => $1)`;
-  const sources = await rows<{ source: string; medium: string; visitors: string; cases: string; paid: string; cents: string }>(
+  const sources = await rows<{ source: string; medium: string; visitors: string; cases: string; paid: string; free_maps: string; cents: string }>(
     ctx,
     `WITH first_attr AS (
        SELECT DISTINCT ON (session_id) session_id, coalesce(nullif(props->'attr'->>'source',''), 'direto') AS source, coalesce(nullif(props->'attr'->>'medium',''), '') AS medium
@@ -248,7 +328,8 @@ export async function traffic(ctx: Ctx, days: number) {
      SELECT coalesce(a.source, 'direto') AS source, coalesce(a.medium, '') AS medium,
             count(DISTINCT v.session_id) AS visitors,
             count(DISTINCT c.id) AS cases,
-            count(DISTINCT o.id) AS paid,
+            count(DISTINCT o.id) FILTER (WHERE o.total_cents > 0) AS paid,
+            count(DISTINCT o.id) FILTER (WHERE o.total_cents = 0) AS free_maps,
             coalesce(sum(o.total_cents), 0) AS cents
        FROM vis v
        LEFT JOIN first_attr a ON a.session_id = v.session_id
@@ -266,11 +347,11 @@ export async function traffic(ctx: Ctx, days: number) {
     ctx,
     `SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM (o.paid_at - f.first_at))) AS median_s
        FROM app.orders o JOIN (SELECT session_id, min(created_at) AS first_at FROM app.events GROUP BY 1) f ON f.session_id = o.session_id
-      WHERE o.status = 'paid' AND o.paid_at >= ${from} AND o.case_id IS NOT NULL AND o.paid_at >= f.first_at`,
+      WHERE o.status = 'paid' AND o.total_cents > 0 AND o.paid_at >= ${from} AND o.case_id IS NOT NULL AND o.paid_at >= f.first_at`,
     [days],
   );
   return {
-    sources: sources.map((s) => ({ source: s.source, medium: s.medium, visitors: num(s.visitors), cases: num(s.cases), paid: num(s.paid), revenueCents: num(s.cents), conversionPct: pct(num(s.paid), num(s.visitors)) })),
+    sources: sources.map((s) => ({ source: s.source, medium: s.medium, visitors: num(s.visitors), cases: num(s.cases), freeMaps: num(s.free_maps), paid: num(s.paid), revenueCents: num(s.cents), conversionPct: pct(num(s.paid), num(s.visitors)), mapPct: pct(num(s.free_maps), num(s.visitors)) })),
     views: views.map((v) => ({ view: v.k ?? 'n/d', events: num(v.n), sessions: num(v.s) })),
     ctas: ctas.map((c) => ({ id: c.k ?? 'n/d', clicks: num(c.n) })),
     tools: tools.map((t) => ({ tool: t.k ?? 'n/d', uses: num(t.n), sessions: num(t.s) })),
